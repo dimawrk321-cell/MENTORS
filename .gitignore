@@ -1,0 +1,26 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next
+/out
+next-env.d.ts
+
+# production
+/build
+
+# env — секреты только в env, не в репозитории
+.env
+.env.local
+.env*.local
+
+# misc
+*.tsbuildinfo
+coverage
+.DS_Store
+
+# claude code local session settings
+.claude/settings.local.json
+
+# prisma
+/prisma/*.db

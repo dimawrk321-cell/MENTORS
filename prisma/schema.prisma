@@ -1,0 +1,11 @@
+// DECISION: stage 0 ships Prisma infrastructure only (generator + datasource);
+// data models are added incrementally per the stage plan (spec section 17).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
