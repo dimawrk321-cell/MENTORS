@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { checkAnswer, normalizeShortText } from "@/lib/utils/answers";
+import {
+  isValidQuestionLinkFlags,
+  questionLinkSchema,
+  QUESTION_LINK_ROLE_ERROR,
+} from "@/lib/utils/validation";
 
 // Mandatory suite (stage 3): short_text-нормализация (spec 7.4) и автопроверка
 // закрытых типов (spec 7.5) — pure logic.
@@ -79,5 +84,29 @@ describe("checkAnswer", () => {
 
   it("open никогда не автопроверяется", () => {
     expect(checkAnswer({ type: "open" as const }, "что угодно")).toBe(false);
+  });
+});
+
+describe("роль привязки вопроса (changelog этапа 3: is_key XOR in_quiz)", () => {
+  const base = { questionId: "q1", lessonId: "l1" };
+
+  it("обе роли сразу — запрещено при записи", () => {
+    expect(isValidQuestionLinkFlags({ isKey: true, inQuiz: true })).toBe(false);
+    const result = questionLinkSchema.safeParse({ ...base, isKey: true, inQuiz: true });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe(QUESTION_LINK_ROLE_ERROR);
+    }
+  });
+
+  it("одиночные роли и «просто привязан» проходят", () => {
+    for (const flags of [
+      { isKey: true, inQuiz: false },
+      { isKey: false, inQuiz: true },
+      { isKey: false, inQuiz: false },
+    ]) {
+      expect(isValidQuestionLinkFlags(flags)).toBe(true);
+      expect(questionLinkSchema.safeParse({ ...base, ...flags }).success).toBe(true);
+    }
   });
 });

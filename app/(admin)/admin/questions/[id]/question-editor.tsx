@@ -25,6 +25,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import {
+  flagsFromRole,
+  QuestionRoleSelect,
+  roleFromFlags,
+  type QuestionLinkRole,
+} from "@/components/features/question-role-select";
 import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants";
 import type { ActionResult } from "@/lib/auth/action-helpers";
 import {
@@ -81,7 +87,10 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
   });
   const [previewHtml, setPreviewHtml] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [newLink, setNewLink] = useState({ lessonId: "", isKey: false, inQuiz: true });
+  const [newLink, setNewLink] = useState<{ lessonId: string; role: QuestionLinkRole }>({
+    lessonId: "",
+    role: "quiz",
+  });
   const [pending, startTransition] = useTransition();
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -407,38 +416,19 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
             {links.map((link) => (
               <li key={link.lessonId} className="flex flex-wrap items-center gap-3 text-[13px]">
                 <span className="min-w-0 flex-1 truncate">{link.label}</span>
-                <label className="text-text-2 flex items-center gap-1.5">
-                  <Switch
-                    checked={link.isKey}
-                    onCheckedChange={(isKey) =>
-                      run(() =>
-                        upsertQuestionLinkAction({
-                          questionId: question.id,
-                          lessonId: link.lessonId,
-                          isKey,
-                          inQuiz: link.inQuiz,
-                        }),
-                      )
-                    }
-                  />
-                  is_key
-                </label>
-                <label className="text-text-2 flex items-center gap-1.5">
-                  <Switch
-                    checked={link.inQuiz}
-                    onCheckedChange={(inQuiz) =>
-                      run(() =>
-                        upsertQuestionLinkAction({
-                          questionId: question.id,
-                          lessonId: link.lessonId,
-                          isKey: link.isKey,
-                          inQuiz,
-                        }),
-                      )
-                    }
-                  />
-                  in_quiz
-                </label>
+                {/* Changelog этапа 3: роль одна — ключевой ИЛИ в квизе. */}
+                <QuestionRoleSelect
+                  value={roleFromFlags(link.isKey, link.inQuiz)}
+                  onChange={(role) =>
+                    run(() =>
+                      upsertQuestionLinkAction({
+                        questionId: question.id,
+                        lessonId: link.lessonId,
+                        ...flagsFromRole(role),
+                      }),
+                    )
+                  }
+                />
                 <button
                   type="button"
                   aria-label="Отвязать от урока"
@@ -479,20 +469,10 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
               ))}
             </SelectContent>
           </Select>
-          <label className="text-text-2 flex items-center gap-1.5 text-[13px]">
-            <Switch
-              checked={newLink.isKey}
-              onCheckedChange={(isKey) => setNewLink({ ...newLink, isKey })}
-            />
-            is_key
-          </label>
-          <label className="text-text-2 flex items-center gap-1.5 text-[13px]">
-            <Switch
-              checked={newLink.inQuiz}
-              onCheckedChange={(inQuiz) => setNewLink({ ...newLink, inQuiz })}
-            />
-            in_quiz
-          </label>
+          <QuestionRoleSelect
+            value={newLink.role}
+            onChange={(role) => setNewLink({ ...newLink, role })}
+          />
           <Button
             variant="secondary"
             size="sm"
@@ -504,8 +484,7 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
                   upsertQuestionLinkAction({
                     questionId: question.id,
                     lessonId: newLink.lessonId,
-                    isKey: newLink.isKey,
-                    inQuiz: newLink.inQuiz,
+                    ...flagsFromRole(newLink.role),
                   }),
                 "Привязано",
               )

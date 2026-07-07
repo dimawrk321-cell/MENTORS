@@ -45,6 +45,24 @@ export const inviteStudentSchema = z.object({
   name: z.string("Укажи имя").trim().min(1, "Укажи имя").max(100, "Имя слишком длинное"),
 });
 
+// Changelog этапа 3: is_key и in_quiz взаимоисключающие — ключевой вопрос
+// раскрывает эталон в блоке урока и не может одновременно быть вопросом квиза.
+export const QUESTION_LINK_ROLE_ERROR =
+  "Вопрос не может быть одновременно ключевым и в квизе — выбери одну роль";
+
+export function isValidQuestionLinkFlags(flags: { isKey: boolean; inQuiz: boolean }): boolean {
+  return !(flags.isKey && flags.inQuiz);
+}
+
+export const questionLinkSchema = z
+  .object({
+    questionId: z.string().min(1),
+    lessonId: z.string().min(1),
+    isKey: z.boolean(),
+    inQuiz: z.boolean(),
+  })
+  .refine(isValidQuestionLinkFlags, QUESTION_LINK_ROLE_ERROR);
+
 export const reportContentSchema = z.object({
   lessonId: z.string().min(1),
   type: z.enum(["error", "unclear"], "Выбери тип обращения"),

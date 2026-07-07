@@ -27,6 +27,11 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
+import {
+  flagsFromRole,
+  QuestionRoleSelect,
+  type QuestionLinkRole,
+} from "@/components/features/question-role-select";
 import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants";
 import {
   bulkQuestionsAction,
@@ -82,8 +87,7 @@ export function QuestionsBank({
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [linkLessonId, setLinkLessonId] = useState("");
-  const [linkIsKey, setLinkIsKey] = useState(false);
-  const [linkInQuiz, setLinkInQuiz] = useState(true);
+  const [linkRole, setLinkRole] = useState<QuestionLinkRole>("quiz");
   const [newQuestion, setNewQuestion] = useState({ type: "open", categoryId: "" });
   const [newCategory, setNewCategory] = useState({ title: "", parentId: "" });
 
@@ -538,14 +542,11 @@ export function QuestionsBank({
                 </SelectContent>
               </Select>
             </div>
-            <label className="flex items-center gap-2 text-[14px]">
-              <Switch checked={linkIsKey} onCheckedChange={setLinkIsKey} />
-              is_key — ключевой вопрос урока
-            </label>
-            <label className="flex items-center gap-2 text-[14px]">
-              <Switch checked={linkInQuiz} onCheckedChange={setLinkInQuiz} />
-              in_quiz — участвует в квизе
-            </label>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-text-2 text-[13px]">Роль в уроке</span>
+              {/* Changelog этапа 3: роли взаимоисключающие. */}
+              <QuestionRoleSelect value={linkRole} onChange={setLinkRole} className="h-9 w-full" />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setLinkDialogOpen(false)}>
@@ -555,12 +556,7 @@ export function QuestionsBank({
               loading={pending}
               disabled={!linkLessonId}
               onClick={() =>
-                runBulk({
-                  kind: "link",
-                  lessonId: linkLessonId,
-                  isKey: linkIsKey,
-                  inQuiz: linkInQuiz,
-                })
+                runBulk({ kind: "link", lessonId: linkLessonId, ...flagsFromRole(linkRole) })
               }
             >
               Привязать

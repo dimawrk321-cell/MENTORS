@@ -6,8 +6,13 @@ import { Link2, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
+import {
+  flagsFromRole,
+  QuestionRoleSelect,
+  roleFromFlags,
+  type QuestionLinkRole,
+} from "@/components/features/question-role-select";
 import type { ActionResult } from "@/lib/auth/action-helpers";
 import {
   removeQuestionLinkAction,
@@ -43,6 +48,7 @@ export function LessonQuestions({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchRow[]>([]);
   const [searching, setSearching] = useState(false);
+  const [attachRole, setAttachRole] = useState<QuestionLinkRole>("quiz");
   const [pending, startTransition] = useTransition();
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -86,7 +92,8 @@ export function LessonQuestions({
         Вопросы урока
       </h2>
       <p className="text-text-3 mb-3 text-[13px]">
-        is_key попадают в «Ключевые вопросы» (и в SRS с этапа 4), in_quiz — в квиз урока.
+        Роль одна: «ключевой» попадает в блок «Ключевые вопросы» (и в SRS с этапа 4), «в квизе» — в
+        квиз урока.
       </p>
 
       {links.length === 0 ? (
@@ -100,38 +107,19 @@ export function LessonQuestions({
                 <span className="text-text-3 ml-2">· {link.category}</span>
               </span>
               {link.status === "draft" && <Badge>черновик</Badge>}
-              <label className="text-text-2 flex items-center gap-1.5">
-                <Switch
-                  checked={link.isKey}
-                  onCheckedChange={(isKey) =>
-                    run(() =>
-                      upsertQuestionLinkAction({
-                        questionId: link.questionId,
-                        lessonId,
-                        isKey,
-                        inQuiz: link.inQuiz,
-                      }),
-                    )
-                  }
-                />
-                is_key
-              </label>
-              <label className="text-text-2 flex items-center gap-1.5">
-                <Switch
-                  checked={link.inQuiz}
-                  onCheckedChange={(inQuiz) =>
-                    run(() =>
-                      upsertQuestionLinkAction({
-                        questionId: link.questionId,
-                        lessonId,
-                        isKey: link.isKey,
-                        inQuiz,
-                      }),
-                    )
-                  }
-                />
-                in_quiz
-              </label>
+              {/* Changelog этапа 3: роль одна — ключевой ИЛИ в квизе. */}
+              <QuestionRoleSelect
+                value={roleFromFlags(link.isKey, link.inQuiz)}
+                onChange={(role) =>
+                  run(() =>
+                    upsertQuestionLinkAction({
+                      questionId: link.questionId,
+                      lessonId,
+                      ...flagsFromRole(role),
+                    }),
+                  )
+                }
+              />
               <button
                 type="button"
                 aria-label="Отвязать вопрос"
@@ -166,6 +154,14 @@ export function LessonQuestions({
             aria-label="Поиск по банку вопросов"
           />
         </div>
+        <label className="text-text-2 flex items-center gap-2 text-[13px]">
+          Привязывать как
+          <QuestionRoleSelect
+            value={attachRole}
+            onChange={setAttachRole}
+            ariaLabel="Роль для привязки из поиска"
+          />
+        </label>
         {searching && <p className="text-text-3 text-[12px]">Ищу…</p>}
         {results.length > 0 && (
           <ul className="flex flex-col gap-1.5">
@@ -188,10 +184,9 @@ export function LessonQuestions({
                           upsertQuestionLinkAction({
                             questionId: row.id,
                             lessonId,
-                            isKey: false,
-                            inQuiz: true,
+                            ...flagsFromRole(attachRole),
                           }),
-                        "Привязано (in_quiz)",
+                        "Привязано",
                       )
                     }
                   >

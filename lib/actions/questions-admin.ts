@@ -19,6 +19,11 @@ import {
 import { upsertModuleTestConfig } from "@/lib/services/tests";
 import { renderMarkdownHtml } from "@/lib/utils/markdown";
 import {
+  isValidQuestionLinkFlags,
+  questionLinkSchema,
+  QUESTION_LINK_ROLE_ERROR,
+} from "@/lib/utils/validation";
+import {
   ActionError,
   parseInput,
   requireActionRole,
@@ -173,12 +178,15 @@ const bulkSchema = z.object({
   op: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("category"), categoryId: idSchema }),
     z.object({ kind: z.literal("publish") }),
-    z.object({
-      kind: z.literal("link"),
-      lessonId: idSchema,
-      isKey: z.boolean(),
-      inQuiz: z.boolean(),
-    }),
+    z
+      .object({
+        kind: z.literal("link"),
+        lessonId: idSchema,
+        isKey: z.boolean(),
+        inQuiz: z.boolean(),
+      })
+      // Changelog этапа 3: роли взаимоисключающие.
+      .refine(isValidQuestionLinkFlags, QUESTION_LINK_ROLE_ERROR),
   ]),
 });
 
@@ -224,18 +232,12 @@ export async function bulkQuestionsAction(
 }
 
 // --- Links (question editor + lesson editor) ---
-
-const linkSchema = z.object({
-  questionId: idSchema,
-  lessonId: idSchema,
-  isKey: z.boolean(),
-  inQuiz: z.boolean(),
-});
+// Валидация ролей (is_key XOR in_quiz) — общая схема из lib/utils/validation.
 
 export async function upsertQuestionLinkAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
     const auth = await requireActionRole("mentor");
-    const parsed = parseInput(linkSchema, input);
+    const parsed = parseInput(questionLinkSchema, input);
     const result = await upsertQuestionLessonLink(prisma, { actorId: auth.user.id, ...parsed });
     if (!result.ok) throw new ActionError(result.code, "Вопрос или урок не найден");
     revalidateBank();
