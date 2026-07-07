@@ -8,7 +8,14 @@
  * Commands: setup | start | stop | status
  */
 import { spawnSync } from "node:child_process";
-import { createWriteStream, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -61,7 +68,9 @@ async function downloadBinaries() {
   const zipPath = path.join(os.tmpdir(), `postgresql-${PG_VERSION}-win-x64.zip`);
   const res = await fetch(PG_ZIP_URL);
   if (!res.ok || !res.body) {
-    fail(`Не удалось скачать ${PG_ZIP_URL} (HTTP ${res.status}). Проверь сеть и повтори pnpm db:setup.`);
+    fail(
+      `Не удалось скачать ${PG_ZIP_URL} (HTTP ${res.status}). Проверь сеть и повтори pnpm db:setup.`,
+    );
   }
   await pipeline(Readable.fromWeb(res.body), createWriteStream(zipPath));
 
@@ -102,15 +111,24 @@ function initCluster() {
   writeFileSync(pwFile, `${DB.password}\n`, "utf8");
   try {
     const base = [
-      "-D", DATA_DIR,
-      "-U", DB.user,
-      "-A", "scram-sha-256",
+      "-D",
+      DATA_DIR,
+      "-U",
+      DB.user,
+      "-A",
+      "scram-sha-256",
       `--pwfile=${pwFile}`,
-      "-E", "UTF8",
+      "-E",
+      "UTF8",
     ];
     // Prefer ICU with Russian collation (proper ORDER BY for russian content);
     // fall back to plain C locale if ICU is unavailable in the bundle.
-    let res = run(exe("initdb"), [...base, "--locale-provider=icu", "--icu-locale=ru-RU", "--locale=C"]);
+    let res = run(exe("initdb"), [
+      ...base,
+      "--locale-provider=icu",
+      "--icu-locale=ru-RU",
+      "--locale=C",
+    ]);
     if (res.status !== 0) {
       console.log("ICU-локаль недоступна, использую locale=C ...");
       rmSync(DATA_DIR, { recursive: true, force: true });
@@ -165,15 +183,29 @@ function ensureDatabase() {
   const env = { PGPASSWORD: DB.password };
   const check = run(
     exe("psql"),
-    ["-h", DB.host, "-p", String(DB.port), "-U", DB.user, "-d", "postgres", "-tAc",
-      `SELECT 1 FROM pg_database WHERE datname='${DB.name}'`],
+    [
+      "-h",
+      DB.host,
+      "-p",
+      String(DB.port),
+      "-U",
+      DB.user,
+      "-d",
+      "postgres",
+      "-tAc",
+      `SELECT 1 FROM pg_database WHERE datname='${DB.name}'`,
+    ],
     env,
   );
   if (check.status !== 0) {
     fail(`Не удалось проверить наличие базы:\n${check.stderr}`);
   }
   if (check.stdout.trim() === "1") return;
-  const create = run(exe("createdb"), ["-h", DB.host, "-p", String(DB.port), "-U", DB.user, DB.name], env);
+  const create = run(
+    exe("createdb"),
+    ["-h", DB.host, "-p", String(DB.port), "-U", DB.user, DB.name],
+    env,
+  );
   if (create.status !== 0) {
     fail(`Не удалось создать базу ${DB.name}:\n${create.stderr}`);
   }
@@ -194,7 +226,8 @@ async function setup() {
 
   const wasRunning = serverRunning();
   if (!wasRunning) startServer();
-  if (!(await waitReady())) fail("PostgreSQL не отвечает на 127.0.0.1:5432 — смотри pgsql/postgres.log");
+  if (!(await waitReady()))
+    fail("PostgreSQL не отвечает на 127.0.0.1:5432 — смотри pgsql/postgres.log");
   ensureDatabase();
   if (!wasRunning) {
     stopServer();
@@ -213,7 +246,8 @@ async function start() {
     return;
   }
   startServer();
-  if (!(await waitReady())) fail("PostgreSQL стартовала, но не отвечает — смотри pgsql/postgres.log");
+  if (!(await waitReady()))
+    fail("PostgreSQL стартовала, но не отвечает — смотри pgsql/postgres.log");
   console.log(`PostgreSQL 16 запущена: postgresql://${DB.user}@${DB.host}:${DB.port}/${DB.name}`);
 }
 

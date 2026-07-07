@@ -1,5 +1,8 @@
-// DECISION: stage 0 ships Prisma infrastructure only (generator + datasource);
-// data models are added incrementally per the stage plan (spec section 17).
+// Stage 1 (spec section 17): auth & access models — users, invites, password
+// resets, access extensions, sessions, devices, security flags + the service
+// tables the stage needs (audit_log, analytics_events, app_settings) and the
+// login rate-limit table required by spec section 11.
+// Later stages append their own models incrementally.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,4 +11,269 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum Role {
+  student
+  mentor
+  admin
+  owner
+}
+
+enum UserStatus {
+  invited
+  active
+  blocked
+  expired
+}
+
+enum Theme {
+  system
+  dark
+  light
+}
+
+enum Track {
+  ds
+  nlp
+  ai
+}
+
+enum SessionRevokeReason {
+  evicted_login // single concurrent session: a newer login displaced this one
+  evicted_device // device cap: the oldest device was displaced by a third one
+  logout
+  logout_all
+  password_change
+  password_reset
+  admin_reset
+  blocked
+  impersonation_end
+}
+
+enum SecurityFlagType {
+  concurrent_geo
+  rapid_content
+  manual
+}
+
+enum SecurityFlagStatus {
+  open
+  resolved
+}
+
+enum AuthAttemptKind {
+  login
+  forgot
+}
+
+model User {
+  id     String     @id @default(cuid())
+  email  String     @unique
+  // DECISION: spec 6 lists password_hash as required, but an invited user has
+  // no password until the invite is accepted — nullable expresses that state.
+  passwordHash  String?    @map("password_hash")
+  name          String
+  role          Role       @default(student)
+  isInterviewer Boolean    @default(false) @map("is_interviewer")
+  timezone      String     @default("Europe/Moscow")
+  theme         Theme      @default(system)
+  track         Track?
+  dailyGoalXp   Int        @default(60) @map("daily_goal_xp")
+  studyDays     Int[]      @default([1, 2, 3, 4, 5, 6, 7]) @map("study_days")
+  digestTime    String     @default("09:00") @map("digest_time")
+  status        UserStatus @default(invited)
+  activatedAt   DateTime?  @map("activated_at")
+  accessUntil   DateTime?  @map("access_until")
+  // DECISION: avatar_color has no type in spec 6 — stored as an index (0..7)
+  // into the muted category palette (spec 5.1), assigned from email hash.
+  avatarColor    Int       @map("avatar_color")
+  lastSeenAt     DateTime? @map("last_seen_at")
+  mentorNote     String?   @map("mentor_note")
+  libraryEnabled Boolean   @default(true) @map("library_enabled")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  sessions             Session[]         @relation("UserSessions")
+  impersonatedSessions Session[]         @relation("SessionImpersonator")
+  devices              Device[]
+  invitesSent          Invite[]          @relation("InviteInvitedBy")
+  passwordResets       PasswordReset[]
+  accessExtensions     AccessExtension[] @relation("ExtensionUser")
+  grantedExtensions    AccessExtension[] @relation("ExtensionGrantedBy")
+  securityFlags        SecurityFlag[]    @relation("FlagUser")
+  resolvedFlags        SecurityFlag[]    @relation("FlagResolvedBy")
+  auditEntries         AuditLog[]        @relation("AuditActor")
+  analyticsEvents      AnalyticsEvent[]
+
+  @@index([status, accessUntil])
+  @@map("users")
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  email       String
+  token       String    @unique
+  invitedById String    @map("invited_by")
+  invitedBy   User      @relation("InviteInvitedBy", fields: [invitedById], references: [id])
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([invitedById])
+  @@map("invites")
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+model AccessExtension {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  user           User     @relation("ExtensionUser", fields: [userId], references: [id], onDelete: Cascade)
+  days           Int
+  newAccessUntil DateTime @map("new_access_until")
+  grantedById    String   @map("granted_by")
+  grantedBy      User     @relation("ExtensionGrantedBy", fields: [grantedById], references: [id])
+  comment        String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([grantedById])
+  @@map("access_extensions")
+}
+
+model Session {
+  id        String  @id @default(cuid())
+  userId    String  @map("user_id")
+  user      User    @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String  @unique @map("token_hash")
+  // DECISION: nullable — impersonation sessions belong to the admin's browser
+  // and must not occupy one of the student's two device slots. SetNull (not
+  // Cascade): deleting an evicted device must keep revoked session rows so the
+  // displaced browser can still render the eviction screen.
+  deviceId  String? @map("device_id")
+  device    Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  ip        String
+  city      String?
+  country   String?
+  expiresAt      DateTime  @map("expires_at")
+  lastActiveAt   DateTime  @default(now()) @map("last_active_at")
+  impersonatorId String?   @map("impersonator_id")
+  impersonator   User?     @relation("SessionImpersonator", fields: [impersonatorId], references: [id], onDelete: Cascade)
+  // DECISION: evicted sessions are kept (revoked_at + reason) instead of being
+  // deleted so the displaced request can render the dedicated «Вход выполнен на
+  // другом устройстве» screen (spec 7.2); sessionCleanup purges them at stage 9.
+  revokedAt     DateTime?            @map("revoked_at")
+  revokedReason SessionRevokeReason? @map("revoked_reason")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([deviceId])
+  @@index([impersonatorId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Device {
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fingerprintHash String    @map("fingerprint_hash")
+  label           String
+  firstSeenAt     DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt      DateTime  @default(now()) @map("last_seen_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  sessions        Session[]
+
+  @@unique([userId, fingerprintHash])
+  @@map("devices")
+}
+
+model SecurityFlag {
+  id           String             @id @default(cuid())
+  userId       String             @map("user_id")
+  user         User               @relation("FlagUser", fields: [userId], references: [id], onDelete: Cascade)
+  type         SecurityFlagType
+  details      Json
+  status       SecurityFlagStatus @default(open)
+  resolvedById String?            @map("resolved_by")
+  resolvedBy   User?              @relation("FlagResolvedBy", fields: [resolvedById], references: [id])
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  @@index([userId, type, createdAt])
+  @@index([status])
+  @@index([resolvedById])
+  @@map("security_flags")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String   @map("actor_id")
+  actor      User     @relation("AuditActor", fields: [actorId], references: [id])
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      String
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([type, createdAt])
+  @@index([userId])
+  @@map("analytics_events")
+}
+
+// DECISION: spec 11 requires a table for failed login attempts (restart-safe
+// rate limit); forgot-password requests share it via `kind`. Append-only, no
+// updated_at; old rows are pruned opportunistically by the rate limiter.
+model AuthAttempt {
+  id        String          @id @default(cuid())
+  kind      AuthAttemptKind
+  email     String
+  ip        String
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@index([kind, email, ip, createdAt])
+  @@map("auth_attempts")
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
 }

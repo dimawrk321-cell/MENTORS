@@ -41,7 +41,9 @@ socket.once("connect", () => {
 
 const onFail = () => {
   socket.destroy();
-  console.error(`\x1b[31mБаза не запущена — выполни pnpm db:start\x1b[0m (нет соединения с ${host}:${port})`);
+  console.error(
+    `\x1b[31mБаза не запущена — выполни pnpm db:start\x1b[0m (нет соединения с ${host}:${port})`,
+  );
   process.exit(1);
 };
 
