@@ -240,6 +240,21 @@ export async function validateSessionToken(
     return { state: "none" };
   }
 
+  // Lazy expiry (spec 7.1.5): the daily worker arrives at stage 9 — ANY request
+  // of an overdue active student flips the status right here, so layout guards
+  // and action checks see the account as expired immediately, not only after a
+  // re-login.
+  if (
+    session.user.role === "student" &&
+    session.user.status === "active" &&
+    session.user.accessUntil !== null &&
+    session.user.accessUntil <= now
+  ) {
+    await db.user.update({ where: { id: session.userId }, data: { status: "expired" } });
+    await emitEvent(db, "access.expired", { via: "request" }, { userId: session.userId });
+    session.user.status = "expired";
+  }
+
   // Rolling 30 days — throttled; impersonation sessions never roll and never
   // touch the student's activity timestamps.
   if (

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChangePasswordForm } from "./change-password-form";
-import { RevokeAllSessionsButton } from "./revoke-all-button";
+import { RevokeOtherSessionsButton } from "./revoke-others-button";
 
 export const metadata: Metadata = {
   title: "Профиль",
@@ -98,7 +98,7 @@ export default async function ProfilePage() {
             </ul>
           )}
           <div>
-            <RevokeAllSessionsButton />
+            <RevokeOtherSessionsButton />
           </div>
         </CardContent>
       </Card>

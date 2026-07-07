@@ -57,6 +57,7 @@ export async function requireActionAuth(): Promise<ZoneAuth> {
     user: auth.user,
     session: auth.session,
     impersonated: auth.session.impersonatorId !== null,
+    accessExpired: auth.accessExpired,
   };
 }
 
@@ -72,6 +73,13 @@ export async function requireActionRole(min: Role): Promise<ZoneAuth> {
 export function assertNotImpersonating(auth: ZoneAuth): void {
   if (auth.impersonated) {
     throw new ActionError("impersonation_readonly", "Режим просмотра — изменения недоступны");
+  }
+}
+
+/** Soft-lock (spec 7.1.5): student actions are unavailable once access is over. */
+export function assertActiveAccess(auth: ZoneAuth): void {
+  if (auth.user.role === "student" && auth.accessExpired) {
+    throw new ActionError("access_expired", "Доступ завершён — продли его, чтобы продолжить");
   }
 }
 

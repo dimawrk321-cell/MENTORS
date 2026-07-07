@@ -49,7 +49,7 @@ export function ExtendAccessControls({ userId }: { userId: string }) {
         loading={pending}
         onClick={() => extend({ kind: "days", days: EXTENSION_MONTH_DAYS })}
       >
-        +1 месяц
+        +1 месяц ({EXTENSION_MONTH_DAYS} дней)
       </Button>
       <Button
         variant="secondary"
@@ -57,7 +57,7 @@ export function ExtendAccessControls({ userId }: { userId: string }) {
         loading={pending}
         onClick={() => extend({ kind: "days", days: EXTENSION_MONTH_DAYS * 3 })}
       >
-        +3 месяца
+        +3 месяца ({EXTENSION_MONTH_DAYS * 3} дней)
       </Button>
       <Button variant="secondary" size="sm" onClick={() => setDialogOpen(true)}>
         <CalendarPlus size={14} strokeWidth={1.75} aria-hidden="true" />

@@ -2,7 +2,13 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { hashPassword } from "@/lib/utils/password";
 import { addDays } from "@/lib/utils/dates";
 import { changePassword, login, logout } from "@/lib/services/auth";
-import { SESSION_TTL_MS, startImpersonation, validateSessionToken } from "@/lib/services/sessions";
+import {
+  createSession,
+  revokeSessions,
+  SESSION_TTL_MS,
+  startImpersonation,
+  validateSessionToken,
+} from "@/lib/services/sessions";
 import { createTestUser, resetDb, testDb, UA } from "./helpers/db";
 
 // Mandatory suite (spec 19.2): single concurrent session — a new login
@@ -179,7 +185,7 @@ describe("session validity (spec 7.2)", () => {
     expect((await validateSessionToken(testDb, res.token, NOW)).state).toBe("none");
   });
 
-  it("overdue active student validates with accessExpired=true (soft-lock)", async () => {
+  it("overdue active student validates with accessExpired=true and the status flips lazily", async () => {
     const user = await createTestUser({
       email: "soft@test.local",
       passwordHash,
@@ -191,9 +197,53 @@ describe("session validity (spec 7.2)", () => {
 
     const beforeEnd = await validateSessionToken(testDb, res.token, NOW);
     expect(beforeEnd.state === "valid" && beforeEnd.accessExpired).toBe(false);
+    expect((await testDb.user.findUniqueOrThrow({ where: { id: user.id } })).status).toBe("active");
 
+    // Any request past access_until: the guard sends the student to /expired
+    // (accessExpired=true) AND the status flips right away — spec 7.1.5,
+    // acceptance fix #1: not only on login.
     const afterEnd = await validateSessionToken(testDb, res.token, addDays(NOW, 2));
     expect(afterEnd.state === "valid" && afterEnd.accessExpired).toBe(true);
+    expect((await testDb.user.findUniqueOrThrow({ where: { id: user.id } })).status).toBe(
+      "expired",
+    );
+
+    const event = await testDb.analyticsEvent.findFirst({
+      where: { type: "access.expired", userId: user.id },
+    });
+    expect(event).not.toBeNull();
+  });
+
+  it("«выйти на всех остальных» keeps the pressing session alive", async () => {
+    const user = await makeStudent("others@test.local");
+    // Two live sessions built directly (login would evict the first one).
+    const other = await createSession(testDb, {
+      userId: user.id,
+      deviceId: null,
+      ip: "127.0.0.1",
+      now: NOW,
+    });
+    const current = await createSession(testDb, {
+      userId: user.id,
+      deviceId: null,
+      ip: "127.0.0.1",
+      now: NOW,
+    });
+
+    // Mirrors revokeOtherSessionsAction: everything except the current session.
+    await revokeSessions(testDb, {
+      userId: user.id,
+      reason: "logout_all",
+      exceptSessionId: current.sessionId,
+      now: NOW,
+    });
+
+    const stillMe = await validateSessionToken(testDb, current.token, NOW);
+    expect(stillMe.state).toBe("valid");
+
+    // The other device is signed out plainly — not the eviction screen.
+    const otherState = await validateSessionToken(testDb, other.token, NOW);
+    expect(otherState.state).toBe("none");
   });
 });
 

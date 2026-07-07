@@ -1,13 +1,11 @@
 "use server";
 
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { changePassword } from "@/lib/services/auth";
 import { revokeSessions } from "@/lib/services/sessions";
-import { clearedCookieOptions, SESSION_COOKIE } from "@/lib/auth/cookies";
 import {
   ActionError,
+  assertActiveAccess,
   assertNotImpersonating,
   parseInput,
   requireActionAuth,
@@ -25,6 +23,7 @@ export async function changePasswordAction(
   return runAction<undefined>(async () => {
     const auth = await requireActionAuth();
     assertNotImpersonating(auth);
+    assertActiveAccess(auth);
     const input = parseInput(changePasswordSchema, {
       oldPassword: formData.get("oldPassword"),
       newPassword: formData.get("newPassword"),
@@ -43,19 +42,19 @@ export async function changePasswordAction(
 }
 
 /**
- * «Выйти на всех» (spec 7.2 / 8.3).
- * DECISION: revokes every session including the current one — the literal
- * reading; the user re-signs in once, which is the honest outcome of the button.
+ * «Выйти на всех остальных» (spec 7.2 / 8.3): revokes every session except the
+ * one that pressed the button — a safety action must not sign out its author.
  */
-export async function revokeAllSessionsAction(): Promise<ActionResult<undefined>> {
-  const result = await runAction<undefined>(async () => {
+export async function revokeOtherSessionsAction(): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
     const auth = await requireActionAuth();
     assertNotImpersonating(auth);
-    await revokeSessions(prisma, { userId: auth.user.id, reason: "logout_all" });
-    const jar = await cookies();
-    jar.set(SESSION_COOKIE, "", clearedCookieOptions());
+    assertActiveAccess(auth);
+    await revokeSessions(prisma, {
+      userId: auth.user.id,
+      reason: "logout_all",
+      exceptSessionId: auth.session.id,
+    });
     return undefined;
   });
-  if (result.ok) redirect("/login");
-  return result;
 }

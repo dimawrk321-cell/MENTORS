@@ -33,6 +33,8 @@ export interface ZoneAuth {
   user: User;
   session: SessionWithUser;
   impersonated: boolean;
+  /** Soft-lock state (spec 7.1.5): true for a student whose access window is over. */
+  accessExpired: boolean;
 }
 
 /** Where a signed-in user belongs (spec 8.1: student → «/», mentor+ → /admin). */
@@ -55,6 +57,7 @@ export async function requireStudentZone(): Promise<ZoneAuth> {
     user: auth.user,
     session: auth.session,
     impersonated: auth.session.impersonatorId !== null,
+    accessExpired: auth.accessExpired,
   };
 }
 
@@ -68,6 +71,7 @@ export async function requireExpiredStudent(): Promise<ZoneAuth> {
     user: auth.user,
     session: auth.session,
     impersonated: auth.session.impersonatorId !== null,
+    accessExpired: auth.accessExpired,
   };
 }
 
@@ -82,6 +86,7 @@ export async function requireAdminZone(min: Role = "mentor"): Promise<ZoneAuth> 
     user: auth.user,
     session: auth.session,
     impersonated: auth.session.impersonatorId !== null,
+    accessExpired: auth.accessExpired,
   };
 }
 
@@ -95,6 +100,7 @@ export async function requireInterviewerZone(): Promise<ZoneAuth> {
     user: auth.user,
     session: auth.session,
     impersonated: auth.session.impersonatorId !== null,
+    accessExpired: auth.accessExpired,
   };
 }
 
