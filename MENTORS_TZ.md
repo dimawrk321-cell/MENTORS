@@ -635,6 +635,7 @@ Lucide, stroke 1.5–1.75, размер 16–20. Достижения — мон
 **ENV:** `DATABASE_URL, SESSION_SECRET, CRON_SECRET, PLATFORM_URL, BRAND_NAME=MENTORS, SMTP_HOST/PORT/USER/PASS/FROM, RENEWAL_CONTACT (ссылка tg/mail), GEOIP_DB_PATH?, NODE_ENV`.
 **Seed (`prisma/seed.ts`):** owner (email/пароль из env SEED_OWNER_*), 2 ментора (один is_interviewer) + профили интервьюеров с плейсхолдер room_url, tracks (ds/nlp/ai), 8 категорий вопросов с цветами, rubric_templates с дефолтными критериями (7.8), achievements-справочник (7.7), app_settings (XP-карта, правила, RENEWAL-текст), notification_prefs-дефолты, демо-курс «Демо» (1 модуль, 2 урока: с формулой/кодом/коллаутами/видео, 6 вопросов: 3 open + 3 закрытых, module_test) — для проверки всех механик до импорта.
 **Деплой:** docker compose на VPS; caddy — TLS+домен; `prisma migrate deploy` на старте web; healthcheck `/api/health`; логи stdout→journald. Prod-заметка: PG — volume + ежедневный pg_dump.
+**Локальная разработка (дополнение, июль 2026):** ведётся без Docker — портативный PostgreSQL 16 в `./pgsql` (в git не попадает), управление через `pnpm db:setup / db:start / db:stop / db:status`, перед `pnpm dev` выполняется проверка доступности БД. Docker Compose остаётся путём продакшена и машин с Docker.
 
 ## 19. Definition of Done (каждый этап и проект в целом)
 
