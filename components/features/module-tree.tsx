@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { Check, Circle, Lock } from "lucide-react";
+import { Check, Circle, ClipboardCheck, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { pluralRu } from "@/lib/utils/dates";
 import { cn } from "@/lib/utils/cn";
 
 // ModuleTree (spec 5.3): галки завершённых, точка текущего, замки закрытых,
-// метки «необязательный» и «обновлён». Строка модульного теста и test-out
-// подключатся на этапе 3.
+// метки «необязательный» и «обновлён»; строка модульного теста
+// «сдан {score}% / доступен / закрыт» и «Сдать экстерном» (spec 8.3).
 
 export interface ModuleTreeLesson {
   id: string;
@@ -19,12 +19,23 @@ export interface ModuleTreeLesson {
   updatedSinceCompletion: boolean;
 }
 
+export interface ModuleTreeTest {
+  passed: boolean;
+  bestScore: number | null;
+  /** Обычный тест доступен, когда обязательные уроки модуля завершены. */
+  available: boolean;
+  /** «Сдать экстерном» — незачтённый strict-модуль с непройденными уроками. */
+  testoutAvailable: boolean;
+}
+
 export interface ModuleTreeModule {
   id: string;
   title: string;
   completedRequired: number;
   totalRequired: number;
   lessons: ModuleTreeLesson[];
+  /** Присутствует только у модулей с enabled-тестом. */
+  test?: ModuleTreeTest;
 }
 
 function LessonIcon({ lesson }: { lesson: ModuleTreeLesson }) {
@@ -109,9 +120,65 @@ export function ModuleTree({ modules }: { modules: ModuleTreeModule[] }) {
             {module.lessons.map((lesson) => (
               <LessonRow key={lesson.id} lesson={lesson} />
             ))}
+            {module.test && <TestRow moduleId={module.id} test={module.test} />}
           </div>
         </section>
       ))}
+    </div>
+  );
+}
+
+function TestRow({ moduleId, test }: { moduleId: string; test: ModuleTreeTest }) {
+  const inner = (
+    <>
+      <span className="flex w-5 shrink-0 items-center justify-center">
+        {test.passed ? (
+          <Check size={15} strokeWidth={2.25} className="text-success" aria-hidden="true" />
+        ) : test.available || test.testoutAvailable ? (
+          <ClipboardCheck size={15} strokeWidth={1.75} className="text-accent" aria-hidden="true" />
+        ) : (
+          <Lock size={14} strokeWidth={1.75} className="text-text-3" aria-hidden="true" />
+        )}
+      </span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-[14px]",
+          test.passed || test.available || test.testoutAvailable ? "text-text-1" : "text-text-3",
+        )}
+      >
+        Модульный тест
+      </span>
+      {test.passed ? (
+        <Badge variant="success">сдан {test.bestScore}%</Badge>
+      ) : test.available ? (
+        <Badge variant="accent">доступен</Badge>
+      ) : (
+        <Badge>закрыт</Badge>
+      )}
+      {test.testoutAvailable && (
+        <span className="text-accent shrink-0 text-[12px]">Сдать экстерном</span>
+      )}
+    </>
+  );
+
+  // Кликабельно, когда есть что сдавать или смотреть (разбор после сдачи).
+  if (test.passed || test.available || test.testoutAvailable) {
+    return (
+      <Link
+        href={test.testoutAvailable ? `/tests/${moduleId}?kind=testout` : `/tests/${moduleId}`}
+        className="rounded-control ease-app hover:bg-surface-2 flex items-center gap-2.5 px-2.5 py-2 transition-colors duration-150"
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <div
+      aria-disabled="true"
+      title="Откроется после завершения уроков модуля"
+      className="rounded-control flex items-center gap-2.5 px-2.5 py-2"
+    >
+      {inner}
     </div>
   );
 }

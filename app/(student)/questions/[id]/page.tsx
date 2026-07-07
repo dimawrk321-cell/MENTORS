@@ -1,0 +1,121 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft, Plus } from "lucide-react";
+import { prisma } from "@/lib/db";
+import { requireStudentZone } from "@/lib/auth/guards";
+import { getQuestionPublic } from "@/lib/services/questions";
+import { parseOptions } from "@/lib/utils/answers";
+import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants";
+import { LessonRenderer } from "@/components/blocks/lesson-renderer";
+import { FlipCard } from "@/components/features/flip-card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+export const metadata: Metadata = {
+  title: "Вопрос",
+};
+
+interface QuestionPageProps {
+  params: Promise<{ id: string }>;
+}
+
+/** FlipCard-просмотр вопроса (spec 7.4/8.3). */
+export default async function QuestionPage({ params }: QuestionPageProps) {
+  await requireStudentZone();
+  const { id } = await params;
+  const question = await getQuestionPublic(prisma, id);
+  if (!question) notFound();
+
+  const colorIndex = question.category.parent?.colorIndex ?? question.category.colorIndex;
+  const correctOptions = parseOptions(question.options).filter((option) => option.correct);
+
+  const chips = (
+    <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <Badge
+        style={{
+          color: `var(--cat-${colorIndex})`,
+          background: `color-mix(in srgb, var(--cat-${colorIndex}) 12%, transparent)`,
+        }}
+      >
+        {question.category.parent ? `${question.category.parent.title} · ` : ""}
+        {question.category.title}
+      </Badge>
+      <Badge>{QUESTION_TYPE_LABEL[question.type]}</Badge>
+      <Badge>{QUESTION_DIFFICULTY_LABEL[question.difficulty]}</Badge>
+    </div>
+  );
+
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      <Link
+        href="/questions"
+        className="text-text-3 ease-app hover:text-text-1 flex w-fit items-center gap-1.5 text-[13px] transition-colors duration-150"
+      >
+        <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
+        Вопросы
+      </Link>
+
+      <FlipCard
+        front={
+          <Card className="min-h-[300px]">
+            <CardContent className="p-6">
+              {chips}
+              <div className="lesson-prose text-[16px]">
+                <LessonRenderer markdown={question.textMd} />
+              </div>
+            </CardContent>
+          </Card>
+        }
+        back={
+          <Card className="min-h-[300px]">
+            <CardContent className="p-6">
+              <p className="text-text-3 mb-3 text-[12px] font-medium tracking-wide uppercase">
+                Эталонный ответ
+              </p>
+              <div className="lesson-prose text-[15px]">
+                {question.answerMd?.trim() ? (
+                  <LessonRenderer markdown={question.answerMd} />
+                ) : (
+                  <>
+                    {correctOptions.length > 0 && (
+                      <p>
+                        <span className="text-text-2">Правильный ответ: </span>
+                        {correctOptions.map((option) => option.text).join("; ")}
+                      </p>
+                    )}
+                    {question.explanationMd?.trim() ? (
+                      <LessonRenderer markdown={question.explanationMd} />
+                    ) : (
+                      correctOptions.length === 0 && (
+                        <p className="text-text-2">Разбор появится позже.</p>
+                      )
+                    )}
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        }
+      />
+
+      <div className="flex justify-center">
+        {/* SRS придёт на этапе 4 — кнопка честно ждёт тренажёр. */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Button variant="secondary" disabled>
+                  <Plus size={15} strokeWidth={1.75} aria-hidden="true" />В повторения
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Появится вместе с тренажёром</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    </div>
+  );
+}

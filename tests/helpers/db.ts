@@ -4,9 +4,16 @@ import { testDatabaseUrl } from "./db-url";
 
 export const testDb = new PrismaClient({ datasourceUrl: testDatabaseUrl() });
 
-/** Wipes all stage-1/2 tables in FK-safe order. */
+/** Wipes all stage-1/2/3 tables in FK-safe order. */
 export async function resetDb(): Promise<void> {
+  await testDb.quizAnswer.deleteMany();
+  await testDb.testAttemptAnswer.deleteMany();
+  await testDb.testAttempt.deleteMany();
+  await testDb.questionLesson.deleteMany();
+  await testDb.moduleTest.deleteMany();
   await testDb.contentReport.deleteMany();
+  await testDb.question.deleteMany();
+  await testDb.questionCategory.deleteMany();
   await testDb.lessonProgress.deleteMany();
   await testDb.lesson.deleteMany();
   await testDb.module.deleteMany();

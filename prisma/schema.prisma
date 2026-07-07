@@ -3,7 +3,10 @@
 // tables the stage needs (audit_log, analytics_events, app_settings) and the
 // login rate-limit table required by spec section 11.
 // Stage 2: content models — courses, modules, lessons, tracks, lesson_progress,
-// content_reports (questions & question_lessons arrive at stage 3).
+// content_reports.
+// Stage 3: question bank & tests — question_categories, questions,
+// question_lessons, module_tests, test_attempts, test_attempt_answers,
+// quiz_answers + the content_reports.question_id FK.
 // Later stages append their own models incrementally.
 
 generator client {
@@ -110,6 +113,8 @@ model User {
   lessonProgress       LessonProgress[]
   contentReports       ContentReport[]   @relation("ReportAuthor")
   resolvedReports      ContentReport[]   @relation("ReportResolvedBy")
+  testAttempts         TestAttempt[]
+  quizAnswers          QuizAnswer[]
 
   @@index([status, accessUntil])
   @@map("users")
@@ -349,6 +354,8 @@ model Module {
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
   lessons   Lesson[]
+  test      ModuleTest?
+  attempts  TestAttempt[]
 
   @@index([courseId])
   @@map("modules")
@@ -379,6 +386,8 @@ model Lesson {
   updatedAt        DateTime    @updatedAt @map("updated_at")
   progress         LessonProgress[]
   reports          ContentReport[]
+  questionLinks    QuestionLesson[]
+  quizAnswers      QuizAnswer[]
 
   @@unique([moduleId, slug])
   @@index([moduleId])
@@ -415,14 +424,171 @@ model LessonProgress {
   @@map("lesson_progress")
 }
 
+// --- Stage 3: question bank & tests (spec 6 «Вопросы и тесты») ---
+
+enum QuestionType {
+  open
+  single
+  multi
+  tf
+  short_text
+}
+
+enum QuestionSource {
+  import
+  manual
+}
+
+enum TestKind {
+  module
+  testout
+}
+
+model QuestionCategory {
+  id         String             @id @default(cuid())
+  title      String
+  slug       String             @unique
+  parentId   String?            @map("parent_id")
+  parent     QuestionCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   QuestionCategory[] @relation("CategoryTree")
+  // Spec 5.1/7.4: 8 muted pairs assigned to root categories in order.
+  colorIndex Int                @map("color_index")
+  order      Int                @default(0)
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+  questions  Question[]
+
+  @@index([parentId])
+  @@map("question_categories")
+}
+
+model Question {
+  id            String           @id @default(cuid())
+  type          QuestionType
+  categoryId    String           @map("category_id")
+  category      QuestionCategory @relation(fields: [categoryId], references: [id])
+  textMd        String           @map("text_md")
+  /** Эталон открытого вопроса (может содержать изображения/KaTeX). */
+  answerMd      String?          @map("answer_md")
+  /** Разбор закрытого вопроса — показывается в квизе и успешном тесте. */
+  explanationMd String?          @map("explanation_md")
+  /** [{id,text,correct}] для single|multi|tf. */
+  options       Json?
+  /** string[] для short_text (сравнение через нормализацию 7.4). */
+  acceptedAnswers Json?          @map("accepted_answers")
+  difficulty    Int              @default(2)
+  status        ContentStatus    @default(draft)
+  /** Флаг импортера: ответ был картинкой, формулы надо переписать в KaTeX. */
+  needsLatex    Boolean          @default(false) @map("needs_latex")
+  source        QuestionSource   @default(manual)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  lessonLinks    QuestionLesson[]
+  quizAnswers    QuizAnswer[]
+  attemptAnswers TestAttemptAnswer[]
+  reports        ContentReport[]
+
+  @@index([categoryId])
+  @@index([status, type])
+  @@map("questions")
+}
+
+model QuestionLesson {
+  id         String   @id @default(cuid())
+  questionId String   @map("question_id")
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  lessonId   String   @map("lesson_id")
+  lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  /** Ключевой вопрос урока → в SRS при завершении (этап 4). */
+  isKey  Boolean @default(false) @map("is_key")
+  /** Участвует в квизе урока. */
+  inQuiz Boolean @default(false) @map("in_quiz")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([questionId, lessonId])
+  @@index([lessonId])
+  @@map("question_lessons")
+}
+
+model ModuleTest {
+  id              String   @id @default(cuid())
+  moduleId        String   @unique @map("module_id")
+  module          Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  poolSize        Int      @default(12) @map("pool_size")
+  threshold       Int      @default(80)
+  cooldownMinutes Int      @default(45) @map("cooldown_minutes")
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("module_tests")
+}
+
+model TestAttempt {
+  id       String   @id @default(cuid())
+  userId   String   @map("user_id")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moduleId String   @map("module_id")
+  module   Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  kind     TestKind @default(module)
+  /** Зафиксированная выборка вопросов (string[] в порядке показа). */
+  questionIds Json      @map("question_ids")
+  score       Int       @default(0)
+  passed      Boolean   @default(false)
+  startedAt   DateTime  @default(now()) @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  answers     TestAttemptAnswer[]
+
+  @@index([userId, moduleId, kind])
+  @@map("test_attempts")
+}
+
+model TestAttemptAnswer {
+  id         String      @id @default(cuid())
+  attemptId  String      @map("attempt_id")
+  attempt    TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String      @map("question_id")
+  question   Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer     Json
+  correct    Boolean
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  @@unique([attemptId, questionId])
+  @@index([questionId])
+  @@map("test_attempt_answers")
+}
+
+model QuizAnswer {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String   @map("question_id")
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  lessonId   String   @map("lesson_id")
+  lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  correct    Boolean
+  /** Первый правильный ответ на вопрос — для разовой выдачи XP (этап 5). */
+  first     Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, questionId])
+  @@index([lessonId])
+  @@map("quiz_answers")
+}
+
 model ContentReport {
   id       String  @id @default(cuid())
   userId   String  @map("user_id")
   user     User    @relation("ReportAuthor", fields: [userId], references: [id], onDelete: Cascade)
   lessonId String? @map("lesson_id")
   lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
-  // DECISION: plain column until stage 3 ships the questions table (FK added then).
   questionId   String?             @map("question_id")
+  question     Question?           @relation(fields: [questionId], references: [id], onDelete: SetNull)
   blockAnchor  String?             @map("block_anchor")
   type         ContentReportType
   text         String?

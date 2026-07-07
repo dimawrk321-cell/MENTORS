@@ -100,7 +100,7 @@ describe("gating over the database", () => {
     // L3 and L4 locked at the start.
     expect((await getLessonView(testDb, l3, user.id))?.unlocked).toBe(false);
     const lockedView = await getLessonView(testDb, l3, user.id);
-    expect(lockedView?.unlockAfter?.id).toBe(l1);
+    expect(lockedView?.unlockReason).toEqual({ kind: "lesson", id: l1, title: "Урок 1" });
     // Completing a locked lesson is rejected.
     expect(await completeLesson(testDb, { userId: user.id, lessonId: l3, now: NOW })).toEqual({
       ok: false,

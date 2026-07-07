@@ -136,6 +136,26 @@ export async function renderLessonHast(markdown: string): Promise<RenderedLesson
   return { hast, headings };
 }
 
+/**
+ * Markdown → HTML string. Used where rendered markdown must cross the
+ * server-action boundary (KaTeX preview in the question editor); pages render
+ * through hast→JSX instead.
+ */
+export async function renderMarkdownHtml(markdown: string): Promise<string> {
+  const { default: rehypeStringify } = await import("rehype-stringify");
+  const htmlProcessor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkMath)
+    .use(remarkDirective)
+    .use(remarkDirectiveBlocks)
+    .use(remarkRehype)
+    .use(rehypeKatex)
+    .use(rehypeStringify);
+  const file = await htmlProcessor.process(markdown);
+  return String(file);
+}
+
 const WORDS_PER_MINUTE = 180;
 
 /**

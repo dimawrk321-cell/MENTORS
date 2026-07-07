@@ -17,6 +17,7 @@ export async function getContentTree(db: Db) {
       modules: {
         orderBy: [{ order: "asc" }, { createdAt: "asc" }],
         include: {
+          test: true,
           lessons: {
             orderBy: [{ order: "asc" }, { createdAt: "asc" }],
             select: {

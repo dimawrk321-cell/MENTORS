@@ -1,6 +1,11 @@
 import type { CourseGating, Track } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { emitEvent } from "@/lib/services/events";
+import {
+  getModuleTestStates,
+  makeModuleTestHook,
+  type ModuleTestState,
+} from "@/lib/services/tests";
 
 // Student-facing content domain (spec 7.3): course/module/lesson reading model,
 // gating, reading positions, completion, content reports. The admin studio
@@ -40,6 +45,10 @@ export interface ModuleState {
   completedRequired: number;
   totalRequired: number;
 }
+
+export type UnlockReason =
+  | { kind: "lesson"; id: string; title: string }
+  | { kind: "module_test"; moduleId: string; moduleTitle: string };
 
 export interface CourseState {
   lessons: Map<string, LessonState>;
@@ -202,9 +211,12 @@ export async function listCoursesForStudent(db: Db, userId: string, track: Track
     course.modules.flatMap((module) => module.lessons.map((lesson) => lesson.id)),
   );
   const progress = await getProgressMap(db, userId, allLessonIds);
+  const allModuleIds = ordered.flatMap((course) => course.modules.map((m) => m.id));
+  const testStates = await getModuleTestStates(db, userId, allModuleIds);
+  const testHook = makeModuleTestHook(testStates);
 
   return ordered.map((course) => {
-    const state = computeCourseState(course.gating, course.modules, progress);
+    const state = computeCourseState(course.gating, course.modules, progress, testHook);
     return {
       id: course.id,
       slug: course.slug,
@@ -230,10 +242,23 @@ export async function getCourseView(db: Db, slug: string, userId: string) {
 
   const lessonIds = course.modules.flatMap((m) => m.lessons.map((l) => l.id));
   const progress = await getProgressMap(db, userId, lessonIds);
-  const state = computeCourseState(course.gating, course.modules, progress);
+  // Spec 7.3: закрытие модуля учитывает сданный модульный тест (если включён).
+  const testStates = await getModuleTestStates(
+    db,
+    userId,
+    course.modules.map((m) => m.id),
+  );
+  const state = computeCourseState(
+    course.gating,
+    course.modules,
+    progress,
+    makeModuleTestHook(testStates),
+  );
 
-  return { course, state };
+  return { course, state, testStates };
 }
+
+export type CourseTestStates = Map<string, ModuleTestState>;
 
 export interface LessonView {
   lesson: {
@@ -251,7 +276,7 @@ export interface LessonView {
   state: LessonState;
   unlocked: boolean;
   /** For the lock screen: the step that opens this lesson (spec 8.3). */
-  unlockAfter: { id: string; title: string } | null;
+  unlockReason: UnlockReason | null;
   prev: { id: string; title: string; unlocked: boolean } | null;
   next: { id: string; title: string; unlocked: boolean } | null;
   progress: { scrollPos: number | null; videoPos: number | null; completedAt: Date | null };
@@ -295,20 +320,30 @@ export async function getLessonView(
     current: false,
   };
 
-  // Lock hint: the first not-completed required lesson before this one.
-  let unlockAfter: { id: string; title: string } | null = null;
+  // Lock hint (spec 8.3): the first not-completed required lesson before this
+  // one, or — когда уроки предыдущего модуля пройдены — его несданный
+  // модульный тест (замок «Откроется после модульного теста» только у модулей
+  // с enabled-тестом: hook возвращает false ровно в этом случае).
+  let unlockReason: UnlockReason | null = null;
   if (!lessonState.unlocked) {
     for (const mod of courseView.course.modules) {
+      const isOwnModule = mod.id === lesson.moduleId;
       for (const candidate of mod.lessons) {
-        if (candidate.id === lesson.id) break;
+        if (isOwnModule && candidate.id === lesson.id) break;
         const candidateState = state.lessons.get(candidate.id);
         if (!candidate.isOptional && !candidateState?.completed) {
-          unlockAfter = { id: candidate.id, title: candidate.title };
+          unlockReason = { kind: "lesson", id: candidate.id, title: candidate.title };
           break;
         }
       }
-      if (unlockAfter) break;
-      if (mod.id === lesson.moduleId) break;
+      if (unlockReason || isOwnModule) break;
+      const moduleState = state.modules.get(mod.id);
+      if (moduleState && !moduleState.closed) {
+        // All required lessons of the previous module are done → the blocker
+        // is its enabled, unpassed test.
+        unlockReason = { kind: "module_test", moduleId: mod.id, moduleTitle: mod.title };
+        break;
+      }
     }
   }
 
@@ -331,7 +366,7 @@ export async function getLessonView(
     module: { id: lesson.module.id, title: lesson.module.title },
     state: lessonState,
     unlocked: lessonState.unlocked,
-    unlockAfter,
+    unlockReason,
     prev: prevMeta
       ? { ...prevMeta, unlocked: state.lessons.get(prevMeta.id)?.unlocked ?? false }
       : null,

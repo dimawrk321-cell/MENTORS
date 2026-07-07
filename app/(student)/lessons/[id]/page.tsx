@@ -5,6 +5,9 @@ import { ArrowLeft, ArrowRight, ChevronRight, Lock } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getLessonView } from "@/lib/services/content";
+import { getKeyQuestionsForLesson, getQuizQuestionsForLesson } from "@/lib/services/questions";
+import { KeyQuestions } from "@/components/features/key-questions";
+import { QuizWidget } from "@/components/features/quiz/quiz-widget";
 import { renderLessonContent } from "@/components/blocks/lesson-renderer";
 import { Watermark } from "@/components/features/watermark";
 import { LessonReader } from "@/components/features/lesson-reader";
@@ -43,14 +46,20 @@ export default async function LessonPage({ params }: LessonPageProps) {
           icon={Lock}
           title="Урок пока закрыт"
           description={
-            view.unlockAfter
-              ? `Откроется после урока «${view.unlockAfter.title}».`
-              : "Заверши предыдущие шаги курса, чтобы открыть его."
+            view.unlockReason?.kind === "lesson"
+              ? `Откроется после урока «${view.unlockReason.title}».`
+              : view.unlockReason?.kind === "module_test"
+                ? `Откроется после модульного теста «${view.unlockReason.moduleTitle}».`
+                : "Заверши предыдущие шаги курса, чтобы открыть его."
           }
           action={
-            view.unlockAfter ? (
+            view.unlockReason?.kind === "lesson" ? (
               <Button asChild>
-                <Link href={`/lessons/${view.unlockAfter.id}`}>Перейти к нужному шагу</Link>
+                <Link href={`/lessons/${view.unlockReason.id}`}>Перейти к нужному шагу</Link>
+              </Button>
+            ) : view.unlockReason?.kind === "module_test" ? (
+              <Button asChild>
+                <Link href={`/tests/${view.unlockReason.moduleId}`}>К тесту модуля</Link>
               </Button>
             ) : (
               <Button asChild variant="secondary">
@@ -64,6 +73,10 @@ export default async function LessonPage({ params }: LessonPageProps) {
   }
 
   const { content, headings } = await renderLessonContent(view.lesson.contentMd);
+  const [keyQuestions, quizQuestions] = await Promise.all([
+    getKeyQuestionsForLesson(prisma, view.lesson.id),
+    getQuizQuestionsForLesson(prisma, { lessonId: view.lesson.id, userId: user.id }),
+  ]);
 
   return (
     <div className="flex gap-10">
@@ -123,6 +136,10 @@ export default async function LessonPage({ params }: LessonPageProps) {
             <article className="lesson-prose">{content}</article>
           </div>
         </LessonReader>
+
+        {/* Автоблок ключевых вопросов + квиз (spec 7.3/7.5) */}
+        <KeyQuestions questions={keyQuestions} />
+        <QuizWidget lessonId={view.lesson.id} userId={user.id} questions={quizQuestions} />
 
         {/* Completion + prev/next (spec 7.3) */}
         <div className="border-border mt-10 flex flex-col gap-4 border-t pt-6">

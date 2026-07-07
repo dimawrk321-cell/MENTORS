@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  ClipboardCheck,
   Eye,
   EyeOff,
   FilePlus2,
@@ -48,6 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import type { ActionResult } from "@/lib/auth/action-helpers";
@@ -64,6 +66,7 @@ import {
   setModuleStatusAction,
   updateCourseAction,
 } from "@/lib/actions/content-admin";
+import { upsertModuleTestAction } from "@/lib/actions/questions-admin";
 
 export interface TreeLesson {
   id: string;
@@ -73,10 +76,18 @@ export interface TreeLesson {
   readingMinutes: number;
 }
 
+export interface TreeModuleTest {
+  poolSize: number;
+  threshold: number;
+  cooldownMinutes: number;
+  enabled: boolean;
+}
+
 export interface TreeModule {
   id: string;
   title: string;
   status: "draft" | "published";
+  test: TreeModuleTest | null;
   lessons: TreeLesson[];
 }
 
@@ -518,6 +529,13 @@ function ModuleBlock({ module }: { module: TreeModule }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [newLessonOpen, setNewLessonOpen] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
+  const [testForm, setTestForm] = useState({
+    poolSize: module.test?.poolSize ?? 12,
+    threshold: module.test?.threshold ?? 80,
+    cooldownMinutes: module.test?.cooldownMinutes ?? 45,
+    enabled: module.test?.enabled ?? true,
+  });
   const published = module.status === "published";
 
   return (
@@ -551,6 +569,22 @@ function ModuleBlock({ module }: { module: TreeModule }) {
             </IconAction>
             <IconAction label="Добавить урок" onClick={() => setNewLessonOpen(true)}>
               <FilePlus2 size={13} strokeWidth={1.75} />
+            </IconAction>
+            <IconAction
+              label={
+                module.test?.enabled
+                  ? "Тест модуля (включён)"
+                  : module.test
+                    ? "Тест модуля (выключен)"
+                    : "Настроить тест модуля"
+              }
+              onClick={() => setTestOpen(true)}
+            >
+              <ClipboardCheck
+                size={13}
+                strokeWidth={1.75}
+                className={module.test?.enabled ? "text-accent" : undefined}
+              />
             </IconAction>
             {module.status === "draft" && (
               <IconAction label="Удалить модуль" onClick={() => setDeleteOpen(true)}>
@@ -627,6 +661,94 @@ function ModuleBlock({ module }: { module: TreeModule }) {
           )
         }
       />
+
+      {/* Настройка модульного теста (spec 8.5) */}
+      <Dialog open={testOpen} onOpenChange={setTestOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Тест модуля «{module.title}»</DialogTitle>
+            <DialogDescription>
+              Пул — закрытые опубликованные вопросы уроков модуля; выборка случайная, экстерн — с
+              порогом 90%.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <label className="flex items-center justify-between gap-3 text-[14px]">
+              Тест включён (участвует в закрытии модуля)
+              <Switch
+                checked={testForm.enabled}
+                onCheckedChange={(enabled) => setTestForm({ ...testForm, enabled })}
+              />
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor={`test-pool-${module.id}`} className="text-text-2 text-[13px]">
+                  Вопросов
+                </label>
+                <Input
+                  id={`test-pool-${module.id}`}
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={testForm.poolSize}
+                  onChange={(event) =>
+                    setTestForm({ ...testForm, poolSize: Number(event.target.value) || 1 })
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor={`test-threshold-${module.id}`} className="text-text-2 text-[13px]">
+                  Порог, %
+                </label>
+                <Input
+                  id={`test-threshold-${module.id}`}
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={testForm.threshold}
+                  onChange={(event) =>
+                    setTestForm({ ...testForm, threshold: Number(event.target.value) || 80 })
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor={`test-cooldown-${module.id}`} className="text-text-2 text-[13px]">
+                  Кулдаун, мин
+                </label>
+                <Input
+                  id={`test-cooldown-${module.id}`}
+                  type="number"
+                  min={0}
+                  max={1440}
+                  value={testForm.cooldownMinutes}
+                  onChange={(event) =>
+                    setTestForm({ ...testForm, cooldownMinutes: Number(event.target.value) || 0 })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setTestOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              loading={pending}
+              onClick={() =>
+                act(
+                  () => upsertModuleTestAction({ moduleId: module.id, ...testForm }),
+                  () => {
+                    setTestOpen(false);
+                    toast({ title: "Тест модуля сохранён", variant: "success" });
+                  },
+                )
+              }
+            >
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SortableRow>
   );
 }

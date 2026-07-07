@@ -42,11 +42,22 @@ export default async function CoursePage({ params }: CoursePageProps) {
 
   const treeModules: ModuleTreeModule[] = course.modules.map((module) => {
     const moduleState = state.modules.get(module.id)!;
+    const testState = view.testStates.get(module.id);
+    const lessonsDone = moduleState.completedRequired === moduleState.totalRequired;
     return {
       id: module.id,
       title: module.title,
       completedRequired: moduleState.completedRequired,
       totalRequired: moduleState.totalRequired,
+      test: testState?.test.enabled
+        ? {
+            passed: testState.passed,
+            bestScore: testState.bestPassedScore,
+            available: lessonsDone,
+            // Spec 7.3: экстерн — на незачтённых strict-модулях с непройденными уроками.
+            testoutAvailable: course.gating === "strict" && !testState.passed && !lessonsDone,
+          }
+        : undefined,
       lessons: module.lessons.map((lesson) => {
         const lessonState = state.lessons.get(lesson.id)!;
         return {

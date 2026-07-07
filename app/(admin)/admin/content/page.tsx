@@ -24,6 +24,14 @@ export default async function ContentPage() {
       id: module.id,
       title: module.title,
       status: module.status,
+      test: module.test
+        ? {
+            poolSize: module.test.poolSize,
+            threshold: module.test.threshold,
+            cooldownMinutes: module.test.cooldownMinutes,
+            enabled: module.test.enabled,
+          }
+        : null,
       lessons: module.lessons.map((lesson) => ({
         id: lesson.id,
         title: lesson.title,
