@@ -115,9 +115,8 @@ export async function acceptInviteAction(
     return undefined;
   });
 
-  // DECISION: the invite lands on the dashboard until /onboarding ships at
-  // stage 2 (spec 8.1 sends the accepted invite to onboarding).
-  if (result.ok && done) redirect("/");
+  // Spec 8.1: accepted invite → auto-login → onboarding.
+  if (result.ok && done) redirect("/onboarding");
   return result;
 }
 

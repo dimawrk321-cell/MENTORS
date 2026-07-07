@@ -69,6 +69,15 @@ export async function requireActionRole(min: Role): Promise<ZoneAuth> {
   return auth;
 }
 
+/** Student-only actions (learning flow — spec 2: только student проходит обучение). */
+export async function requireActionStudent(): Promise<ZoneAuth> {
+  const auth = await requireActionAuth();
+  if (auth.user.role !== "student") {
+    throw new ActionError("forbidden", "Действие доступно только ученикам");
+  }
+  return auth;
+}
+
 /** Impersonation is strictly read-only (spec 7.2): every mutation calls this. */
 export function assertNotImpersonating(auth: ZoneAuth): void {
   if (auth.impersonated) {

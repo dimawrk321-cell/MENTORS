@@ -110,6 +110,15 @@
     }
   }
 
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
   /* Section 5.4: reduced motion degrades animations; fine-grained pass in stage 12. */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -120,5 +129,160 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/* --- Stage 2: lesson content (spec 5.2/7.3) --- */
+@layer components {
+  /* Watermark layers: exactly one is visible per theme (spec 5.7). */
+  html[data-theme="dark"] .wm-light,
+  html[data-theme="light"] .wm-dark {
+    display: none;
+  }
+
+  /* Reading column typography — tokens only, 680px handled by the page. */
+  .lesson-prose {
+    font-size: 16px;
+    line-height: 1.65;
+  }
+  .lesson-prose > :first-child {
+    margin-top: 0;
+  }
+  .lesson-prose h2 {
+    margin: 2rem 0 0.75rem;
+    font-size: 24px;
+  }
+  .lesson-prose h3 {
+    margin: 1.5rem 0 0.5rem;
+    font-size: 18px;
+  }
+  .lesson-prose h4 {
+    margin: 1.25rem 0 0.5rem;
+    font-size: 16px;
+  }
+  .lesson-prose p {
+    margin: 0.75rem 0;
+  }
+  .lesson-prose a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    text-underline-offset: 3px;
+    transition: text-decoration-color 150ms var(--ease);
+  }
+  .lesson-prose a:hover {
+    text-decoration-color: var(--accent);
+  }
+  .lesson-prose ul,
+  .lesson-prose ol {
+    margin: 0.75rem 0;
+    padding-left: 1.5rem;
+  }
+  .lesson-prose ul {
+    list-style: disc;
+  }
+  .lesson-prose ol {
+    list-style: decimal;
+  }
+  .lesson-prose li {
+    margin: 0.3rem 0;
+  }
+  .lesson-prose li::marker {
+    color: var(--text-3);
+  }
+  .lesson-prose blockquote {
+    margin: 1rem 0;
+    border-left: 2px solid var(--border-strong);
+    padding-left: 1rem;
+    color: var(--text-2);
+  }
+  .lesson-prose hr {
+    margin: 2rem 0;
+    border-color: var(--border);
+  }
+  .lesson-prose img {
+    max-width: 100%;
+    border-radius: var(--radius-card);
+  }
+  .lesson-prose strong {
+    font-weight: 600;
+  }
+  .lesson-prose code:not(pre code) {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface-2);
+    padding: 0.1em 0.35em;
+    font-size: 13.5px;
+  }
+  .lesson-prose table {
+    width: 100%;
+    font-size: 14px;
+    border-collapse: collapse;
+  }
+  .lesson-prose th,
+  .lesson-prose td {
+    border-bottom: 1px solid var(--border);
+    padding: 0.5rem 0.9rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .lesson-prose thead th {
+    color: var(--text-2);
+    font-weight: 500;
+  }
+  .lesson-prose tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .lesson-prose .lesson-callout p {
+    margin: 0.35rem 0;
+  }
+  /* KaTeX display blocks scroll instead of overflowing (spec 13). */
+  .lesson-prose .katex-display {
+    margin: 1.25rem 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0;
+  }
+
+  /* Shiki: dual theme via CSS variables (defaultColor: false). */
+  .lesson-prose pre.shiki {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 1rem 1.25rem;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  html[data-theme="dark"] .shiki,
+  html[data-theme="dark"] .shiki span {
+    color: var(--shiki-dark) !important;
+    font-style: var(--shiki-dark-font-style) !important;
+    font-weight: var(--shiki-dark-font-weight) !important;
+  }
+  html[data-theme="dark"] pre.shiki {
+    background-color: var(--surface-1) !important;
+  }
+  html[data-theme="light"] .shiki,
+  html[data-theme="light"] .shiki span {
+    color: var(--shiki-light) !important;
+    font-style: var(--shiki-light-font-style) !important;
+    font-weight: var(--shiki-light-font-weight) !important;
+  }
+  html[data-theme="light"] pre.shiki {
+    background-color: var(--surface-1) !important;
+  }
+
+  /* Optional line numbers: fence meta `numbers` (spec 5.3). */
+  pre[data-line-numbers] code {
+    counter-reset: line;
+  }
+  pre[data-line-numbers] .line::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 2ch;
+    margin-right: 1.25rem;
+    color: var(--text-3);
+    text-align: right;
   }
 }

@@ -45,6 +45,29 @@ export const inviteStudentSchema = z.object({
   name: z.string("Укажи имя").trim().min(1, "Укажи имя").max(100, "Имя слишком длинное"),
 });
 
+export const reportContentSchema = z.object({
+  lessonId: z.string().min(1),
+  type: z.enum(["error", "unclear"], "Выбери тип обращения"),
+  text: z.string().trim().max(1000, "Слишком длинный комментарий").optional(),
+});
+
+export const savePositionSchema = z.object({
+  lessonId: z.string().min(1),
+  scroll: z.number().min(0).max(1).optional(),
+  video: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60 * 60)
+    .optional(),
+});
+
+export const onboardingSchema = z.object({
+  track: z.enum(["ds", "nlp", "ai"]).nullable(),
+  dailyGoalXp: z.union([z.literal(30), z.literal(60), z.literal(120)]),
+  digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Укажи время в формате ЧЧ:ММ"),
+});
+
 export const extendAccessSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("days"),

@@ -57,7 +57,7 @@ pnpm dev
 
 ## Статус
 
-Выполнены этапы 0–1 из плана работ (раздел 17 ТЗ).
+Выполнены этапы 0–2 из плана работ (раздел 17 ТЗ).
 
 - Этап 0 («Каркас»): repo, Next.js, токены дизайн-системы, UI-кит, layout-скелеты зон,
   темы с анти-FOUC, шрифты, error/404, логгер, Vitest, Prisma + dev-compose.
@@ -67,3 +67,10 @@ pnpm dev
   аудит-сервис, impersonation «Глазами ученика», инвайт-флоу и минимальный
   /admin/students, жизненный цикл доступа 90 дней (активация, продление, expire,
   экран /expired), профиль-безопасность, dev-seed, юнит-тесты access/sessions/devices/rate-limit.
+- Этап 2 («Контент»): модели courses/modules/lessons/tracks/lesson_progress/content_reports,
+  markdown-пайплайн (директивы :::callout/:::video/:::practice/:::mock, KaTeX, Shiki,
+  GFM-таблицы), LessonRenderer с watermark-слоем, страницы /courses и /courses/[slug]
+  (ModuleTree с замками/галками/optional/«обновлён»), /lessons/[id] по анатомии 7.3
+  (позиции чтения, автопереход, репорты, TOC-шторка), гейтинг strict/recommended/free,
+  онбординг 8.2, контент-студия (дерево с drag-порядком, двухпанельный редактор
+  с live-preview, публикация с revalidate), демо-курс в сиде, тесты гейтинга и reading_minutes.

@@ -2,6 +2,8 @@
 // resets, access extensions, sessions, devices, security flags + the service
 // tables the stage needs (audit_log, analytics_events, app_settings) and the
 // login rate-limit table required by spec section 11.
+// Stage 2: content models — courses, modules, lessons, tracks, lesson_progress,
+// content_reports (questions & question_lessons arrive at stage 3).
 // Later stages append their own models incrementally.
 
 generator client {
@@ -105,6 +107,9 @@ model User {
   resolvedFlags        SecurityFlag[]    @relation("FlagResolvedBy")
   auditEntries         AuditLog[]        @relation("AuditActor")
   analyticsEvents      AnalyticsEvent[]
+  lessonProgress       LessonProgress[]
+  contentReports       ContentReport[]   @relation("ReportAuthor")
+  resolvedReports      ContentReport[]   @relation("ReportResolvedBy")
 
   @@index([status, accessUntil])
   @@map("users")
@@ -276,4 +281,159 @@ model AppSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("app_settings")
+}
+
+// --- Stage 2: content (spec 6 «Контент») ---
+
+enum CourseGating {
+  strict
+  recommended
+  free
+}
+
+enum ContentStatus {
+  draft
+  published
+}
+
+enum LessonDifficulty {
+  intro
+  base
+  advanced
+}
+
+enum VideoStatus {
+  ok
+  unavailable
+  unchecked
+}
+
+enum LessonProgressStatus {
+  in_progress
+  completed
+}
+
+enum ContentReportType {
+  error
+  unclear
+}
+
+enum ContentReportStatus {
+  open
+  resolved
+}
+
+model Course {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  title       String
+  description String        @default("")
+  order       Int           @default(0)
+  gating      CourseGating  @default(strict)
+  status      ContentStatus @default(draft)
+  icon        String?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  modules     Module[]
+
+  @@map("courses")
+}
+
+model Module {
+  id        String        @id @default(cuid())
+  courseId  String        @map("course_id")
+  course    Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  order     Int           @default(0)
+  status    ContentStatus @default(draft)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  lessons   Lesson[]
+
+  @@index([courseId])
+  @@map("modules")
+}
+
+model Lesson {
+  id         String        @id @default(cuid())
+  moduleId   String        @map("module_id")
+  module     Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  // DECISION: spec 6 does not scope lesson slug uniqueness; routes are id-based
+  // (/lessons/[id]), so the slug is unique per module — enough for anchors/import.
+  slug       String
+  title      String
+  order      Int           @default(0)
+  status     ContentStatus @default(draft)
+  difficulty LessonDifficulty @default(base)
+  isOptional Boolean       @default(false) @map("is_optional")
+  contentMd  String        @default("") @map("content_md")
+  // Recomputed on save: words / 180 (spec 6).
+  readingMinutes   Int         @default(1) @map("reading_minutes")
+  videoUrl         String?     @map("video_url")
+  videoStatus      VideoStatus @default(unchecked) @map("video_status")
+  videoCheckedAt   DateTime?   @map("video_checked_at")
+  publishedAt      DateTime?   @map("published_at")
+  // Bumped only when content_md changes — powers the «урок обновлён» badge.
+  contentUpdatedAt DateTime    @default(now()) @map("content_updated_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  progress         LessonProgress[]
+  reports          ContentReport[]
+
+  @@unique([moduleId, slug])
+  @@index([moduleId])
+  @@map("lessons")
+}
+
+model TrackDef {
+  id        String   @id @default(cuid())
+  key       Track    @unique
+  title     String
+  // Ordered list of course ids (spec 6: course_ids:json).
+  courseIds Json     @map("course_ids")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tracks")
+}
+
+model LessonProgress {
+  id          String               @id @default(cuid())
+  userId      String               @map("user_id")
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId    String               @map("lesson_id")
+  lesson      Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  status      LessonProgressStatus @default(in_progress)
+  completedAt DateTime?            @map("completed_at")
+  scrollPos   Float?               @map("scroll_pos")
+  videoPos    Int?                 @map("video_pos")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  @@unique([userId, lessonId])
+  @@index([lessonId])
+  @@map("lesson_progress")
+}
+
+model ContentReport {
+  id       String  @id @default(cuid())
+  userId   String  @map("user_id")
+  user     User    @relation("ReportAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  lessonId String? @map("lesson_id")
+  lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  // DECISION: plain column until stage 3 ships the questions table (FK added then).
+  questionId   String?             @map("question_id")
+  blockAnchor  String?             @map("block_anchor")
+  type         ContentReportType
+  text         String?
+  status       ContentReportStatus @default(open)
+  resolvedById String?             @map("resolved_by")
+  resolvedBy   User?               @relation("ReportResolvedBy", fields: [resolvedById], references: [id])
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([lessonId])
+  @@index([status])
+  @@map("content_reports")
 }

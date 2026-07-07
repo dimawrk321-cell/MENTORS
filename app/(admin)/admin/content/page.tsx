@@ -1,0 +1,38 @@
+import type { Metadata } from "next";
+import { prisma } from "@/lib/db";
+import { requireAdminZone } from "@/lib/auth/guards";
+import { getContentTree } from "@/lib/services/content-admin";
+import { ContentTree, type TreeCourse } from "./content-tree";
+
+export const metadata: Metadata = {
+  title: "Контент",
+};
+
+/** Content studio tree (spec 8.5): drag order, statuses, CRUD dialogs. */
+export default async function ContentPage() {
+  await requireAdminZone();
+  const courses = await getContentTree(prisma);
+
+  const tree: TreeCourse[] = courses.map((course) => ({
+    id: course.id,
+    title: course.title,
+    slug: course.slug,
+    description: course.description,
+    gating: course.gating,
+    status: course.status,
+    modules: course.modules.map((module) => ({
+      id: module.id,
+      title: module.title,
+      status: module.status,
+      lessons: module.lessons.map((lesson) => ({
+        id: lesson.id,
+        title: lesson.title,
+        status: lesson.status,
+        isOptional: lesson.isOptional,
+        readingMinutes: lesson.readingMinutes,
+      })),
+    })),
+  }));
+
+  return <ContentTree courses={tree} />;
+}
