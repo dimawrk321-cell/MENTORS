@@ -10,9 +10,9 @@ export function Card({ interactive = false, className, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        "bg-surface-1 border border-border rounded-card",
+        "bg-surface-1 border-border rounded-card border",
         interactive &&
-          "transition-[transform,border-color] duration-150 ease-app hover:-translate-y-px hover:border-border-strong",
+          "ease-app hover:border-border-strong transition-[transform,border-color] duration-150 hover:-translate-y-px",
         className,
       )}
       {...props}
@@ -29,7 +29,7 @@ export function CardTitle({ className, ...props }: React.ComponentProps<"h3">) {
 }
 
 export function CardDescription({ className, ...props }: React.ComponentProps<"p">) {
-  return <p className={cn("text-[14px] text-text-2", className)} {...props} />;
+  return <p className={cn("text-text-2 text-[14px]", className)} {...props} />;
 }
 
 export function CardContent({ className, ...props }: React.ComponentProps<"div">) {

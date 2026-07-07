@@ -19,8 +19,8 @@ function SelectTrigger({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        "inline-flex h-9 w-full items-center justify-between gap-2 rounded-control border border-border bg-transparent px-3 text-[14px] text-text-1",
-        "transition-colors duration-150 ease-app hover:border-border-strong",
+        "rounded-control border-border text-text-1 inline-flex h-9 w-full items-center justify-between gap-2 border bg-transparent px-3 text-[14px]",
+        "ease-app hover:border-border-strong transition-colors duration-150",
         "disabled:pointer-events-none disabled:opacity-50",
         "data-[placeholder]:text-text-3",
         className,
@@ -29,7 +29,7 @@ function SelectTrigger({
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDown size={16} strokeWidth={1.75} className="shrink-0 text-text-3" />
+        <ChevronDown size={16} strokeWidth={1.75} className="text-text-3 shrink-0" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -48,7 +48,7 @@ function SelectContent({
         position={position}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-[8rem] overflow-hidden rounded-control border border-border bg-surface-2 p-1 shadow-surface-2",
+          "rounded-control border-border bg-surface-2 shadow-surface-2 z-50 min-w-[8rem] overflow-hidden border p-1",
           "animate-[fade-in_150ms_var(--ease)]",
           className,
         )}
@@ -79,7 +79,7 @@ function SelectItem({
       // variant is not wired to data-theme, so a translucent accent wash is the
       // one token-based option that reads on surface-2 in both themes.
       className={cn(
-        "relative flex cursor-default select-none items-center rounded-[6px] py-1.5 pl-2.5 pr-8 text-[14px] outline-none",
+        "relative flex cursor-default items-center rounded-[6px] py-1.5 pr-8 pl-2.5 text-[14px] outline-none select-none",
         "data-[highlighted]:bg-accent/10 data-[highlighted]:text-text-1",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
@@ -94,13 +94,10 @@ function SelectItem({
   );
 }
 
-function SelectLabel({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Label>) {
+function SelectLabel({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.Label>) {
   return (
     <SelectPrimitive.Label
-      className={cn("px-2.5 py-1.5 text-[12px] text-text-3", className)}
+      className={cn("text-text-3 px-2.5 py-1.5 text-[12px]", className)}
       {...props}
     />
   );
@@ -110,12 +107,7 @@ function SelectSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Separator>) {
-  return (
-    <SelectPrimitive.Separator
-      className={cn("my-1 h-px bg-border", className)}
-      {...props}
-    />
-  );
+  return <SelectPrimitive.Separator className={cn("bg-border my-1 h-px", className)} {...props} />;
 }
 
 export {

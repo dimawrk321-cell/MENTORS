@@ -77,22 +77,22 @@ function Toaster() {
             }
           }}
           className={cn(
-            "relative rounded-card border border-border bg-surface-2 p-4 pr-9 shadow-surface-2 animate-[fade-in_200ms_var(--ease)]",
-            "data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-full",
+            "rounded-card border-border bg-surface-2 shadow-surface-2 relative animate-[fade-in_200ms_var(--ease)] border p-4 pr-9",
+            "data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-full data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none",
             variantClasses[item.variant ?? "default"],
           )}
         >
-          <ToastPrimitive.Title className="text-[14px] font-medium text-text-1">
+          <ToastPrimitive.Title className="text-text-1 text-[14px] font-medium">
             {item.title}
           </ToastPrimitive.Title>
           {item.description ? (
-            <ToastPrimitive.Description className="text-[13px] text-text-2">
+            <ToastPrimitive.Description className="text-text-2 text-[13px]">
               {item.description}
             </ToastPrimitive.Description>
           ) : null}
           <ToastPrimitive.Close
             aria-label="Закрыть"
-            className="absolute top-3 right-3 text-text-3 transition-colors duration-150 ease-app hover:text-text-1"
+            className="text-text-3 ease-app hover:text-text-1 absolute top-3 right-3 transition-colors duration-150"
           >
             <X size={14} strokeWidth={1.75} />
           </ToastPrimitive.Close>

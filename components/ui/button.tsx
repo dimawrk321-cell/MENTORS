@@ -9,8 +9,7 @@ type ButtonSize = "sm" | "md" | "lg";
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: "bg-accent text-white hover:bg-accent-hover",
-  secondary:
-    "border border-border bg-transparent hover:border-border-strong hover:bg-surface-2",
+  secondary: "border border-border bg-transparent hover:border-border-strong hover:bg-surface-2",
   ghost: "bg-transparent text-text-2 hover:text-text-1 hover:bg-surface-2",
 };
 
@@ -64,13 +63,10 @@ export function Button({
   }
 
   return (
-    <button
-      type={type ?? "button"}
-      className={classes}
-      disabled={disabled || loading}
-      {...props}
-    >
-      {loading && <Loader2 className="animate-spin" size={16} strokeWidth={1.75} aria-hidden="true" />}
+    <button type={type ?? "button"} className={classes} disabled={disabled || loading} {...props}>
+      {loading && (
+        <Loader2 className="animate-spin" size={16} strokeWidth={1.75} aria-hidden="true" />
+      )}
       {children}
     </button>
   );

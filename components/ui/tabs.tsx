@@ -5,13 +5,10 @@ import { cn } from "@/lib/utils/cn";
 
 export const Tabs = TabsPrimitive.Root;
 
-export function TabsList({
-  className,
-  ...props
-}: React.ComponentProps<typeof TabsPrimitive.List>) {
+export function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
-      className={cn("flex items-center gap-5 border-b border-border", className)}
+      className={cn("border-border flex items-center gap-5 border-b", className)}
       {...props}
     />
   );
@@ -24,8 +21,8 @@ export function TabsTrigger({
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        "relative -mb-px border-b-2 border-transparent pb-2.5 text-[14px] text-text-2",
-        "transition-colors duration-150 ease-app hover:text-text-1",
+        "text-text-2 relative -mb-px border-b-2 border-transparent pb-2.5 text-[14px]",
+        "ease-app hover:text-text-1 transition-colors duration-150",
         "data-[state=active]:border-accent data-[state=active]:text-text-1",
         className,
       )}

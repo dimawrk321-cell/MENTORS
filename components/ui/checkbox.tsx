@@ -14,8 +14,8 @@ export function Checkbox({
   return (
     <CheckboxPrimitive.Root
       className={cn(
-        "size-4 shrink-0 rounded-[4px] border border-border-strong bg-transparent",
-        "transition-colors duration-150 ease-app",
+        "border-border-strong size-4 shrink-0 rounded-[4px] border bg-transparent",
+        "ease-app transition-colors duration-150",
         "data-[state=checked]:border-accent data-[state=checked]:bg-accent data-[state=checked]:text-white",
         "disabled:pointer-events-none disabled:opacity-50",
         className,
