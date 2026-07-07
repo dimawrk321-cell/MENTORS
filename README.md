@@ -11,26 +11,41 @@ Next.js 15 (App Router, RSC, Server Actions) · TypeScript strict · Tailwind CS
 
 - Node.js >= 20
 - pnpm >= 9
-- Docker (для локальной PostgreSQL)
+- PostgreSQL 16 — либо портативный в папке проекта (без Docker и прав администратора, см. ниже), либо Docker
 
-## Запуск с нуля
+## Запуск с нуля (без Docker — основной способ на этой машине)
 
 ```bash
 pnpm install          # зависимости
 cp .env.example .env  # заполнить переменные (для dev достаточно дефолтов)
-pnpm db:up            # PostgreSQL 16 в Docker
-pnpm dev              # http://localhost:3000
+pnpm db:setup         # разово: скачает EDB-бинарники PostgreSQL 16 (~326 МБ) в ./pgsql,
+                      # выполнит initdb и создаст базу mentors (пользователь mentors/mentors)
+pnpm db:start         # запустить базу (localhost:5432)
+pnpm dev              # http://localhost:3000 (перед стартом проверяет доступность базы)
+```
+
+Папка `./pgsql` (бинарники, data-каталог, лог) в git не попадает (`.gitignore`).
+Остановка — `pnpm db:stop`, проверка — `pnpm db:status`. Если база не запущена,
+`pnpm dev` откажется стартовать с подсказкой «База не запущена — выполни pnpm db:start».
+
+## Запуск с Docker (альтернатива на машинах с Docker)
+
+```bash
+pnpm db:up            # PostgreSQL 16 из docker-compose.dev.yml (те же реквизиты)
+pnpm dev
 ```
 
 ## Скрипты
 
 | Команда | Действие |
 |---|---|
-| `pnpm dev` / `pnpm build` / `pnpm start` | dev-сервер / прод-сборка / запуск сборки |
+| `pnpm dev` / `pnpm build` / `pnpm start` | dev-сервер (с проверкой БД) / прод-сборка / запуск сборки |
 | `pnpm typecheck` | проверка типов (`tsc --noEmit`) |
 | `pnpm lint` / `pnpm format` | ESLint / Prettier |
 | `pnpm test` | юнит-тесты (Vitest) |
-| `pnpm db:up` / `pnpm db:down` | PostgreSQL в Docker |
+| `pnpm db:setup` | разовая установка портативного PostgreSQL 16 в `./pgsql` |
+| `pnpm db:start` / `pnpm db:stop` / `pnpm db:status` | управление портативной базой |
+| `pnpm db:up` / `pnpm db:down` | PostgreSQL в Docker (альтернатива) |
 | `pnpm db:migrate` / `pnpm db:generate` | миграции / генерация Prisma-клиента |
 
 ## Статус

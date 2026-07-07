@@ -24,3 +24,6 @@ coverage
 
 # prisma
 /prisma/*.db
+
+# portable postgresql (binaries + data catalog, installed via pnpm db:setup)
+/pgsql/
