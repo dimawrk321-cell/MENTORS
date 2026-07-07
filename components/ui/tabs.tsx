@@ -40,7 +40,9 @@ export function TabsContent({
 }: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
     <TabsPrimitive.Content
-      className={cn("pt-5 outline-none", className)}
+      // No outline-none: Radix Content is keyboard-focusable (tabIndex=0), the
+      // global :focus-visible ring must stay visible (spec 14).
+      className={cn("pt-5", className)}
       {...props}
     />
   );

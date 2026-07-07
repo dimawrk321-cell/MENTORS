@@ -98,8 +98,12 @@ function Toaster() {
           </ToastPrimitive.Close>
         </ToastPrimitive.Root>
       ))}
-      {/* max-sm:bottom-20 clears the 56px mobile bottom navigation. */}
-      <ToastPrimitive.Viewport className="fixed right-4 bottom-4 z-50 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2 outline-none max-sm:bottom-20" />
+      {/* max-md:bottom-20 clears the mobile bottom navigation (visible below md).
+          No outline-none — the viewport is focusable via hotkey, spec 14 keeps rings visible. */}
+      <ToastPrimitive.Viewport
+        label="Уведомления ({hotkey})"
+        className="fixed right-4 bottom-4 z-50 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2 max-md:bottom-20"
+      />
     </ToastPrimitive.Provider>
   );
 }

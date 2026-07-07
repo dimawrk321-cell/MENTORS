@@ -10,11 +10,14 @@ export function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       aria-hidden="true"
+      // DECISION: fill uses the translucent border token and the sweep uses
+      // text-1 at 5% — surface-2 / white are invisible on the light theme
+      // (#FFFFFF on #FAFAF9), while these alpha tokens read on both themes.
       className={cn(
-        "relative overflow-hidden rounded-control bg-surface-2",
+        "relative overflow-hidden rounded-control bg-border",
         "after:absolute after:inset-0 after:-translate-x-full",
         "after:animate-[shimmer_1.6s_infinite]",
-        "after:bg-gradient-to-r after:from-transparent after:via-white/[0.06] after:to-transparent",
+        "after:bg-gradient-to-r after:from-transparent after:via-text-1/[0.05] after:to-transparent",
         className,
       )}
       {...props}

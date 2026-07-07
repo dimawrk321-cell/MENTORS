@@ -48,6 +48,8 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      // aria-label keeps the accessible name on the icon-only tablet rail (spec 14).
+      aria-label={item.label}
       className={cn(
         "flex h-9 items-center gap-3 rounded-control px-3 text-[14px] transition-colors duration-150 ease-app",
         active ? "bg-surface-2 text-text-1" : "text-text-2 hover:text-text-1",
@@ -66,8 +68,11 @@ export function StudentSidebar({ brandName }: { brandName: string }) {
   return (
     <aside className="sticky top-0 hidden h-dvh shrink-0 border-r border-border px-3 py-5 md:flex md:w-16 md:flex-col lg:w-60 gap-1">
       <div className="mb-4 px-3 text-[15px] font-semibold tracking-tight">
-        <span className="lg:hidden">{brandName.charAt(0)}</span>
-        <span className="hidden lg:inline">{brandName}</span>
+        <span aria-hidden="true" className="lg:hidden">
+          {brandName.charAt(0)}
+        </span>
+        {/* Full brand name stays in the accessibility tree on the tablet rail. */}
+        <span className="sr-only lg:not-sr-only">{brandName}</span>
       </div>
       <nav aria-label="Основная навигация" className="flex flex-1 flex-col gap-1">
         {mainItems.map((item) => (

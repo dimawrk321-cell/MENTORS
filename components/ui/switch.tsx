@@ -9,8 +9,10 @@ export function Switch({
 }: React.ComponentProps<typeof SwitchPrimitive.Root>) {
   return (
     <SwitchPrimitive.Root
+      // p-[2px] + size-4 thumb: 36 - 4 = 32px track, 16px travel — the thumb is
+      // vertically centered and flush at both ends.
       className={cn(
-        "h-5 w-9 shrink-0 rounded-pill border border-transparent bg-border-strong",
+        "inline-flex h-5 w-9 shrink-0 items-center rounded-pill bg-border-strong p-[2px]",
         "transition-colors duration-150 ease-app",
         "data-[state=checked]:bg-accent",
         "disabled:pointer-events-none disabled:opacity-50",
