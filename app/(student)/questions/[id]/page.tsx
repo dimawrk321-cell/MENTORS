@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getQuestionPublic } from "@/lib/services/questions";
+import { getUserCardQuestionIds } from "@/lib/services/srs";
 import { parseOptions } from "@/lib/utils/answers";
 import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants";
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
+import { AddToSrsButton } from "@/components/features/add-to-srs-button";
 import { FlipCard } from "@/components/features/flip-card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const metadata: Metadata = {
   title: "Вопрос",
@@ -24,10 +24,11 @@ interface QuestionPageProps {
 
 /** FlipCard-просмотр вопроса (spec 7.4/8.3). */
 export default async function QuestionPage({ params }: QuestionPageProps) {
-  await requireStudentZone();
+  const { user } = await requireStudentZone();
   const { id } = await params;
   const question = await getQuestionPublic(prisma, id);
   if (!question) notFound();
+  const inSrs = await getUserCardQuestionIds(prisma, user.id, [question.id]);
 
   const colorIndex = question.category.parent?.colorIndex ?? question.category.colorIndex;
   const correctOptions = parseOptions(question.options).filter((option) => option.correct);
@@ -102,19 +103,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
       />
 
       <div className="flex justify-center">
-        {/* SRS придёт на этапе 4 — кнопка честно ждёт тренажёр. */}
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span tabIndex={0}>
-                <Button variant="secondary" disabled>
-                  <Plus size={15} strokeWidth={1.75} aria-hidden="true" />В повторения
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Появится вместе с тренажёром</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <AddToSrsButton questionId={question.id} initialInSrs={inSrs.has(question.id)} />
       </div>
     </div>
   );

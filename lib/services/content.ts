@@ -1,6 +1,7 @@
 import type { CourseGating, Track } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { emitEvent } from "@/lib/services/events";
+import { addSrsCardsForLessonCompletion } from "@/lib/services/srs";
 import {
   getModuleTestStates,
   makeModuleTestHook,
@@ -432,6 +433,13 @@ export async function completeLesson(
       { lessonId: input.lessonId, moduleId: view.module.id, courseId: view.course.id },
       { userId: input.userId },
     );
+    // Spec 7.6: завершение урока заводит карточки всех is_key-вопросов. Внутри
+    // идемпотентной ветки — повторное нажатие «Завершить» карточки не трогает.
+    await addSrsCardsForLessonCompletion(db, {
+      userId: input.userId,
+      lessonId: input.lessonId,
+      now,
+    });
   }
 
   // Recompute after the write — the completion may have opened the next slot.

@@ -14,8 +14,9 @@ export function FlipCard({ front, back }: { front: ReactNode; back: ReactNode })
   return (
     <div className="flex flex-col gap-4">
       <div className="relative [perspective:1200px]">
+        {/* Spec 5.4: reduced-motion — флип заменяется мгновенной сменой. */}
         <div
-          className="ease-app relative grid transition-transform duration-250 [transform-style:preserve-3d]"
+          className="ease-app relative grid transition-transform duration-250 [transform-style:preserve-3d] motion-reduce:transition-none"
           style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
         >
           <div className="col-start-1 row-start-1 [backface-visibility:hidden]">{front}</div>

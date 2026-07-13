@@ -27,3 +27,7 @@ coverage
 
 # portable postgresql (binaries + data catalog, installed via pnpm db:setup)
 /pgsql/
+
+# raw Notion export — importer input (fed via `pnpm import -- --file=…`),
+# not source code; kept out of the repo (spec 7.14, importer stage)
+/import/

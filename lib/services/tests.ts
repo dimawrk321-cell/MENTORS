@@ -3,6 +3,7 @@ import type { Db } from "@/lib/db";
 import { checkAnswer, CLOSED_QUESTION_TYPES } from "@/lib/utils/answers";
 import { randomShuffle } from "@/lib/utils/shuffle";
 import { emitEvent } from "@/lib/services/events";
+import { addSrsCardForFailure } from "@/lib/services/srs";
 import { writeAudit } from "@/lib/services/audit";
 
 // Module tests & test-out (spec 7.5/7.3). Gating-related availability (which
@@ -225,14 +226,26 @@ export async function answerTestQuestion(
   const question = await db.question.findUnique({ where: { id: input.questionId } });
   if (!question) return { ok: false, code: "foreign_question" };
 
+  const correct = checkAnswer(question, input.answer);
   await db.testAttemptAnswer.create({
     data: {
       attemptId: attempt.id,
       questionId: question.id,
       answer: input.answer as never,
-      correct: checkAnswer(question, input.answer),
+      correct,
     },
   });
+  // Spec 7.5: каждый неверный ответ (в любой попытке) → SRS (test_fail).
+  // DECISION: карточка заводится в момент ответа, а не на finish, — «неверный
+  // ответ» случается здесь; неотвеченные вопросы попытки карточек не создают.
+  if (!correct) {
+    await addSrsCardForFailure(db, {
+      userId: attempt.userId,
+      questionId: question.id,
+      source: "test_fail",
+      now: input.now,
+    });
+  }
   const answered = await db.testAttemptAnswer.count({ where: { attemptId: attempt.id } });
   return { ok: true, answered, total: questionIds.length };
 }

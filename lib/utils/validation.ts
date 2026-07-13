@@ -86,6 +86,11 @@ export const onboardingSchema = z.object({
   digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Укажи время в формате ЧЧ:ММ"),
 });
 
+export const reviewCardSchema = z.object({
+  cardId: z.string().min(1),
+  grade: z.enum(["again", "hard", "good"]),
+});
+
 export const extendAccessSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("days"),

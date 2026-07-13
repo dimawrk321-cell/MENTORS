@@ -7,6 +7,7 @@
 // Stage 3: question bank & tests — question_categories, questions,
 // question_lessons, module_tests, test_attempts, test_attempt_answers,
 // quiz_answers + the content_reports.question_id FK.
+// Stage 4: SRS — srs_cards, srs_reviews (spec 6 «SRS (повторения)»).
 // Later stages append their own models incrementally.
 
 generator client {
@@ -115,6 +116,7 @@ model User {
   resolvedReports      ContentReport[]   @relation("ReportResolvedBy")
   testAttempts         TestAttempt[]
   quizAnswers          QuizAnswer[]
+  srsCards             SrsCard[]
 
   @@index([status, accessUntil])
   @@map("users")
@@ -487,6 +489,7 @@ model Question {
   quizAnswers    QuizAnswer[]
   attemptAnswers TestAttemptAnswer[]
   reports        ContentReport[]
+  srsCards       SrsCard[]
 
   @@index([categoryId])
   @@index([status, type])
@@ -579,6 +582,67 @@ model QuizAnswer {
   @@index([userId, questionId])
   @@index([lessonId])
   @@map("quiz_answers")
+}
+
+// --- Stage 4: SRS (spec 6 «SRS (повторения)», логика — spec 7.6) ---
+
+enum SrsGrade {
+  again
+  hard
+  good
+}
+
+// DECISION: spec 6 lists lesson_key|test_fail|quiz_fail|mock, but spec 7.4
+// explicitly allows manual additions with added_from=manual — the enum carries
+// all five. `mock` is reserved until stage 6 wires the interviewer marks.
+enum SrsAddedFrom {
+  lesson_key
+  test_fail
+  quiz_fail
+  mock
+  manual
+}
+
+model SrsCard {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String   @map("question_id")
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  /** 0–4 — лестница STEPS, 5 — «выучен» (контрольный показ раз в 90 дней). */
+  step Int @default(0)
+  /** Календарная дата в TZ пользователя, хранится как date (полночь UTC). */
+  nextReviewAt DateTime     @map("next_review_at") @db.Date
+  addedFrom    SrsAddedFrom @map("added_from")
+  /** Считает только оценку «Не знаю» — сбросы источников его не трогают. */
+  lapses       Int       @default(0)
+  reviewsCount Int       @default(0) @map("reviews_count")
+  lastGrade    SrsGrade? @map("last_grade")
+  suspended    Boolean   @default(false)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  reviews      SrsReview[]
+
+  @@unique([userId, questionId])
+  // Spec 12: составной индекс под выборку дневной очереди.
+  @@index([userId, nextReviewAt])
+  @@index([questionId])
+  @@map("srs_cards")
+}
+
+model SrsReview {
+  id         String   @id @default(cuid())
+  cardId     String   @map("card_id")
+  card       SrsCard  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  grade      SrsGrade
+  reviewedAt DateTime @default(now()) @map("reviewed_at")
+  prevStep   Int      @map("prev_step")
+  newStep    Int      @map("new_step")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([cardId, reviewedAt])
+  @@map("srs_reviews")
 }
 
 model ContentReport {

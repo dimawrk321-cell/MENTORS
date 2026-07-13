@@ -5,6 +5,7 @@ import { checkAnswer, parseOptions, CLOSED_QUESTION_TYPES } from "@/lib/utils/an
 import { seededShuffle } from "@/lib/utils/shuffle";
 import { slugify, uniqueSlug } from "@/lib/utils/slug";
 import { emitEvent } from "@/lib/services/events";
+import { addSrsCardForFailure } from "@/lib/services/srs";
 import { writeAudit } from "@/lib/services/audit";
 
 // Question bank (spec 7.4): student catalog + lesson quiz/key questions +
@@ -83,6 +84,8 @@ export interface CatalogFilters {
   categoryId?: string;
   type?: QuestionType;
   difficulty?: 1 | 2 | 3;
+  /** «Мои западающие» (этап 4): ограничение выборки по id карточек SRS. */
+  ids?: string[];
   page?: number;
 }
 
@@ -90,6 +93,7 @@ export async function listQuestionsCatalog(db: Db, filters: CatalogFilters) {
   const page = Math.max(1, filters.page ?? 1);
   const where: Prisma.QuestionWhereInput = {
     status: "published",
+    ...(filters.ids ? { id: { in: filters.ids } } : {}),
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.difficulty ? { difficulty: filters.difficulty } : {}),
     ...(filters.categoryId
@@ -195,6 +199,15 @@ export async function answerQuizQuestion(
     { lessonId: input.lessonId, questionId: input.questionId, correct, first },
     { userId: input.userId },
   );
+  // Spec 7.5: неверный ответ квиза → карточка в SRS (quiz_fail).
+  if (!correct) {
+    await addSrsCardForFailure(db, {
+      userId: input.userId,
+      questionId: input.questionId,
+      source: "quiz_fail",
+      now: input.now,
+    });
+  }
   return { ok: true, correct, first };
 }
 

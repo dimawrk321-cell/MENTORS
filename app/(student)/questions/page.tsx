@@ -5,8 +5,10 @@ import { MessageCircleQuestion, Search } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { listCategoriesTree, listQuestionsCatalog } from "@/lib/services/questions";
+import { getLaggingQuestionIds, getUserCardQuestionIds } from "@/lib/services/srs";
 import { stripMarkdown } from "@/lib/utils/text";
 import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants";
+import { AddToSrsButton } from "@/components/features/add-to-srs-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,6 +28,7 @@ interface QuestionsPageProps {
     category?: string;
     type?: string;
     difficulty?: string;
+    lagging?: string;
     page?: string;
   }>;
 }
@@ -42,9 +45,9 @@ function filterHref(
   return qs ? `/questions?${qs}` : "/questions";
 }
 
-/** Каталог вопросов (spec 7.4/8.3); FTS — этап 8, «мои западающие» — этап 4. */
+/** Каталог вопросов (spec 7.4/8.3); FTS — этап 8. */
 export default async function QuestionsPage({ searchParams }: QuestionsPageProps) {
-  await requireStudentZone();
+  const { user } = await requireStudentZone();
   const params = await searchParams;
   const type = TYPES.includes(params.type as QuestionType)
     ? (params.type as QuestionType)
@@ -52,7 +55,11 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
   const difficulty = ["1", "2", "3"].includes(params.difficulty ?? "")
     ? (Number(params.difficulty) as 1 | 2 | 3)
     : undefined;
+  const lagging = params.lagging === "1";
   const page = Math.max(1, Number(params.page) || 1);
+
+  // «Мои западающие» (spec 7.4 + этап 4): lapses ≥ 1 или карточка из ошибок.
+  const laggingIds = lagging ? await getLaggingQuestionIds(prisma, user.id) : undefined;
 
   const [categories, catalog] = await Promise.all([
     listCategoriesTree(prisma),
@@ -61,15 +68,22 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
       categoryId: params.category,
       type,
       difficulty,
+      ids: laggingIds,
       page,
     }),
   ]);
+  const inSrs = await getUserCardQuestionIds(
+    prisma,
+    user.id,
+    catalog.items.map((question) => question.id),
+  );
   const totalPages = Math.max(1, Math.ceil(catalog.total / catalog.pageSize));
   const plain = {
     q: params.q,
     category: params.category,
     type: params.type,
     difficulty: params.difficulty,
+    lagging: params.lagging,
   };
 
   return (
@@ -81,6 +95,7 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
         {params.category && <input type="hidden" name="category" value={params.category} />}
         {params.type && <input type="hidden" name="type" value={params.type} />}
         {params.difficulty && <input type="hidden" name="difficulty" value={params.difficulty} />}
+        {params.lagging && <input type="hidden" name="lagging" value={params.lagging} />}
         <Input
           type="search"
           name="q"
@@ -133,7 +148,7 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
         })}
       </div>
 
-      {/* Тип и сложность */}
+      {/* Тип, сложность и «мои западающие» */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px]">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-text-3">Тип:</span>
@@ -175,6 +190,17 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
             );
           })}
         </div>
+        <Link
+          href={filterHref(plain, { lagging: lagging ? undefined : "1" })}
+          className={cn(
+            "rounded-pill ease-app flex h-7 items-center border px-2.5 transition-colors duration-150",
+            lagging
+              ? "border-warning bg-warning/12 text-warning"
+              : "border-border text-text-2 hover:border-border-strong hover:text-text-1",
+          )}
+        >
+          Мои западающие
+        </Link>
       </div>
 
       {catalog.items.length === 0 ? (
@@ -182,12 +208,18 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
           <EmptyState
             icon={MessageCircleQuestion}
             title={
-              catalog.total === 0 && !params.q ? "Банк вопросов наполняется" : "Ничего не нашлось"
+              lagging && !params.q
+                ? "Западающих вопросов нет"
+                : catalog.total === 0 && !params.q
+                  ? "Банк вопросов наполняется"
+                  : "Ничего не нашлось"
             }
             description={
-              catalog.total === 0 && !params.q
-                ? "Вопросы появятся после импорта базы."
-                : "Попробуй изменить запрос или фильтры."
+              lagging && !params.q
+                ? "Сюда попадают вопросы, на которых ты ошибался в квизах, тестах и повторениях."
+                : catalog.total === 0 && !params.q
+                  ? "Вопросы появятся после импорта базы."
+                  : "Попробуй изменить запрос или фильтры."
             }
           />
         </Card>
@@ -198,27 +230,36 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
               const colorIndex =
                 question.category.parent?.colorIndex ?? question.category.colorIndex;
               return (
-                <Link key={question.id} href={`/questions/${question.id}`} className="group">
-                  <Card interactive className="h-full">
-                    <CardContent className="flex h-full flex-col gap-3 p-4">
-                      <p className="text-text-1 group-hover:text-accent text-[14px] leading-relaxed font-medium">
-                        {stripMarkdown(question.textMd, 140) || "Без текста"}
-                      </p>
-                      <div className="mt-auto flex flex-wrap items-center gap-1.5">
-                        <Badge
-                          style={{
-                            color: `var(--cat-${colorIndex})`,
-                            background: `color-mix(in srgb, var(--cat-${colorIndex}) 12%, transparent)`,
-                          }}
-                        >
-                          {question.category.title}
-                        </Badge>
-                        <Badge>{QUESTION_TYPE_LABEL[question.type]}</Badge>
-                        <Badge>{QUESTION_DIFFICULTY_LABEL[question.difficulty]}</Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                <Card key={question.id} interactive className="group relative h-full">
+                  <CardContent className="flex h-full flex-col gap-3 p-4">
+                    {/* Stretched link: вся карточка кликабельна, кнопка — поверх. */}
+                    <Link
+                      href={`/questions/${question.id}`}
+                      className="text-text-1 group-hover:text-accent text-[14px] leading-relaxed font-medium after:absolute after:inset-0 after:content-['']"
+                    >
+                      {stripMarkdown(question.textMd, 140) || "Без текста"}
+                    </Link>
+                    <div className="mt-auto flex flex-wrap items-center gap-1.5">
+                      <Badge
+                        style={{
+                          color: `var(--cat-${colorIndex})`,
+                          background: `color-mix(in srgb, var(--cat-${colorIndex}) 12%, transparent)`,
+                        }}
+                      >
+                        {question.category.title}
+                      </Badge>
+                      <Badge>{QUESTION_TYPE_LABEL[question.type]}</Badge>
+                      <Badge>{QUESTION_DIFFICULTY_LABEL[question.difficulty]}</Badge>
+                      <span className="relative z-10 ml-auto">
+                        <AddToSrsButton
+                          questionId={question.id}
+                          initialInSrs={inSrs.has(question.id)}
+                          size="sm"
+                        />
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>

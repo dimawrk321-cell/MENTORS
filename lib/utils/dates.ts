@@ -16,6 +16,21 @@ export function formatDateRu(date: Date, timezone: string): string {
   }).format(date);
 }
 
+/**
+ * «5 октября 2026» for a calendar-date value stored as UTC midnight (`@db.Date`,
+ * produced by dateOnlyUtc). Formatting such a value in the user's timezone would
+ * shift it to the previous local day for zones west of UTC — a date-only column
+ * already IS the user's calendar date, so it is rendered in UTC (spec 0.6).
+ */
+export function formatDateOnlyRu(date: Date): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
 /** «5 окт, 14:32» in the user's timezone. */
 export function formatDateTimeRu(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat("ru-RU", {
@@ -67,6 +82,33 @@ export function zonedDateEndUtc(dateStr: string, timeZone: string): Date {
     guess = new Date(guess.getTime() + diff);
   }
   return guess;
+}
+
+/** Calendar date «YYYY-MM-DD» of an instant in a timezone (spec 0.6: «сегодня» — в TZ пользователя). */
+export function localDateStr(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+/**
+ * A calendar date as the UTC-midnight instant Prisma stores in `@db.Date`
+ * columns — the storage form of «календарная дата в таймзоне пользователя».
+ */
+export function dateOnlyUtc(dateStr: string): Date {
+  return new Date(`${dateStr}T00:00:00.000Z`);
+}
+
+/** UTC instants bounding a calendar date in a timezone: [start, end). */
+export function zonedDayUtcRange(dateStr: string, timeZone: string): { start: Date; end: Date } {
+  const previousDay = localDateStr(addDays(dateOnlyUtc(dateStr), -1), "UTC");
+  return {
+    start: zonedDateEndUtc(previousDay, timeZone),
+    end: zonedDateEndUtc(dateStr, timeZone),
+  };
 }
 
 /** Russian pluralization: pluralRu(5, "день", "дня", "дней") → «дней». */

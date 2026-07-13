@@ -1,30 +1,12 @@
 import type { Question } from "@prisma/client";
 import { ChevronDown, KeyRound } from "lucide-react";
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
-import { parseOptions } from "@/lib/utils/answers";
+import { QuestionAnswerBody } from "@/components/features/question-answer-body";
 
 // Автоблок «Ключевые вопросы урока» (spec 7.3): is_key-вопросы, раскрывающиеся
-// карточки вопрос → эталон. SRS-подключение — этап 4, подпись уже честная.
-
-function AnswerBody({ question }: { question: Question }) {
-  if (question.answerMd?.trim()) {
-    return <LessonRenderer markdown={question.answerMd} />;
-  }
-  // DECISION: закрытый is_key-вопрос без answer_md показывает верные варианты
-  // и разбор — эталона у него нет по модели данных.
-  const correct = parseOptions(question.options).filter((option) => option.correct);
-  return (
-    <div className="flex flex-col gap-2">
-      {correct.length > 0 && (
-        <p>
-          <span className="text-text-2">Правильный ответ: </span>
-          {correct.map((option) => option.text).join("; ")}
-        </p>
-      )}
-      {question.explanationMd?.trim() && <LessonRenderer markdown={question.explanationMd} />}
-    </div>
-  );
-}
+// карточки вопрос → эталон (общий QuestionAnswerBody — закрытый is_key без
+// answer_md показывает верные варианты и разбор). Карточки этих вопросов
+// заводятся в SRS при завершении урока (этап 4).
 
 export function KeyQuestions({ questions }: { questions: Question[] }) {
   if (questions.length === 0) return null;
@@ -54,7 +36,7 @@ export function KeyQuestions({ questions }: { questions: Question[] }) {
               />
             </summary>
             <div className="lesson-prose border-border border-t px-4 py-3.5 text-[15px]">
-              <AnswerBody question={question} />
+              <QuestionAnswerBody question={question} />
             </div>
           </details>
         ))}
