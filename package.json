@@ -22,6 +22,7 @@
     "db:status": "node scripts/db.mjs status",
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
     "db:down": "docker compose -f docker-compose.dev.yml down",
+    "import": "tsx scripts/import-notion.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed"

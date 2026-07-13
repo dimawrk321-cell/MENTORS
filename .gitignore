@@ -31,3 +31,6 @@ coverage
 # raw Notion export — importer input (fed via `pnpm import -- --file=…`),
 # not source code; kept out of the repo (spec 7.14, importer stage)
 /import/
+
+# importer run output — regenerated on every `pnpm import`, not source
+/import-report.md
