@@ -5,9 +5,12 @@ import type { ImportPlan, PlannedCategory, PlannedLesson } from "./types";
 
 // Idempotent committer (spec 7.14 «Правила безопасности импорта»). Everything is
 // created as draft; nothing publishes. Skip-if-exists keys: course by slug,
-// module by (course,title), lesson by (module,title), question by normalized-
-// text hash within its category. A second run creates nothing new. dryRun reads
-// existing state to report accurate created/skipped counts without writing.
+// module by (course,title), lesson by (module,slug) — slug is the title's
+// unique-ified form (the plan disambiguates «X» and «X (ДОПОЛНИТЕЛЬНО…)» to
+// distinct slugs; keying on raw title would collapse them), question by
+// normalized-text hash within its category. A second run creates nothing new.
+// dryRun assigns synthetic ids to would-create rows so it reports accurate
+// created/skipped counts (links included) without writing.
 
 export interface Counts {
   created: number;
@@ -50,6 +53,8 @@ class Committer {
   private readonly categoryIdBySlug = new Map<string, string | null>();
   /** category id → (question hash → question id) — for dedupe + link reuse. */
   private readonly questionsByCategory = new Map<string, Map<string, string>>();
+  /** (lessonId|questionId) seen this dry-run — to count link skips accurately. */
+  private readonly seenLinks = new Set<string>();
 
   constructor(
     private readonly db: Db,
@@ -82,6 +87,11 @@ class Committer {
     return `${parentTitle ?? ""}␟${title}`;
   }
 
+  /** Synthetic id for a would-create row in dry-run (never collides with a cuid). */
+  private dryId(kind: string, key: string): string {
+    return `dry:${kind}:${key}`;
+  }
+
   private async ensureCategory(cat: PlannedCategory): Promise<void> {
     const key = this.composite(cat.parentTitle, cat.title);
     if (this.categoryIdByComposite.has(key)) return;
@@ -98,7 +108,7 @@ class Committer {
     }
     this.result.categories.created += 1;
     if (this.dryRun) {
-      this.rememberCategory(key, cat.slug, null);
+      this.rememberCategory(key, cat.slug, this.dryId("cat", cat.slug));
       return;
     }
     const created = await this.db.questionCategory.create({
@@ -160,7 +170,7 @@ class Committer {
   ): Promise<string | null> {
     const hash = questionHash(textMd);
     if (categoryId === null) {
-      // Dry-run against a not-yet-created category: nothing exists → would create.
+      // Category could not be resolved at all — count as would-create, no link.
       counts.created += 1;
       return null;
     }
@@ -172,8 +182,10 @@ class Committer {
     }
     counts.created += 1;
     if (this.dryRun) {
-      known.set(hash, `dry-${hash}`);
-      return null;
+      // Synthetic id so links to this would-create question can be counted.
+      const synthetic = this.dryId("q", `${categoryId}:${hash}`);
+      known.set(hash, synthetic);
+      return synthetic;
     }
     const created = await this.db.question.create({
       data: {
@@ -199,7 +211,9 @@ class Committer {
       this.result.courses.skipped += 1;
     } else {
       this.result.courses.created += 1;
-      if (!this.dryRun) {
+      if (this.dryRun) {
+        courseId = this.dryId("course", course.slug);
+      } else {
         const created = await this.db.course.create({
           data: {
             slug: course.slug,
@@ -224,7 +238,9 @@ class Committer {
         moduleId = existingModule.id;
       } else {
         this.result.modules.created += 1;
-        if (!this.dryRun && courseId) {
+        if (this.dryRun) {
+          moduleId = this.dryId("mod", `${courseId}:${mod.title}`);
+        } else if (courseId) {
           const created = await this.db.module.create({
             data: { courseId, title: mod.title, order: mod.order, status: "draft" },
           });
@@ -236,15 +252,21 @@ class Committer {
   }
 
   private async ensureLesson(moduleId: string | null, lesson: PlannedLesson): Promise<void> {
+    // Idempotency by (module, slug): the plan gives «X» / «X (ДОПОЛНИТЕЛЬНО…)»
+    // distinct slugs but identical cleaned titles — a title key would collapse them.
     const existing = moduleId
-      ? await this.db.lesson.findFirst({ where: { moduleId, title: lesson.title } })
+      ? await this.db.lesson.findUnique({
+          where: { moduleId_slug: { moduleId, slug: lesson.slug } },
+        })
       : null;
     let lessonId = existing?.id ?? null;
     if (existing) {
       this.result.lessons.skipped += 1;
     } else {
       this.result.lessons.created += 1;
-      if (!this.dryRun && moduleId) {
+      if (this.dryRun && moduleId) {
+        lessonId = this.dryId("lesson", `${moduleId}:${lesson.slug}`);
+      } else if (!this.dryRun && moduleId) {
         const created = await this.db.lesson.create({
           data: {
             moduleId,
@@ -293,9 +315,20 @@ class Committer {
     opts: { isKey: boolean },
     counts: Counts,
   ): Promise<void> {
-    if (!lessonId || !questionId || questionId.startsWith("dry-")) {
-      // Dry-run (ids unknown) — count as would-create.
+    if (!lessonId || !questionId) {
+      // A row that would not be created (unresolved) — count as would-create.
       counts.created += 1;
+      return;
+    }
+    if (this.dryRun) {
+      // Synthetic ids: dedupe pairs in-memory so an is_key link and a later
+      // category link to the same (lesson, question) count as one create + skip.
+      const key = `${lessonId}|${questionId}`;
+      if (this.seenLinks.has(key)) counts.skipped += 1;
+      else {
+        this.seenLinks.add(key);
+        counts.created += 1;
+      }
       return;
     }
     const existing = await this.db.questionLesson.findUnique({
@@ -306,11 +339,9 @@ class Committer {
       return;
     }
     counts.created += 1;
-    if (!this.dryRun) {
-      await this.db.questionLesson.create({
-        data: { questionId, lessonId, isKey: opts.isKey, inQuiz: false },
-      });
-    }
+    await this.db.questionLesson.create({
+      data: { questionId, lessonId, isKey: opts.isKey, inQuiz: false },
+    });
   }
 }
 

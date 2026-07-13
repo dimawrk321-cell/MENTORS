@@ -79,6 +79,44 @@ describe("commitPlan — idempotent skip-if-exists (spec 7.14)", () => {
     expect(await testDb.questionLesson.count()).toBe(3); // 1 is_key + 2 category links
   });
 
+  it("dry-run counts match the real commit on a fresh DB (review fix A/C)", async () => {
+    const plan = buildImportPlan(IMPORT_FIXTURE, new Set());
+    const dry = await commitPlan(testDb, plan, { dryRun: true });
+    expect(await testDb.course.count()).toBe(0); // dry-run wrote nothing
+
+    const wet = await commitPlan(testDb, plan, { dryRun: false });
+    expect(dry.courses).toEqual(wet.courses);
+    expect(dry.modules).toEqual(wet.modules);
+    expect(dry.lessons).toEqual(wet.lessons);
+    expect(dry.categories).toEqual(wet.categories);
+    expect(dry.questions).toEqual(wet.questions);
+    expect(dry.keyQuestions).toEqual(wet.keyQuestions);
+    expect(dry.keyLinks).toEqual(wet.keyLinks);
+    expect(dry.categoryLinks).toEqual(wet.categoryLinks); // was undercounted to 0 before the fix
+    expect(wet.categoryLinks.created).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not collapse two lessons whose cleaned titles match (review fix B)", async () => {
+    const fixture = [
+      "- **Спринты (основное обучение)**",
+      "  - **Python + PyTorch**",
+      "    - **Трансформеры**",
+      "",
+      "      Первый урок.",
+      "    - **Трансформеры (ДОПОЛНИТЕЛЬНО: разбор статьи)**",
+      "",
+      "      Второй урок.",
+    ].join("\n");
+    const plan = buildImportPlan(fixture, new Set());
+    const lessons = plan.courses[0]!.modules[0]!.lessons;
+    expect(lessons.map((l) => l.title)).toEqual(["Трансформеры", "Трансформеры"]);
+    expect(new Set(lessons.map((l) => l.slug)).size).toBe(2); // distinct slugs
+
+    const res = await commitPlan(testDb, plan, { dryRun: false });
+    expect(res.lessons.created).toBe(2);
+    expect(await testDb.lesson.count()).toBe(2); // both persisted — second not collapsed onto the first
+  });
+
   it("mutual exclusivity: category-link and key-question links are is_key-correct", async () => {
     const plan = buildImportPlan(IMPORT_FIXTURE, new Set());
     await commitPlan(testDb, plan, { dryRun: false });

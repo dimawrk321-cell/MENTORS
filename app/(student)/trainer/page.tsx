@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { categoryColorVar } from "@/lib/utils/category-color";
 
 export const metadata: Metadata = {
   title: "Тренажёр",
@@ -113,8 +114,8 @@ export default async function TrainerPage() {
                 <li key={entry.categoryId} className="flex items-center gap-3 px-5 py-3.5">
                   <Badge
                     style={{
-                      color: `var(--cat-${entry.colorIndex})`,
-                      background: `color-mix(in srgb, var(--cat-${entry.colorIndex}) 12%, transparent)`,
+                      color: categoryColorVar(entry.colorIndex),
+                      background: `color-mix(in srgb, ${categoryColorVar(entry.colorIndex)} 12%, transparent)`,
                     }}
                   >
                     {entry.title}

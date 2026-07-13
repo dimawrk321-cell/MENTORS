@@ -13,6 +13,7 @@ import { AddToSrsButton } from "@/components/features/add-to-srs-button";
 import { FlipCard } from "@/components/features/flip-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { categoryColorVar } from "@/lib/utils/category-color";
 
 export const metadata: Metadata = {
   title: "Вопрос",
@@ -37,8 +38,8 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
       <Badge
         style={{
-          color: `var(--cat-${colorIndex})`,
-          background: `color-mix(in srgb, var(--cat-${colorIndex}) 12%, transparent)`,
+          color: categoryColorVar(colorIndex),
+          background: `color-mix(in srgb, ${categoryColorVar(colorIndex)} 12%, transparent)`,
         }}
       >
         {question.category.parent ? `${question.category.parent.title} · ` : ""}

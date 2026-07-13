@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { CopyButton } from "@/components/ui/copy-button";
 import { UserStatusBadge } from "@/components/features/user-status-badge";
+import { categoryColorVar } from "@/lib/utils/category-color";
 import { ExtendAccessControls } from "./extend-access-controls";
 import {
   BlockButton,
@@ -66,8 +67,8 @@ export default async function StudentPage({ params }: StudentPageProps) {
             aria-hidden="true"
             className="rounded-pill flex size-11 shrink-0 items-center justify-center text-[16px] font-semibold"
             style={{
-              background: `color-mix(in srgb, var(--cat-${user.avatarColor}) 15%, transparent)`,
-              color: `var(--cat-${user.avatarColor})`,
+              background: `color-mix(in srgb, ${categoryColorVar(user.avatarColor)} 15%, transparent)`,
+              color: categoryColorVar(user.avatarColor),
             }}
           >
             {user.name.charAt(0).toUpperCase()}

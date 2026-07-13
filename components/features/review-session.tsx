@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/toast";
 import { pluralRu } from "@/lib/utils/dates";
 import { cn } from "@/lib/utils/cn";
+import { categoryColorVar } from "@/lib/utils/category-color";
 import { reviewCardAction } from "@/lib/actions/srs";
 
 // Сессия SRS (spec 7.6/13/14): полноэкранная карточка — категория, вопрос →
@@ -161,8 +162,8 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
       <div>
         <Badge
           style={{
-            color: `var(--cat-${item.category.colorIndex})`,
-            background: `color-mix(in srgb, var(--cat-${item.category.colorIndex}) 12%, transparent)`,
+            color: categoryColorVar(item.category.colorIndex),
+            background: `color-mix(in srgb, ${categoryColorVar(item.category.colorIndex)} 12%, transparent)`,
           }}
         >
           {item.category.title}

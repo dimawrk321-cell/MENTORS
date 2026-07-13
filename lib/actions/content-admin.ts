@@ -10,6 +10,7 @@ import {
   deleteCourse,
   deleteLesson,
   deleteModule,
+  publishLessonsInScope,
   renameModule,
   reorderSiblings,
   saveLessonContent,
@@ -280,6 +281,25 @@ export async function setLessonStatusAction(
     revalidateContent(res.courseSlug, lessonId);
     revalidatePath(`/admin/content/lessons/${lessonId}`);
     return undefined;
+  });
+}
+
+const publishLessonsScopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("module"), moduleId: idSchema }),
+  z.object({ kind: z.literal("course"), courseId: idSchema }),
+]);
+
+/** Bulk-publish valid draft lessons under a module/course (spec 8.5). */
+export async function publishLessonsAction(
+  input: unknown,
+): Promise<ActionResult<{ published: number; skipped: number }>> {
+  return runAction(async () => {
+    const auth = await requireActionRole("mentor");
+    const parsed = parseInput(publishLessonsScopeSchema, input);
+    const res = await publishLessonsInScope(prisma, { actorId: auth.user.id, scope: parsed });
+    if (!res.ok) failWith(res);
+    revalidateContent(res.courseSlug);
+    return { published: res.published, skipped: res.skipped };
   });
 }
 

@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils/cn";
+import { categoryColorVar } from "@/lib/utils/category-color";
 
 export const metadata: Metadata = {
   title: "Вопросы",
@@ -131,9 +132,9 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
               style={
                 active
                   ? {
-                      color: `var(--cat-${category.colorIndex})`,
-                      borderColor: `color-mix(in srgb, var(--cat-${category.colorIndex}) 50%, transparent)`,
-                      background: `color-mix(in srgb, var(--cat-${category.colorIndex}) 12%, transparent)`,
+                      color: categoryColorVar(category.colorIndex),
+                      borderColor: `color-mix(in srgb, ${categoryColorVar(category.colorIndex)} 50%, transparent)`,
+                      background: `color-mix(in srgb, ${categoryColorVar(category.colorIndex)} 12%, transparent)`,
                     }
                   : undefined
               }
@@ -242,8 +243,8 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
                     <div className="mt-auto flex flex-wrap items-center gap-1.5">
                       <Badge
                         style={{
-                          color: `var(--cat-${colorIndex})`,
-                          background: `color-mix(in srgb, var(--cat-${colorIndex}) 12%, transparent)`,
+                          color: categoryColorVar(colorIndex),
+                          background: `color-mix(in srgb, ${categoryColorVar(colorIndex)} 12%, transparent)`,
                         }}
                       >
                         {question.category.title}

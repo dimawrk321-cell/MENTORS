@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  BookCheck,
   ClipboardCheck,
   Eye,
   EyeOff,
@@ -60,6 +61,7 @@ import {
   deleteCourseAction,
   deleteLessonAction,
   deleteModuleAction,
+  publishLessonsAction,
   renameModuleAction,
   reorderContentAction,
   setCourseStatusAction,
@@ -67,6 +69,7 @@ import {
   updateCourseAction,
 } from "@/lib/actions/content-admin";
 import { upsertModuleTestAction } from "@/lib/actions/questions-admin";
+import { pluralRu } from "@/lib/utils/dates";
 
 export interface TreeLesson {
   id: string;
@@ -223,6 +226,19 @@ function IconAction({
   );
 }
 
+/** Toast for the bulk «Опубликовать уроки» action — count + skipped drafts. */
+function bulkPublishDone(result: { data: unknown }): void {
+  const { published, skipped } = result.data as { published: number; skipped: number };
+  toast({
+    title:
+      published > 0
+        ? `Опубликовано ${published} ${pluralRu(published, "урок", "урока", "уроков")}` +
+          (skipped > 0 ? ` · ${skipped} пропущено (пустые)` : "")
+        : "Нет валидных черновиков для публикации",
+    variant: published > 0 ? "success" : "default",
+  });
+}
+
 /** Название-подтверждение для диалогов с одним текстовым полем. */
 function TitleDialog({
   open,
@@ -375,6 +391,19 @@ function CourseCard({ course }: { course: TreeCourse }) {
               <Eye size={14} strokeWidth={1.75} />
             )}
           </IconAction>
+          {course.modules.some((m) => m.lessons.some((l) => l.status === "draft")) && (
+            <IconAction
+              label="Опубликовать все уроки курса"
+              onClick={() =>
+                act(
+                  () => publishLessonsAction({ kind: "course", courseId: course.id }),
+                  bulkPublishDone,
+                )
+              }
+            >
+              <BookCheck size={14} strokeWidth={1.75} />
+            </IconAction>
+          )}
           <IconAction label="Добавить модуль" onClick={() => setNewModuleOpen(true)}>
             <FolderPlus size={14} strokeWidth={1.75} />
           </IconAction>
@@ -567,6 +596,19 @@ function ModuleBlock({ module }: { module: TreeModule }) {
                 <Eye size={13} strokeWidth={1.75} />
               )}
             </IconAction>
+            {module.lessons.some((lesson) => lesson.status === "draft") && (
+              <IconAction
+                label="Опубликовать все уроки модуля"
+                onClick={() =>
+                  act(
+                    () => publishLessonsAction({ kind: "module", moduleId: module.id }),
+                    bulkPublishDone,
+                  )
+                }
+              >
+                <BookCheck size={13} strokeWidth={1.75} />
+              </IconAction>
+            )}
             <IconAction label="Добавить урок" onClick={() => setNewLessonOpen(true)}>
               <FilePlus2 size={13} strokeWidth={1.75} />
             </IconAction>

@@ -350,6 +350,84 @@ export async function setLessonStatus(
   return { ok: true, courseSlug: lesson.module.course.slug };
 }
 
+/**
+ * A draft lesson is publishable only if it has actual content — an empty
+ * imported stub (title only) must not go live. Cheap, pure gate so the bulk
+ * action can filter without rendering every lesson.
+ */
+export function isLessonPublishable(lesson: { contentMd: string }): boolean {
+  return lesson.contentMd.trim().length > 0;
+}
+
+export type BulkPublishScope =
+  { kind: "module"; moduleId: string } | { kind: "course"; courseId: string };
+
+/**
+ * Bulk-publish every VALID draft lesson under a module or course — the review
+ * of 64 imported drafts must not be 64 clicks. Only valid drafts flip; a single
+ * audit entry records the count (spec 7.13: not a per-lesson log). Modules and
+ * courses keep their own publish buttons — this touches lessons only.
+ */
+export async function publishLessonsInScope(
+  db: PrismaClient,
+  input: { actorId: string; scope: BulkPublishScope; now?: Date },
+): Promise<
+  | { ok: true; published: number; skipped: number; courseSlug: string }
+  | { ok: false; code: "not_found" }
+> {
+  const now = input.now ?? new Date();
+
+  let courseSlug: string;
+  let where: { status: "draft"; moduleId?: string; module?: { courseId: string } };
+  if (input.scope.kind === "module") {
+    const mod = await db.module.findUnique({
+      where: { id: input.scope.moduleId },
+      include: { course: { select: { slug: true } } },
+    });
+    if (!mod) return { ok: false, code: "not_found" };
+    courseSlug = mod.course.slug;
+    where = { status: "draft", moduleId: mod.id };
+  } else {
+    const course = await db.course.findUnique({
+      where: { id: input.scope.courseId },
+      select: { slug: true },
+    });
+    if (!course) return { ok: false, code: "not_found" };
+    courseSlug = course.slug;
+    where = { status: "draft", module: { courseId: input.scope.courseId } };
+  }
+
+  const drafts = await db.lesson.findMany({
+    where,
+    select: { id: true, contentMd: true, publishedAt: true },
+  });
+  const valid = drafts.filter(isLessonPublishable);
+  const skipped = drafts.length - valid.length;
+
+  if (valid.length > 0) {
+    const ids = valid.map((lesson) => lesson.id);
+    const firstPublish = valid.filter((lesson) => lesson.publishedAt === null).map((l) => l.id);
+    await db.$transaction(async (tx) => {
+      await tx.lesson.updateMany({ where: { id: { in: ids } }, data: { status: "published" } });
+      if (firstPublish.length > 0) {
+        await tx.lesson.updateMany({
+          where: { id: { in: firstPublish } },
+          data: { publishedAt: now },
+        });
+      }
+      await writeAudit(tx, {
+        actorId: input.actorId,
+        action: "lessons.bulk_published",
+        entityType: input.scope.kind,
+        entityId: input.scope.kind === "module" ? input.scope.moduleId : input.scope.courseId,
+        after: { published: valid.length, skipped, lessonIds: ids },
+      });
+    });
+  }
+
+  return { ok: true, published: valid.length, skipped, courseSlug };
+}
+
 export async function deleteLesson(
   db: PrismaClient,
   input: { actorId: string; lessonId: string },
