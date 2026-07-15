@@ -6,7 +6,7 @@ set -e
 # pending migrations and never generates/resets, so it is safe on every start.
 
 echo "[entrypoint] prisma migrate deploy ..."
-node ./node_modules/prisma/build/index.js migrate deploy
+./node_modules/.bin/prisma migrate deploy
 
 echo "[entrypoint] starting Next.js standalone on ${HOSTNAME}:${PORT} ..."
 exec node server.js

@@ -35,27 +35,34 @@ RUN pnpm exec prisma generate
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
 RUN pnpm run build
 
-# --- runner: minimal standalone runtime + migrate tooling ---
+# --- runner: standalone server + full node_modules (pnpm-safe Prisma) ---
 FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+WORKDIR /app
 
-# Standalone server + static assets + public (server.js serves public/ and
-# .next/static; imported lesson images live in public/media/import — spec 7.14).
-COPY --from=builder /app/.next/standalone ./
+# Standalone server (server.js + pruned server .next) + client static + public.
+# We copy the standalone root files explicitly and skip its bundled node_modules
+# — the full node_modules below replaces it cleanly (no symlink/dir overlay).
+# public/media/import holds the imported lesson images (spec 7.14).
+COPY --from=builder /app/.next/standalone/server.js ./server.js
+COPY --from=builder /app/.next/standalone/package.json ./package.json
+COPY --from=builder /app/.next/standalone/.next ./.next
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Prisma schema + migrations + CLI/engines so the entrypoint can run
-# `prisma migrate deploy` on start (spec 18). The standalone trace already
-# bundles @prisma/client + the query engine for request-time queries; here we
-# overlay the full @prisma + the CLI needed only for migrations.
+# Prisma schema + migrations for `prisma migrate deploy` on start (spec 18).
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# DECISION (dev-stand): copy the FULL builder node_modules (pnpm store +
+# symlinks) rather than the standalone-traced subset. Under pnpm, Next's
+# standalone trace omits the Prisma query engine (.prisma/client lives deep in
+# .pnpm/), so the runtime client would be missing. A full copy makes both the
+# request-time client and the `prisma` migrate CLI reliably present. Slimming
+# to prod-only deps is a stage-13 optimization.
+COPY --from=builder /app/node_modules ./node_modules
 
 COPY docker/web-entrypoint.sh /usr/local/bin/web-entrypoint.sh
 RUN chmod +x /usr/local/bin/web-entrypoint.sh
