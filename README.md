@@ -97,8 +97,9 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml --profile tools r
 ```bash
 ssh -N -L 5433:127.0.0.1:5432 mentors-vps &   # туннель к postgres контейнера через хост
 # затем локально с DATABASE_URL=postgresql://mentors:***@127.0.0.1:5433/mentors :
-pnpm import -- --file="import/notion/<export>.md" --dry-run
-pnpm import -- --file="import/notion/<export>.md" --commit
+# (именно `pnpm run import` — `pnpm import` без run вызывает встроенную команду pnpm)
+pnpm run import -- --file="import/notion/<export>.md" --dry-run
+pnpm run import -- --file="import/notion/<export>.md" --commit
 ```
 
 ### Бэкапы и восстановление
