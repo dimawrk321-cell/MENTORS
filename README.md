@@ -55,6 +55,64 @@ pnpm dev
 | `pnpm db:up` / `pnpm db:down`                       | PostgreSQL в Docker (альтернатива)                              |
 | `pnpm db:migrate` / `pnpm db:generate`              | миграции / генерация Prisma-клиента                             |
 
+## Дев-стенд (VPS)
+
+Внеочередной мини-этап после этапа 5: текущая версия развёрнута на будущем
+прод-VPS, чтобы команда тестировала платформу и вычитывала импортированный контент.
+Полная прод-ревизия — этап 13 (см. changelog ТЗ).
+
+- **URL:** https://dev.62-113-108-135.sslip.io (временное имя через sslip.io; TLS — Caddy автоматически).
+- **Сервер:** Ubuntu 24.04, `/opt/mentors` (клон репозитория), Docker Compose: `postgres` + `web` + `caddy` (`worker` — заготовка до этапа 9).
+- **Админ-доступ:** только по SSH через Tailscale (`ssh mentors-vps`). Публичный вход по паролю в sshd отключён; наружу открыты только 80/443.
+- **Секреты:** `/opt/mentors/.env.prod` (в git не попадает; шаблон — `.env.prod.example`). Посмотреть на сервере: `cat /opt/mentors/.env.prod`.
+
+### Обновление стенда
+
+```powershell
+pwsh scripts/deploy.ps1     # с ноутбука: git pull → build → up -d → миграции (в entrypoint web)
+```
+
+Либо на сервере напрямую: `cd /opt/mentors && bash deploy.sh`. Compose всегда
+запускается с `--env-file .env.prod -f docker-compose.prod.yml`.
+
+### Логи и статус
+
+```bash
+cd /opt/mentors
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f web
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f caddy   # диагностика TLS
+```
+
+### Сид и импорт контента
+
+```bash
+# dev-seed (owner + 2 ментора, демо-курс, категории, достижения) — one-shot:
+docker compose --env-file .env.prod -f docker-compose.prod.yml --profile tools run --rm seed
+```
+
+Импорт Notion выполняется локально по SSH-туннелю к серверной БД (порт наружу
+закрыт), картинки уже в репозитории (`public/media/import/`, вшиты в образ):
+
+```bash
+ssh -N -L 5433:127.0.0.1:5432 mentors-vps &   # туннель к postgres контейнера через хост
+# затем локально с DATABASE_URL=postgresql://mentors:***@127.0.0.1:5433/mentors :
+pnpm import -- --file="import/notion/<export>.md" --dry-run
+pnpm import -- --file="import/notion/<export>.md" --commit
+```
+
+### Бэкапы и восстановление
+
+Ежедневный `pg_dump` в `/opt/mentors/backups` (cron на хосте, ротация 14 дней).
+Восстановление из дампа:
+
+```bash
+cd /opt/mentors
+gunzip -c backups/mentors-YYYYMMDD-HHMM.sql.gz | \
+  docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T postgres \
+  psql -U mentors -d mentors
+```
+
 ## Статус
 
 Выполнены этапы 0–3 из плана работ (раздел 17 ТЗ).

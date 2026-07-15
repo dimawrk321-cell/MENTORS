@@ -1,0 +1,7 @@
+# Shell scripts and container files must stay LF — a CRLF shebang breaks the
+# entrypoint inside the Linux image, and Caddy/Dockerfile parse LF cleanly.
+*.sh text eol=lf
+deploy.sh text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
+*.yml text eol=lf

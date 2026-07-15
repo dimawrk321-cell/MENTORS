@@ -1,0 +1,99 @@
+# MENTORS dev-stand — production-shaped Docker Compose (spec 3/18).
+# Run through deploy.sh, which always passes --env-file .env.prod so that both
+# compose interpolation (${VAR}) and the web container env come from one file.
+#
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#
+# The full prod compose (worker enabled, tuned resources) is a stage-13 task.
+name: mentors
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mentors}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env.prod}
+      POSTGRES_DB: ${POSTGRES_DB:-mentors}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mentors} -d ${POSTGRES_DB:-mentors}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # No published port: the DB is reachable only on the compose network.
+    # Migrations/import reach it via an SSH tunnel over tailnet (spec 11/18).
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    # No published port: only Caddy reaches the web container (network-internal).
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-dev.62-113-108-135.sslip.io}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # One-shot dev-seed (owner + 2 mentors, tracks, demo course, 8 categories,
+  # achievements — spec 18 / seed.ts). Uses the builder target because the seed
+  # runs через tsx over the TS source, which the slim runtime image lacks.
+  #   docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  #     --profile tools run --rm seed
+  seed:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    env_file: .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["pnpm", "db:seed"]
+
+  # worker — заготовка (spec 3/7.15). node-cron-обвязка и джобы приходят
+  # этапом 9; сейчас worker/index.ts только экспортирует реестр джоб без
+  # долгоживущего процесса, поэтому сервис закомментирован.
+  # worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: builder
+  #   restart: unless-stopped
+  #   env_file: .env.prod
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   command: ["pnpm", "exec", "tsx", "worker/index.ts"]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

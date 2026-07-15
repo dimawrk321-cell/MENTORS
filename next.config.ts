@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Standalone output for the Docker prod image (dev-stand mini-stage / spec 18):
+  // produces .next/standalone/server.js with a pruned node_modules trace.
+  output: "standalone",
   // Native/node-oriented packages must not be bundled by the RSC compiler.
   serverExternalPackages: ["@node-rs/argon2", "maxmind", "pino"],
   images: {

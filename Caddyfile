@@ -1,0 +1,9 @@
+# MENTORS dev-stand reverse proxy (spec 3/18).
+# Automatic TLS: Caddy tries Let's Encrypt first, then ZeroSSL as a fallback
+# (both ACME CAs are attempted by default). SITE_ADDRESS is injected from the
+# environment (docker-compose caddy service) — currently the temporary sslip.io
+# name; moving to a permanent domain = change SITE_ADDRESS + PLATFORM_URL + A record.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
