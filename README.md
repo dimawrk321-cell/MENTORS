@@ -69,7 +69,7 @@ pnpm dev
 ### Обновление стенда
 
 ```powershell
-pwsh scripts/deploy.ps1     # с ноутбука: git pull → build → up -d → миграции (в entrypoint web)
+powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1   # git pull → build → up -d → миграции (в entrypoint web)
 ```
 
 Либо на сервере напрямую: `cd /opt/mentors && bash deploy.sh`. Compose всегда
