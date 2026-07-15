@@ -21,6 +21,11 @@ interface SeedUser {
   defaultName: string;
   role: Role;
   isInterviewer: boolean;
+  // DECISION (dev-stand): owner is required (fresh /admin is otherwise
+  // unreachable); mentors are optional — absent SEED_MENTOR* env just skips
+  // them, so the seed can bring up an owner-only stand and mentors are added
+  // later через штатный инвайт-флоу.
+  required: boolean;
 }
 
 // Spec 2: is_interviewer у Owner и одного ментора (Дима, Егор — spec 1).
@@ -32,6 +37,7 @@ const SEED_USERS: SeedUser[] = [
     defaultName: "Дима",
     role: "owner",
     isInterviewer: true,
+    required: true,
   },
   {
     emailVar: "SEED_MENTOR1_EMAIL",
@@ -40,6 +46,7 @@ const SEED_USERS: SeedUser[] = [
     defaultName: "Егор",
     role: "mentor",
     isInterviewer: true,
+    required: false,
   },
   {
     emailVar: "SEED_MENTOR2_EMAIL",
@@ -48,6 +55,7 @@ const SEED_USERS: SeedUser[] = [
     defaultName: "Ментор",
     role: "mentor",
     isInterviewer: false,
+    required: false,
   },
 ];
 
@@ -57,9 +65,13 @@ async function seedUser(spec: SeedUser): Promise<void> {
   const name = process.env[spec.nameVar]?.trim() || spec.defaultName;
 
   if (!email || !password) {
-    throw new Error(
-      `Не заданы ${spec.emailVar} / ${spec.passwordVar} — добавь их в .env (см. .env.example)`,
-    );
+    if (spec.required) {
+      throw new Error(
+        `Не заданы ${spec.emailVar} / ${spec.passwordVar} — добавь их в .env (см. .env.example)`,
+      );
+    }
+    console.log(`= ${spec.role} (${spec.emailVar}) не задан — пропущен`);
+    return;
   }
   if (password.length < 8) {
     throw new Error(`${spec.passwordVar}: пароль должен быть не короче 8 символов`);
