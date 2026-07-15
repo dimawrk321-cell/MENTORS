@@ -11,6 +11,8 @@ interface ToastOptions {
   title: string;
   description?: string;
   variant?: ToastVariant;
+  /** Опциональный монохромный глиф слева (достижения — spec 5.6). */
+  icon?: React.ReactNode;
 }
 
 interface ToastItem extends ToastOptions {
@@ -77,19 +79,22 @@ function Toaster() {
             }
           }}
           className={cn(
-            "rounded-card border-border bg-surface-2 shadow-surface-2 relative animate-[fade-in_200ms_var(--ease)] border p-4 pr-9",
+            "rounded-card border-border bg-surface-2 shadow-surface-2 relative flex animate-[fade-in_200ms_var(--ease)] gap-3 border p-4 pr-9",
             "data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-full data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none",
             variantClasses[item.variant ?? "default"],
           )}
         >
-          <ToastPrimitive.Title className="text-text-1 text-[14px] font-medium">
-            {item.title}
-          </ToastPrimitive.Title>
-          {item.description ? (
-            <ToastPrimitive.Description className="text-text-2 text-[13px]">
-              {item.description}
-            </ToastPrimitive.Description>
-          ) : null}
+          {item.icon ? <span className="mt-0.5 shrink-0">{item.icon}</span> : null}
+          <div className="min-w-0">
+            <ToastPrimitive.Title className="text-text-1 text-[14px] font-medium">
+              {item.title}
+            </ToastPrimitive.Title>
+            {item.description ? (
+              <ToastPrimitive.Description className="text-text-2 text-[13px]">
+                {item.description}
+              </ToastPrimitive.Description>
+            ) : null}
+          </div>
           <ToastPrimitive.Close
             aria-label="Закрыть"
             className="text-text-3 ease-app hover:text-text-1 absolute top-3 right-3 transition-colors duration-150"

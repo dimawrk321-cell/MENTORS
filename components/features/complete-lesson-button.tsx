@@ -6,6 +6,7 @@ import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { completeLessonAction } from "@/lib/actions/content";
+import { celebrateGamification } from "@/components/features/gamification-celebrate";
 
 /**
  * «Завершить урок» (spec 7.3): quiet check, no ritual, auto-advance to the
@@ -29,6 +30,8 @@ export function CompleteLessonButton({
         toast({ title: result.error.message, variant: "danger" });
         return;
       }
+      // Тихий чек урока (spec 7.3), но XP/достижения/уровень — ритуалом (spec 5.4).
+      celebrateGamification(result.data.gamification);
       if (result.data.nextLessonId && result.data.nextLessonId !== lessonId) {
         router.push(`/lessons/${result.data.nextLessonId}`);
       } else {

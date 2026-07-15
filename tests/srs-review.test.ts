@@ -229,6 +229,29 @@ describe("queue.completed — строго один раз в день (spec 7.6
     expect(events).toHaveLength(1);
   });
 
+  it("гонка при опустошении последних карточек: очередь закрыта ровно один раз (этап 5)", async () => {
+    const user = await makeStudent();
+    const category = await makeCategory({ slug: "c", title: "C" });
+    const card1 = await makeCard(user.id, category.id);
+    const card2 = await makeCard(user.id, category.id);
+
+    // Две вкладки опустошают последние две карточки одновременно. Проверка очереди
+    // вынесена за коммит ответа — пост-коммит чтение видит чужую карточку, а
+    // уникальный индекс xp_events гасит двойной эмит: ровно одна queue.completed.
+    const settled = await Promise.allSettled([
+      reviewSrsCard(testDb, { userId: user.id, cardId: card1.id, grade: "good", now: NOW }),
+      reviewSrsCard(testDb, { userId: user.id, cardId: card2.id, grade: "good", now: NOW }),
+    ]);
+    expect(settled.every((s) => s.status === "fulfilled")).toBe(true);
+
+    expect(
+      await testDb.analyticsEvent.count({ where: { userId: user.id, type: "queue.completed" } }),
+    ).toBe(1);
+    expect(
+      await testDb.xpEvent.count({ where: { userId: user.id, type: "queue.completed" } }),
+    ).toBe(1);
+  });
+
   it("на следующий день эмитится снова", async () => {
     const user = await makeStudent();
     const category = await makeCategory({ slug: "c", title: "C" });

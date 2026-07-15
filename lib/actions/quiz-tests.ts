@@ -14,6 +14,7 @@ import {
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
+import { toFeedback, type GamificationFeedback } from "@/lib/gamification";
 
 // Student quiz & test actions (spec 7.5). Availability by gating is enforced
 // HERE (server-side) via the content service — tests.ts deliberately does not
@@ -30,7 +31,7 @@ const quizInputSchema = z.object({
 
 export async function answerQuizAction(
   input: unknown,
-): Promise<ActionResult<{ correct: boolean; first: boolean }>> {
+): Promise<ActionResult<{ correct: boolean; first: boolean; gamification: GamificationFeedback }>> {
   return runAction(async () => {
     const auth = await requireActionStudent();
     assertNotImpersonating(auth);
@@ -43,7 +44,7 @@ export async function answerQuizAction(
       answer: parsed.answer,
     });
     if (!result.ok) throw new ActionError(result.code, "Вопрос не найден в квизе урока");
-    return { correct: result.correct, first: result.first };
+    return { correct: result.correct, first: result.first, gamification: toFeedback(result) };
   });
 }
 
@@ -143,9 +144,14 @@ export async function answerTestAction(
   });
 }
 
-export async function finishTestAction(
-  attemptId: string,
-): Promise<ActionResult<{ score: number; passed: boolean; threshold: number }>> {
+export async function finishTestAction(attemptId: string): Promise<
+  ActionResult<{
+    score: number;
+    passed: boolean;
+    threshold: number;
+    gamification: GamificationFeedback;
+  }>
+> {
   return runAction(async () => {
     const auth = await requireActionStudent();
     assertNotImpersonating(auth);
@@ -160,6 +166,11 @@ export async function finishTestAction(
         result.code === "finished" ? "Попытка уже завершена" : "Попытка не найдена",
       );
     }
-    return { score: result.score, passed: result.passed, threshold: result.threshold };
+    return {
+      score: result.score,
+      passed: result.passed,
+      threshold: result.threshold,
+      gamification: toFeedback(result),
+    };
   });
 }

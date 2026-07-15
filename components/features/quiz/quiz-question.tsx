@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { answerQuizAction } from "@/lib/actions/quiz-tests";
+import { celebrateGamification } from "@/components/features/gamification-celebrate";
 
 interface QuizQuestionProps {
   lessonId: string;
@@ -56,6 +57,8 @@ export function QuizQuestion({
       if (!res) return;
       if (res.ok) {
         setResult({ correct: res.data.correct });
+        // +5 XP за первый правильный, закрытие цели/достижения — ритуалом (spec 7.7).
+        celebrateGamification(res.data.gamification);
       } else {
         toast({ title: res.error.message, variant: "danger" });
       }

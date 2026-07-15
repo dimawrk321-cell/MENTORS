@@ -13,12 +13,15 @@ import {
   type ActionResult,
 } from "@/lib/auth/action-helpers";
 import { reviewCardSchema } from "@/lib/utils/validation";
+import { toFeedback, type GamificationFeedback } from "@/lib/gamification";
 
 // SRS actions (spec 9): reviewCard(cardId, grade) + addToSrs(questionId).
 
 export async function reviewCardAction(
   input: unknown,
-): Promise<ActionResult<{ remaining: number; queueCompleted: boolean }>> {
+): Promise<
+  ActionResult<{ remaining: number; queueCompleted: boolean; gamification: GamificationFeedback }>
+> {
   return runAction(async () => {
     const auth = await requireActionStudent();
     assertNotImpersonating(auth);
@@ -37,7 +40,11 @@ export async function reviewCardAction(
           : "Карточка не найдена",
       );
     }
-    return { remaining: result.remaining, queueCompleted: result.queueCompleted };
+    return {
+      remaining: result.remaining,
+      queueCompleted: result.queueCompleted,
+      gamification: toFeedback(result),
+    };
   });
 }
 

@@ -8,6 +8,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { answerTestAction, finishTestAction } from "@/lib/actions/quiz-tests";
+import { celebrateGamification } from "@/components/features/gamification-celebrate";
 
 export interface RunnerQuestion {
   id: string;
@@ -71,6 +72,8 @@ export function TestRunner({ attemptId, questions, answeredIds }: TestRunnerProp
           toast({ title: finished.error.message, variant: "danger" });
           return;
         }
+        // XP (100/+50), достижения (perfect_test, five_first_try) и уровень — ритуалом.
+        if (finished?.ok) celebrateGamification(finished.data.gamification);
         router.refresh(); // страница покажет результат
       } else {
         setIndex(index + 1);

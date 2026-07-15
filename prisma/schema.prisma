@@ -117,6 +117,10 @@ model User {
   testAttempts         TestAttempt[]
   quizAnswers          QuizAnswer[]
   srsCards             SrsCard[]
+  xpEvents             XpEvent[]
+  streak               Streak?
+  streakEvents         StreakEvent[]
+  userAchievements     UserAchievement[]
 
   @@index([status, accessUntil])
   @@map("users")
@@ -666,4 +670,94 @@ model ContentReport {
   @@index([lessonId])
   @@index([status])
   @@map("content_reports")
+}
+
+// --- Stage 5: gamification (spec 6 «Геймификация», логика — spec 7.7/7.13) ---
+
+// Единая идемпотентная запись начисления XP. Диспетчер событий (7.13) — единственный
+// писатель; уникальный индекс (user, type, ref) — барьер exactly-once (в т.ч. для
+// queue.completed из двух вкладок). Все XP-начисления несут непустой ref (гарантия кода).
+model XpEvent {
+  id      String  @id @default(cuid())
+  userId  String  @map("user_id")
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type    String
+  amount  Int
+  refType String? @map("ref_type")
+  refId   String? @map("ref_id")
+  /** Календарная дата начисления в TZ пользователя (полночь UTC, @db.Date). */
+  day       DateTime @map("day") @db.Date
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Идемпотентность (spec 6/7.7): одно начисление на (user, type, ref_type, ref_id).
+  @@unique([userId, type, refType, refId])
+  // Spec 12: составной индекс под дневную сумму (кольцо цели).
+  @@index([userId, day])
+  @@map("xp_events")
+}
+
+model Streak {
+  id      String @id @default(cuid())
+  userId  String @unique @map("user_id")
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  current Int    @default(0)
+  best    Int    @default(0)
+  /** Заморозки 0–2: +1 за каждые 7 подряд засчитанных дней (spec 7.7). */
+  freezes         Int       @default(0)
+  lastCountedDate DateTime? @map("last_counted_date") @db.Date
+  /** true при истёкшем доступе (spec 7.1.5): дни не считаются вовсе. */
+  paused    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("streaks")
+}
+
+enum StreakEventKind {
+  counted
+  freeze_used
+  reset
+  milestone
+}
+
+model StreakEvent {
+  id        String          @id @default(cuid())
+  userId    String          @map("user_id")
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime        @db.Date
+  kind      StreakEventKind
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@index([userId, date])
+  @@map("streak_events")
+}
+
+// Справочник достижений (spec 7.7): сидится из кода (ACHIEVEMENTS). Приложение
+// читает определения из константы; таблица — зеркало для БД/будущей админки.
+model Achievement {
+  key         String   @id
+  title       String
+  description String
+  hidden      Boolean  @default(false)
+  icon        String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // DECISION: plain string, no FK to achievements — granting must not depend on
+  // the dictionary being seeded (keeps the event dispatcher robust); definitions
+  // (title/icon/hidden) live in the ACHIEVEMENTS code constant, the table mirrors it.
+  achievementKey String   @map("achievement_key")
+  earnedAt       DateTime @default(now()) @map("earned_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, achievementKey])
+  @@index([userId])
+  @@map("user_achievements")
 }

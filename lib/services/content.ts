@@ -1,6 +1,6 @@
-import type { CourseGating, Track } from "@prisma/client";
+import type { CourseGating, PrismaClient, Track } from "@prisma/client";
 import type { Db } from "@/lib/db";
-import { emitEvent } from "@/lib/services/events";
+import { emitEvent, type EarnedAchievement, type EmitResult } from "@/lib/services/events";
 import { addSrsCardsForLessonCompletion } from "@/lib/services/srs";
 import {
   getModuleTestStates,
@@ -402,12 +402,27 @@ export async function startLesson(
 }
 
 export type CompleteLessonResult =
-  | { ok: true; nextLessonId: string | null; courseSlug: string }
+  | {
+      ok: true;
+      nextLessonId: string | null;
+      courseSlug: string;
+      /** Геймификация завершения — для ритуалов/тостов на странице урока (spec 5.4). */
+      xpAwarded: number;
+      leveledUpTo: number | null;
+      earnedAchievements: EarnedAchievement[];
+    }
   | { ok: false; code: "not_found" | "locked" };
+
+const NO_GAMIFICATION: EmitResult = {
+  recorded: true,
+  xpAwarded: 0,
+  leveledUpTo: null,
+  earnedAchievements: [],
+};
 
 /** Explicit, idempotent completion (spec 7.3); returns the next open lesson. */
 export async function completeLesson(
-  db: Db,
+  db: PrismaClient,
   input: { userId: string; lessonId: string; now?: Date },
 ): Promise<CompleteLessonResult> {
   const now = input.now ?? new Date();
@@ -415,30 +430,36 @@ export async function completeLesson(
   if (!view) return { ok: false, code: "not_found" };
   if (!view.unlocked) return { ok: false, code: "locked" };
 
+  let gamification = NO_GAMIFICATION;
   if (view.progress.completedAt === null) {
-    await db.lessonProgress.upsert({
-      where: { userId_lessonId: { userId: input.userId, lessonId: input.lessonId } },
-      create: {
+    // Spec 7.13: завершение, его событие (XP/стрик/достижения) и SRS-карточки —
+    // одной транзакцией.
+    gamification = await db.$transaction(async (tx) => {
+      await tx.lessonProgress.upsert({
+        where: { userId_lessonId: { userId: input.userId, lessonId: input.lessonId } },
+        create: {
+          userId: input.userId,
+          lessonId: input.lessonId,
+          status: "completed",
+          completedAt: now,
+          createdAt: now,
+        },
+        update: { status: "completed", completedAt: now },
+      });
+      const result = await emitEvent(
+        tx,
+        "lesson.completed",
+        { lessonId: input.lessonId, moduleId: view.module.id, courseId: view.course.id },
+        { userId: input.userId, now },
+      );
+      // Spec 7.6: завершение урока заводит карточки всех is_key-вопросов. Внутри
+      // идемпотентной ветки — повторное нажатие «Завершить» карточки не трогает.
+      await addSrsCardsForLessonCompletion(tx, {
         userId: input.userId,
         lessonId: input.lessonId,
-        status: "completed",
-        completedAt: now,
-        createdAt: now,
-      },
-      update: { status: "completed", completedAt: now },
-    });
-    await emitEvent(
-      db,
-      "lesson.completed",
-      { lessonId: input.lessonId, moduleId: view.module.id, courseId: view.course.id },
-      { userId: input.userId },
-    );
-    // Spec 7.6: завершение урока заводит карточки всех is_key-вопросов. Внутри
-    // идемпотентной ветки — повторное нажатие «Завершить» карточки не трогает.
-    await addSrsCardsForLessonCompletion(db, {
-      userId: input.userId,
-      lessonId: input.lessonId,
-      now,
+        now,
+      });
+      return result;
     });
   }
 
@@ -448,6 +469,9 @@ export async function completeLesson(
     ok: true,
     nextLessonId: courseView?.state.nextLessonId ?? null,
     courseSlug: view.course.slug,
+    xpAwarded: gamification.xpAwarded,
+    leveledUpTo: gamification.leveledUpTo,
+    earnedAchievements: gamification.earnedAchievements,
   };
 }
 

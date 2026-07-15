@@ -4,8 +4,13 @@ import { testDatabaseUrl } from "./db-url";
 
 export const testDb = new PrismaClient({ datasourceUrl: testDatabaseUrl() });
 
-/** Wipes all stage-1/2/3/4 tables in FK-safe order. */
+/** Wipes all stage-1/2/3/4/5 tables in FK-safe order. */
 export async function resetDb(): Promise<void> {
+  await testDb.xpEvent.deleteMany();
+  await testDb.streakEvent.deleteMany();
+  await testDb.streak.deleteMany();
+  await testDb.userAchievement.deleteMany();
+  await testDb.achievement.deleteMany();
   await testDb.srsReview.deleteMany();
   await testDb.srsCard.deleteMany();
   await testDb.quizAnswer.deleteMany();
@@ -43,6 +48,8 @@ interface TestUserInput {
   activatedAt?: Date | null;
   name?: string;
   timezone?: string;
+  studyDays?: number[];
+  dailyGoalXp?: number;
 }
 
 export async function createTestUser(input: TestUserInput) {
@@ -56,6 +63,8 @@ export async function createTestUser(input: TestUserInput) {
       accessUntil: input.accessUntil ?? null,
       activatedAt: input.activatedAt ?? null,
       timezone: input.timezone ?? "Europe/Moscow",
+      ...(input.studyDays ? { studyDays: input.studyDays } : {}),
+      ...(input.dailyGoalXp ? { dailyGoalXp: input.dailyGoalXp } : {}),
       avatarColor: paletteIndex(input.email),
     },
   });

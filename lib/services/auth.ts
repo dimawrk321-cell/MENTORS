@@ -5,6 +5,7 @@ import { sha256Hex, generateToken } from "@/lib/utils/crypto";
 import { getDummyHash, hashPassword, verifyPassword } from "@/lib/utils/password";
 import { clearAuthAttempts, isAuthRateLimited, recordAuthAttempt } from "@/lib/utils/rate-limit";
 import { emitEvent } from "@/lib/services/events";
+import { pauseStreak } from "@/lib/services/streak";
 import { lookupIp } from "@/lib/services/geoip";
 import { checkGeoAnomalyOnLogin } from "@/lib/services/security";
 import { sendNewDeviceEmail, sendPasswordResetEmail } from "@/lib/services/mail";
@@ -81,6 +82,7 @@ export async function login(
       user.accessUntil <= now
     ) {
       await tx.user.update({ where: { id: user.id }, data: { status: "expired" } });
+      await pauseStreak(tx, user.id); // spec 7.1.5/7.7: серия на паузе, не сгорает
       await emitEvent(tx, "access.expired", { via: "login" }, { userId: user.id });
       user.status = "expired";
     }

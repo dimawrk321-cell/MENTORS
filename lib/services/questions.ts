@@ -4,7 +4,7 @@ import type { Db } from "@/lib/db";
 import { checkAnswer, parseOptions, CLOSED_QUESTION_TYPES } from "@/lib/utils/answers";
 import { seededShuffle } from "@/lib/utils/shuffle";
 import { slugify, uniqueSlug } from "@/lib/utils/slug";
-import { emitEvent } from "@/lib/services/events";
+import { emitEvent, type EarnedAchievement } from "@/lib/services/events";
 import { addSrsCardForFailure } from "@/lib/services/srs";
 import { writeAudit } from "@/lib/services/audit";
 
@@ -159,13 +159,23 @@ export async function getQuizQuestionsForLesson(
 }
 
 export type QuizAnswerResult =
-  { ok: true; correct: boolean; first: boolean } | { ok: false; code: "not_found" };
+  | {
+      ok: true;
+      correct: boolean;
+      first: boolean;
+      /** Геймификация ответа (XP за первый правильный, стрик, достижения). */
+      xpAwarded: number;
+      leveledUpTo: number | null;
+      earnedAchievements: EarnedAchievement[];
+    }
+  | { ok: false; code: "not_found" };
 
-/** Поштучный ответ квиза (spec 7.5): first фиксируется для XP этапа 5. */
+/** Поштучный ответ квиза (spec 7.5): +5 XP за первый правильный (spec 7.7). */
 export async function answerQuizQuestion(
-  db: Db,
+  db: PrismaClient,
   input: { userId: string; lessonId: string; questionId: string; answer: unknown; now?: Date },
 ): Promise<QuizAnswerResult> {
+  const now = input.now ?? new Date();
   const link = await db.questionLesson.findUnique({
     where: { questionId_lessonId: { questionId: input.questionId, lessonId: input.lessonId } },
     include: { question: true },
@@ -183,32 +193,45 @@ export async function answerQuizQuestion(
     })) > 0;
   const first = correct && !hadFirst;
 
-  await db.quizAnswer.create({
-    data: {
-      userId: input.userId,
-      questionId: input.questionId,
-      lessonId: input.lessonId,
-      correct,
-      first,
-      createdAt: input.now ?? new Date(),
-    },
-  });
-  await emitEvent(
-    db,
-    "quiz.answered",
-    { lessonId: input.lessonId, questionId: input.questionId, correct, first },
-    { userId: input.userId },
-  );
-  // Spec 7.5: неверный ответ квиза → карточка в SRS (quiz_fail).
-  if (!correct) {
-    await addSrsCardForFailure(db, {
-      userId: input.userId,
-      questionId: input.questionId,
-      source: "quiz_fail",
-      now: input.now,
+  // Spec 7.13: ответ, его событие (XP/стрик/достижения) и SRS-карточка неверного
+  // ответа — одной транзакцией.
+  const gamification = await db.$transaction(async (tx) => {
+    await tx.quizAnswer.create({
+      data: {
+        userId: input.userId,
+        questionId: input.questionId,
+        lessonId: input.lessonId,
+        correct,
+        first,
+        createdAt: now,
+      },
     });
-  }
-  return { ok: true, correct, first };
+    const result = await emitEvent(
+      tx,
+      "quiz.answered",
+      { lessonId: input.lessonId, questionId: input.questionId, correct, first },
+      { userId: input.userId, now },
+    );
+    // Spec 7.5: неверный ответ квиза → карточка в SRS (quiz_fail).
+    if (!correct) {
+      await addSrsCardForFailure(tx, {
+        userId: input.userId,
+        questionId: input.questionId,
+        source: "quiz_fail",
+        now,
+      });
+    }
+    return result;
+  });
+
+  return {
+    ok: true,
+    correct,
+    first,
+    xpAwarded: gamification.xpAwarded,
+    leveledUpTo: gamification.leveledUpTo,
+    earnedAchievements: gamification.earnedAchievements,
+  };
 }
 
 // --- Admin bank (spec 8.5) ---

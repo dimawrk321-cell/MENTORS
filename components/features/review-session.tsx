@@ -12,6 +12,7 @@ import { pluralRu } from "@/lib/utils/dates";
 import { cn } from "@/lib/utils/cn";
 import { categoryColorVar } from "@/lib/utils/category-color";
 import { reviewCardAction } from "@/lib/actions/srs";
+import { celebrateGamification } from "@/components/features/gamification-celebrate";
 
 // Сессия SRS (spec 7.6/13/14): полноэкранная карточка — категория, вопрос →
 // «Показать ответ» (флип 250мс; reduced-motion — мгновенная смена) → эталон →
@@ -67,6 +68,8 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
         return;
       }
       setRemaining(result.data.remaining);
+      // Ритуалы: toast за достижения (напр. cards_100) и новый уровень (spec 5.4).
+      celebrateGamification(result.data.gamification);
       advance(result.data.remaining);
     });
   }
@@ -125,7 +128,8 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
   }
 
   if (phase === "done") {
-    // Сдержанный экран «Готово» (spec 7.6); XP-строка появится на этапе 5.
+    // Сдержанный экран «Готово» (spec 7.6): +30 XP и день в серию начислены
+    // диспетчером; достижения/уровень уже показаны тостами.
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-4 py-10 text-center">
         <div className="rounded-pill border-border bg-surface-2 flex size-12 items-center justify-center border">

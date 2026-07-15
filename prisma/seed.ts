@@ -3,6 +3,7 @@ import { hashPassword } from "../lib/utils/password";
 import { paletteIndex } from "../lib/utils/crypto";
 import { computeReadingMinutes } from "../lib/utils/markdown";
 import { ACCESS_RULES_SETTING_KEY, DEFAULT_ACCESS_RULES_TEXT } from "../lib/services/settings";
+import { seedAchievements } from "../lib/services/achievements";
 
 // Dev seed: stage 1 — owner + 2 mentors from SEED_* env (fresh DB is loginable);
 // stage 2 — tracks (ds/nlp/ai) + the demo course from spec 18 (1 module,
@@ -453,6 +454,10 @@ async function main(): Promise<void> {
   await seedTracksAndDemoCourse();
   const categoryIds = await seedQuestionCategories();
   await seedDemoQuestions(categoryIds);
+
+  // Stage 5: справочник достижений (spec 7.7) — сидится из ACHIEVEMENTS.
+  await seedAchievements(prisma);
+  console.log("+ справочник достижений (spec 7.7)");
 
   console.log("Dev-seed готов.");
 }

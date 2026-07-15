@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
-import { MonitorSmartphone } from "lucide-react";
+import { MonitorSmartphone, Trophy } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
-import { formatDateRu, formatDateTimeRu } from "@/lib/utils/dates";
+import { formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
+import { getUserAchievements } from "@/lib/services/achievements";
 import { logoutAction } from "@/lib/actions/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AchievementIcon } from "@/components/features/achievement-icon";
 import { ChangePasswordForm } from "./change-password-form";
 import { RevokeOtherSessionsButton } from "./revoke-others-button";
 
@@ -19,10 +21,10 @@ export const metadata: Metadata = {
 // stages 2/5/9 per plan.
 export default async function ProfilePage() {
   const { user, session } = await requireStudentZone();
-  const devices = await prisma.device.findMany({
-    where: { userId: user.id },
-    orderBy: { lastSeenAt: "desc" },
-  });
+  const [devices, achievements] = await Promise.all([
+    prisma.device.findMany({ where: { userId: user.id }, orderBy: { lastSeenAt: "desc" } }),
+    getUserAchievements(prisma, user.id),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -58,6 +60,37 @@ export default async function ProfilePage() {
         </CardHeader>
         <CardContent>
           <ChangePasswordForm />
+        </CardContent>
+      </Card>
+
+      {/* Достижения (spec 8.3): счётчик + список полученных; витрина — V1. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Достижения</CardTitle>
+          <CardDescription>
+            {achievements.count}{" "}
+            {pluralRu(achievements.count, "достижение", "достижения", "достижений")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {achievements.count === 0 ? (
+            <p className="text-text-2 flex items-center gap-2 text-[14px]">
+              <Trophy size={16} strokeWidth={1.75} className="text-text-3" aria-hidden="true" />
+              Пока нет — учись, проходи тесты и повторяй карточки.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {achievements.earned.map((achievement) => (
+                <li key={achievement.key} className="flex items-center gap-3">
+                  <AchievementIcon name={achievement.icon} />
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-medium">{achievement.title}</p>
+                    <p className="text-text-2 text-[13px]">{achievement.description}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

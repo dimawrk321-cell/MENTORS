@@ -1,8 +1,7 @@
-import { Prisma } from "@prisma/client";
 import type { PrismaClient, Question, SrsAddedFrom, SrsCard, SrsGrade } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { addDays, dateOnlyUtc, localDateStr, zonedDayUtcRange } from "@/lib/utils/dates";
-import { emitEvent } from "@/lib/services/events";
+import { emitEvent, mergeEmitResults, type EarnedAchievement } from "@/lib/services/events";
 
 // SRS — интервальные повторения (spec 7.6), ядро продукта. Планировщик —
 // чистая функция applyGrade (юнит-тесты всех переходов); источники карточек
@@ -116,32 +115,32 @@ async function upsertCardFromSource(
   });
   if (existing) return resetExistingCard(db, input);
 
-  try {
-    await db.srsCard.create({
-      data: {
+  // ON CONFLICT DO NOTHING (createMany skipDuplicates): параллельный источник
+  // (два is_key одного вопроса, двойной сабмит) мог создать карточку между
+  // findUnique и вставкой — уникальный индекс (user, question) ловит гонку, НЕ
+  // отравляя транзакцию вызывающего действия (в отличие от create+catch P2002,
+  // где абортнутая tx роняет весь ответ квиза). count=0 ⇒ карточка уже есть.
+  const created = await db.srsCard.createMany({
+    data: [
+      {
         userId: input.userId,
         questionId: input.questionId,
         step: 0,
         nextReviewAt: input.today,
         addedFrom: input.source,
       },
-    });
-    await emitEvent(
-      db,
-      "srs.card_added",
-      { questionId: input.questionId, source: input.source },
-      { userId: input.userId },
-    );
-    return "created";
-  } catch (error) {
-    // TOCTOU: параллельный источник (два is_key одного вопроса, двойной сабмит)
-    // мог успеть создать карточку между findUnique и create — уникальный индекс
-    // (user, question) ловит гонку, обрабатываем как существующую.
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return resetExistingCard(db, input);
-    }
-    throw error;
-  }
+    ],
+    skipDuplicates: true,
+  });
+  if (created.count === 0) return resetExistingCard(db, input);
+
+  await emitEvent(
+    db,
+    "srs.card_added",
+    { questionId: input.questionId, source: input.source },
+    { userId: input.userId },
+  );
+  return "created";
 }
 
 /** completeLesson → карточки всех is_key-вопросов урока (spec 7.6). */
@@ -323,14 +322,25 @@ export async function getNextReviewDate(
 // --- Сессия и оценка карточки ---
 
 export type ReviewCardResult =
-  | { ok: true; prevStep: number; newStep: number; remaining: number; queueCompleted: boolean }
+  | {
+      ok: true;
+      prevStep: number;
+      newStep: number;
+      remaining: number;
+      queueCompleted: boolean;
+      /** Начисленный XP и достижения этого ответа — для ритуалов/тостов (spec 5.4). */
+      xpAwarded: number;
+      leveledUpTo: number | null;
+      earnedAchievements: EarnedAchievement[];
+    }
   | { ok: false; code: "not_found" | "not_due" };
 
 /**
  * Один ответ сессии — отдельное действие (spec 7.6: выход в любой момент,
  * отвеченное сохранено). Карточка вне сегодняшней очереди отклоняется —
  * это же гасит двойной сабмит (после оценки next_review уходит в будущее).
- * queue.completed эмитится строго один раз в календарный день пользователя.
+ * queue.completed эмитится строго один раз в календарный день пользователя —
+ * exactly-once держит уникальный индекс xp_events в диспетчере (spec 7.13).
  */
 export async function reviewSrsCard(
   db: PrismaClient,
@@ -345,7 +355,8 @@ export async function reviewSrsCard(
 
   const transition = applyGrade(card, input.grade, today);
 
-  return db.$transaction(async (tx) => {
+  // Транзакция самого ответа (spec 7.6: отвеченное сохранено при любом выходе).
+  const gamification = await db.$transaction(async (tx) => {
     await tx.srsCard.update({
       where: { id: card.id },
       data: {
@@ -365,7 +376,7 @@ export async function reviewSrsCard(
         newStep: transition.step,
       },
     });
-    await emitEvent(
+    return emitEvent(
       tx,
       "card.reviewed",
       {
@@ -375,33 +386,37 @@ export async function reviewSrsCard(
         prevStep: card.step,
         newStep: transition.step,
       },
-      { userId: input.userId },
+      { userId: input.userId, now },
     );
-
-    const { total: remaining } = await getSrsQueue(tx, { userId: input.userId, now });
-    let queueCompleted = false;
-    if (remaining === 0) {
-      const alreadyEmitted = await tx.analyticsEvent.count({
-        where: {
-          userId: input.userId,
-          type: "queue.completed",
-          payload: { path: ["day"], equals: todayStr },
-        },
-      });
-      if (alreadyEmitted === 0) {
-        await emitEvent(tx, "queue.completed", { day: todayStr }, { userId: input.userId });
-        queueCompleted = true;
-      }
-    }
-
-    return {
-      ok: true,
-      prevStep: card.step,
-      newStep: transition.step,
-      remaining,
-      queueCompleted,
-    };
   });
+
+  // Закрытие очереди — ПОСЛЕ коммита ответа, отдельным идемпотентным эмитом.
+  // Причина: при гонке двух вкладок, опустошающих последние карточки, чтение
+  // внутри транзакции не видит несохранённое обновление чужой карточки — обе
+  // насчитали бы remaining=1 и никто бы не заэмитил (потеря дня). Пост-коммит
+  // чтение видит зафиксированные чужие карточки; уникальный индекс xp_events
+  // гасит двойной эмит — строгий exactly-once (spec 7.13, закрытие огранич. этапа 4).
+  const { total: remaining } = await getSrsQueue(db, { userId: input.userId, now });
+  let queueCompleted = false;
+  let result = gamification;
+  if (remaining === 0) {
+    const queueResult = await db.$transaction((tx) =>
+      emitEvent(tx, "queue.completed", { day: todayStr }, { userId: input.userId, now }),
+    );
+    queueCompleted = queueResult.recorded;
+    result = mergeEmitResults(gamification, queueResult);
+  }
+
+  return {
+    ok: true,
+    prevStep: card.step,
+    newStep: transition.step,
+    remaining,
+    queueCompleted,
+    xpAwarded: result.xpAwarded,
+    leveledUpTo: result.leveledUpTo,
+    earnedAchievements: result.earnedAchievements,
+  };
 }
 
 export interface SessionCard {

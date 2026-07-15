@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { completeLesson } from "@/lib/services/content";
 import { answerQuizQuestion } from "@/lib/services/questions";
 import { answerTestQuestion, startTestAttempt } from "@/lib/services/tests";
-import { addSrsCardManually } from "@/lib/services/srs";
+import { addSrsCardForFailure, addSrsCardManually } from "@/lib/services/srs";
 import { addDays, dateOnlyUtc } from "@/lib/utils/dates";
 import { createTestUser, resetDb, testDb } from "./helpers/db";
 import { CORRECT, makeTestedCourse, WRONG } from "./helpers/content-fixture";
@@ -313,5 +313,27 @@ describe("ручное добавление (spec 7.4/7.6)", () => {
     expect(
       await addSrsCardManually(testDb, { userId: user.id, questionId: "missing", now: NOW }),
     ).toEqual({ ok: false, code: "not_found" });
+  });
+});
+
+describe("гонка создания карточки (этап 5: без отравления транзакции)", () => {
+  it("две параллельные транзакции из ошибки для одного (user,question) → одна карточка, обе успешны", async () => {
+    const user = await makeStudent();
+    const fixture = await makeTestedCourse({ poolQuestions: 1 });
+    const questionId = fixture.questionIds[0]!;
+
+    // Двойной сабмит неверного ответа: обе транзакции создают карточку из ошибки.
+    // createMany skipDuplicates ловит гонку через уникальный (user,question) без
+    // P2002-отравления — иначе проигравшая транзакция откатила бы весь ответ.
+    const settled = await Promise.allSettled([
+      testDb.$transaction((tx) =>
+        addSrsCardForFailure(tx, { userId: user.id, questionId, source: "quiz_fail", now: NOW }),
+      ),
+      testDb.$transaction((tx) =>
+        addSrsCardForFailure(tx, { userId: user.id, questionId, source: "quiz_fail", now: NOW }),
+      ),
+    ]);
+    expect(settled.every((s) => s.status === "fulfilled")).toBe(true);
+    expect(await testDb.srsCard.count({ where: { userId: user.id, questionId } })).toBe(1);
   });
 });

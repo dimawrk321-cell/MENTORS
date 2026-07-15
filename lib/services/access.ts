@@ -6,6 +6,8 @@ import { generateToken, paletteIndex } from "@/lib/utils/crypto";
 import { emitEvent } from "@/lib/services/events";
 import { writeAudit } from "@/lib/services/audit";
 import { revokeSessions } from "@/lib/services/sessions";
+import { pauseStreak, unpauseStreak } from "@/lib/services/streak";
+import { getTotalXp } from "@/lib/services/xp";
 import { sendAccessExpiryReminderEmail, sendInviteEmail } from "@/lib/services/mail";
 
 // Student access lifecycle (spec 7.1): manual invite, 90 days from activation,
@@ -215,11 +217,13 @@ export async function extendAccess(
       },
     });
     // Spec 7.1.7: extension reactivates (blocked/expired → active); bookings are
-    // not restored (nothing to restore before stage 6); streak unpause — stage 5.
+    // not restored (nothing to restore before stage 6).
     await tx.user.update({
       where: { id: user.id },
       data: { accessUntil: newAccessUntil, status: "active" },
     });
+    // Spec 7.1.7/7.7: снимаем паузу серии (сохранённая серия — «всё на месте»).
+    await unpauseStreak(tx, user.id, now);
     await writeAudit(tx, {
       actorId: input.actorId,
       action: "access.extended",
@@ -253,6 +257,8 @@ export async function expireOverdueAccess(
   for (const { id } of overdue) {
     await db.$transaction(async (tx) => {
       await tx.user.update({ where: { id }, data: { status: "expired" } });
+      // Spec 7.1.5/7.7: серия ставится на паузу — не сгорает, дни не считаются.
+      await pauseStreak(tx, id);
       await emitEvent(tx, "access.expired", { via: "worker" }, { userId: id });
     });
   }
@@ -284,11 +290,14 @@ export async function sendAccessExpiryReminders(db: Db, now: Date = new Date()):
 
 /** Totals for the /expired farewell screen (spec 7.1.6). */
 export async function getExpiredSummary(db: Db, userId: string) {
-  // DECISION: lessons/XP/streak/mocks tables arrive at stages 2/5/5/6 — until
-  // then the summary is zeros from this single point; each stage wires its source here.
-  void db;
-  void userId;
-  return { lessonsCompleted: 0, totalXp: 0, bestStreak: 0, mocksCompleted: 0 };
+  // DECISION: mocks join at stage 6 — until then that total is zero; lessons/XP/
+  // streak are wired here now that stage 5 owns those tables (spec 7.1.6).
+  const [lessonsCompleted, totalXp, streak] = await Promise.all([
+    db.lessonProgress.count({ where: { userId, status: "completed" } }),
+    getTotalXp(db, userId),
+    db.streak.findUnique({ where: { userId }, select: { best: true } }),
+  ]);
+  return { lessonsCompleted, totalXp, bestStreak: streak?.best ?? 0, mocksCompleted: 0 };
 }
 
 // --- Admin: block / unblock / reset sessions (spec 2, 7.1.8) ---
@@ -347,6 +356,9 @@ export async function unblockStudent(
 
   await db.$transaction(async (tx) => {
     await tx.user.update({ where: { id: user.id }, data: { status: restored } });
+    // Инвариант «expired ⇒ paused» (spec 7.1.5): если разблокировка приводит в
+    // expired, серия ставится на паузу — как и на обычных путях истечения.
+    if (restored === "expired") await pauseStreak(tx, user.id);
     await writeAudit(tx, {
       actorId: input.actorId,
       action: "user.unblocked",

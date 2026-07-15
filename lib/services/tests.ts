@@ -2,7 +2,7 @@ import type { ModuleTest, PrismaClient, Question, TestKind } from "@prisma/clien
 import type { Db } from "@/lib/db";
 import { checkAnswer, CLOSED_QUESTION_TYPES } from "@/lib/utils/answers";
 import { randomShuffle } from "@/lib/utils/shuffle";
-import { emitEvent } from "@/lib/services/events";
+import { emitEvent, type EarnedAchievement, type EmitResult } from "@/lib/services/events";
 import { addSrsCardForFailure } from "@/lib/services/srs";
 import { writeAudit } from "@/lib/services/audit";
 
@@ -251,7 +251,16 @@ export async function answerTestQuestion(
 }
 
 export type FinishTestResult =
-  | { ok: true; score: number; passed: boolean; threshold: number }
+  | {
+      ok: true;
+      score: number;
+      passed: boolean;
+      threshold: number;
+      /** Геймификация результата — для ритуалов/тостов на экране результата (spec 5.4). */
+      xpAwarded: number;
+      leveledUpTo: number | null;
+      earnedAchievements: EarnedAchievement[];
+    }
   | { ok: false; code: "not_found" | "finished" };
 
 /**
@@ -281,7 +290,7 @@ export async function finishTestAttempt(
   const score = total === 0 ? 0 : Math.round((correct / total) * 100);
   const passed = score >= threshold;
 
-  await db.$transaction(async (tx) => {
+  const gamification = await db.$transaction(async (tx): Promise<EmitResult> => {
     await tx.testAttempt.update({
       where: { id: attempt.id },
       data: { score, passed, finishedAt: now },
@@ -299,24 +308,22 @@ export async function finishTestAttempt(
     });
 
     if (attempt.kind === "module") {
-      await emitEvent(
+      return emitEvent(
         tx,
         passed ? "test.passed" : "test.failed",
         { moduleId: attempt.moduleId, score, threshold, attemptNumber, kind: "module" },
-        { userId: attempt.userId },
+        { userId: attempt.userId, now },
       );
-      return;
     }
 
     // --- testout ---
     if (!passed) {
-      await emitEvent(
+      return emitEvent(
         tx,
         "test.failed",
         { moduleId: attempt.moduleId, score, threshold, attemptNumber, kind: "testout" },
-        { userId: attempt.userId },
+        { userId: attempt.userId, now },
       );
-      return;
     }
 
     const lessons = await tx.lesson.findMany({
@@ -335,7 +342,7 @@ export async function finishTestAttempt(
         update: { status: "completed", completedAt: now },
       });
     }
-    await emitEvent(
+    return emitEvent(
       tx,
       "testout.passed",
       {
@@ -344,11 +351,19 @@ export async function finishTestAttempt(
         via: "testout",
         lessonIds: lessons.map((lesson) => lesson.id),
       },
-      { userId: attempt.userId },
+      { userId: attempt.userId, now },
     );
   });
 
-  return { ok: true, score, passed, threshold };
+  return {
+    ok: true,
+    score,
+    passed,
+    threshold,
+    xpAwarded: gamification.xpAwarded,
+    leveledUpTo: gamification.leveledUpTo,
+    earnedAchievements: gamification.earnedAchievements,
+  };
 }
 
 /** Runner state: fixed question order, already answered set (refresh-safe). */

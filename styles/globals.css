@@ -119,6 +119,22 @@
     }
   }
 
+  /* Ритуал закрытия кольца дневной цели (spec 5.4): мягкий glow ≤500мс. */
+  @keyframes goal-glow {
+    0% {
+      filter: drop-shadow(0 0 0 rgb(139 92 246 / 0));
+    }
+    45% {
+      filter: drop-shadow(0 0 10px rgb(139 92 246 / 0.7));
+    }
+    100% {
+      filter: drop-shadow(0 0 0 rgb(139 92 246 / 0));
+    }
+  }
+  .goal-ring-glow {
+    animation: goal-glow 500ms var(--ease);
+  }
+
   /* Section 5.4: reduced motion degrades animations; fine-grained pass in stage 12. */
   @media (prefers-reduced-motion: reduce) {
     *,

@@ -3,6 +3,7 @@ import type { Db } from "@/lib/db";
 import { generateToken, sha256Hex } from "@/lib/utils/crypto";
 import { parseUserAgent } from "@/lib/utils/user-agent";
 import { emitEvent } from "@/lib/services/events";
+import { pauseStreak } from "@/lib/services/streak";
 import { writeAudit } from "@/lib/services/audit";
 
 // Session & device rules (spec 7.2): random 256-bit token (DB stores sha256),
@@ -251,6 +252,7 @@ export async function validateSessionToken(
     session.user.accessUntil <= now
   ) {
     await db.user.update({ where: { id: session.userId }, data: { status: "expired" } });
+    await pauseStreak(db, session.userId); // spec 7.1.5/7.7: серия на паузе, не сгорает
     await emitEvent(db, "access.expired", { via: "request" }, { userId: session.userId });
     session.user.status = "expired";
   }

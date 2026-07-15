@@ -21,6 +21,7 @@ import {
   type ActionResult,
 } from "@/lib/auth/action-helpers";
 import { onboardingSchema, reportContentSchema, savePositionSchema } from "@/lib/utils/validation";
+import { toFeedback, type GamificationFeedback } from "@/lib/gamification";
 
 /** Fired once on lesson open; impersonation views must not fake student activity. */
 export async function startLessonAction(lessonId: string): Promise<ActionResult<undefined>> {
@@ -35,9 +36,13 @@ export async function startLessonAction(lessonId: string): Promise<ActionResult<
   });
 }
 
-export async function completeLessonAction(
-  lessonId: string,
-): Promise<ActionResult<{ nextLessonId: string | null; courseSlug: string }>> {
+export async function completeLessonAction(lessonId: string): Promise<
+  ActionResult<{
+    nextLessonId: string | null;
+    courseSlug: string;
+    gamification: GamificationFeedback;
+  }>
+> {
   return runAction(async () => {
     const auth = await requireActionStudent();
     assertNotImpersonating(auth);
@@ -49,7 +54,11 @@ export async function completeLessonAction(
     if (!res.ok) {
       throw new ActionError(res.code, res.code === "locked" ? "Урок ещё закрыт" : "Урок не найден");
     }
-    return { nextLessonId: res.nextLessonId, courseSlug: res.courseSlug };
+    return {
+      nextLessonId: res.nextLessonId,
+      courseSlug: res.courseSlug,
+      gamification: toFeedback(res),
+    };
   });
 }
 

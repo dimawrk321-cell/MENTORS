@@ -102,6 +102,25 @@ export function dateOnlyUtc(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00.000Z`);
 }
 
+/** Hour (0–23) of an instant in a timezone — used by streak «под угрозой» / night_shift. */
+export function localHour(date: Date, timeZone: string): number {
+  const hour = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+  return Number(hour);
+}
+
+/**
+ * ISO weekday (1 = Monday … 7 = Sunday) of a calendar date «YYYY-MM-DD».
+ * The string is already the user's local date, so this is timezone-independent —
+ * matches `users.study_days` (spec 6: дни недели 1–7).
+ */
+export function isoWeekday(dateStr: string): number {
+  return ((dateOnlyUtc(dateStr).getUTCDay() + 6) % 7) + 1;
+}
+
 /** UTC instants bounding a calendar date in a timezone: [start, end). */
 export function zonedDayUtcRange(dateStr: string, timeZone: string): { start: Date; end: Date } {
   const previousDay = localDateStr(addDays(dateOnlyUtc(dateStr), -1), "UTC");

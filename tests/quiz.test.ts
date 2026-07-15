@@ -42,7 +42,7 @@ describe("quiz first (spec 7.5: XP только за первый правиль
       questionId: fixture.inQuizId,
       answer: CORRECT,
     });
-    expect(first).toEqual({ ok: true, correct: true, first: true });
+    expect(first).toMatchObject({ ok: true, correct: true, first: true });
 
     const repeat = await answerQuizQuestion(testDb, {
       userId: user.id,
@@ -50,7 +50,7 @@ describe("quiz first (spec 7.5: XP только за первый правиль
       questionId: fixture.inQuizId,
       answer: CORRECT,
     });
-    expect(repeat).toEqual({ ok: true, correct: true, first: false });
+    expect(repeat).toMatchObject({ ok: true, correct: true, first: false });
 
     // Ровно одна запись с first=true (идемпотентность будущего XP).
     expect(
@@ -70,7 +70,7 @@ describe("quiz first (spec 7.5: XP только за первый правиль
       questionId: fixture.inQuizId,
       answer: WRONG,
     });
-    expect(wrong).toEqual({ ok: true, correct: false, first: false });
+    expect(wrong).toMatchObject({ ok: true, correct: false, first: false });
 
     const correct = await answerQuizQuestion(testDb, {
       userId: user.id,
@@ -78,7 +78,7 @@ describe("quiz first (spec 7.5: XP только за первый правиль
       questionId: fixture.inQuizId,
       answer: CORRECT,
     });
-    expect(correct).toEqual({ ok: true, correct: true, first: true });
+    expect(correct).toMatchObject({ ok: true, correct: true, first: true });
 
     // Все попытки записаны (история повторных прохождений).
     expect(
