@@ -6,7 +6,7 @@
 # edge cases of Alpine. Builder and runner share the base so `native` Prisma
 # binary targets and prebuilt .node addons match at runtime.
 
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 # openssl + ca-certificates: required by Prisma engines (generate + runtime).

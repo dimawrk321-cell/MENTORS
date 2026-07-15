@@ -22,8 +22,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    # No published port: the DB is reachable only on the compose network.
-    # Migrations/import reach it via an SSH tunnel over tailnet (spec 11/18).
+    ports:
+      # Loopback-only: NOT a public exposure (ufw/public IP can't reach it).
+      # Reachable solely via an SSH tunnel over tailnet (spec 11/18) — this is
+      # the sanctioned path for the local Notion importer and ad-hoc psql.
+      - "127.0.0.1:5432:5432"
 
   web:
     build:
