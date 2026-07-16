@@ -21,18 +21,17 @@ interface NavItem {
   icon: LucideIcon;
 }
 
-// DECISION: several targets (/trainer, /questions, /mocks, /library, /guides, /profile)
-// do not exist yet at stage 0 — links intentionally point ahead; the global not-found
-// page covers them until those routes land in later stages.
 const mainItems: NavItem[] = [
   { href: "/", label: "Главная", icon: Home },
   { href: "/courses", label: "Обучение", icon: BookOpen },
   { href: "/trainer", label: "Тренажёр", icon: Layers },
   { href: "/questions", label: "Вопросы", icon: MessageCircleQuestion },
   { href: "/mocks", label: "Моки", icon: Video },
-  { href: "/library", label: "Библиотека", icon: Library },
   { href: "/guides", label: "Справочник", icon: BookMarked },
 ];
+
+// Библиотека is per-student toggled (spec 7.9) — inserted only when enabled.
+const libraryItem: NavItem = { href: "/library", label: "Библиотека", icon: Library };
 
 const bottomItems: NavItem[] = [{ href: "/profile", label: "Профиль", icon: UserRound }];
 
@@ -62,8 +61,18 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function StudentSidebar({ brandName }: { brandName: string }) {
+export function StudentSidebar({
+  brandName,
+  libraryEnabled,
+}: {
+  brandName: string;
+  libraryEnabled: boolean;
+}) {
   const pathname = usePathname();
+  // Библиотека sits between «Справочник» and above; keep it right after Моки.
+  const items = libraryEnabled
+    ? [...mainItems.slice(0, 5), libraryItem, ...mainItems.slice(5)]
+    : mainItems;
 
   return (
     <aside className="border-border sticky top-0 hidden h-dvh shrink-0 gap-1 border-r px-3 py-5 md:flex md:w-16 md:flex-col lg:w-60">
@@ -75,7 +84,7 @@ export function StudentSidebar({ brandName }: { brandName: string }) {
         <span className="sr-only lg:not-sr-only">{brandName}</span>
       </div>
       <nav aria-label="Основная навигация" className="flex flex-1 flex-col gap-1">
-        {mainItems.map((item) => (
+        {items.map((item) => (
           <SidebarLink key={item.href} item={item} active={isActive(pathname, item.href)} />
         ))}
         <div className="mt-auto flex flex-col gap-1">

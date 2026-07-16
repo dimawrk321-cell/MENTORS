@@ -15,13 +15,13 @@ export default async function StudentLayout({ children }: { children: ReactNode 
     <>
       {impersonated && <ImpersonationBanner studentName={user.name} />}
       <div className="flex min-h-dvh">
-        <StudentSidebar brandName={brandName} />
+        <StudentSidebar brandName={brandName} libraryEnabled={user.libraryEnabled} />
         {/* pb-20 keeps content clear of the fixed bottom nav on mobile. */}
         <main className="flex-1 pb-20 md:pb-0">
           <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">{children}</div>
         </main>
       </div>
-      <BottomNav />
+      <BottomNav libraryEnabled={user.libraryEnabled} />
     </>
   );
 }
