@@ -217,14 +217,20 @@ describe("category matching (spec 7.14 п.4/п.5)", () => {
 });
 
 describe("buildImportPlan — mapping & heuristics (spec 7.14)", () => {
-  it("produces the expected courses (NLP split, tools skipped)", () => {
+  it("produces the expected courses and routes guide sections (spec 7.14 part 2)", () => {
     const p = plan();
     const slugs = p.courses.map((c) => c.slug);
     expect(slugs).toEqual(["python-pytorch", "nlp-basic", "nlp-advanced", "soft-skills"]);
-    expect(p.anomalies.skippedSections.map((s) => s.title)).toContain(
+    // «Основные инструменты» → guides(tools), no longer skipped (part 2).
+    expect(p.guides.some((g) => g.section === "tools" && g.title === "Git")).toBe(true);
+    expect(p.anomalies.skippedSections.map((s) => s.title)).not.toContain(
       "Основные инструменты, используемые на работе",
     );
-    expect(p.anomalies.skippedSections.map((s) => s.title)).toContain("Гайды по резюме и легенде");
+    // Guide sections are routed to guides, not skipped.
+    expect(p.anomalies.skippedSections.map((s) => s.title)).not.toContain(
+      "Гайды по резюме и легенде",
+    );
+    // Only the Я.Диск «Собеседования» section is skipped now.
     expect(p.anomalies.skippedSections.map((s) => s.title)).toContain("Собеседования");
   });
 
