@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Video } from "lucide-react";
-import { MOCK_TYPE_LABEL } from "@/lib/constants";
+import { isRoomUrlReady, MOCK_TYPE_LABEL } from "@/lib/constants";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 // Карточка ближайшего/активного мока (spec 8.3): обратный отсчёт + «Подключиться»
@@ -44,8 +45,12 @@ export function MockBookingCard(props: MockBookingCardProps) {
   }, []);
 
   // До гидратации рендерим окно как недоступное для подключения (SSR-совместимо).
+  const roomReady = isRoomUrlReady(props.roomUrl);
   const canConnect =
-    nowMs !== null && nowMs >= props.startsAtMs - CONNECT_LEAD_MS && nowMs < props.endsAtMs;
+    roomReady &&
+    nowMs !== null &&
+    nowMs >= props.startsAtMs - CONNECT_LEAD_MS &&
+    nowMs < props.endsAtMs;
   const countdown = nowMs === null ? "" : countdownLabel(props.startsAtMs, props.endsAtMs, nowMs);
 
   return (
@@ -64,7 +69,11 @@ export function MockBookingCard(props: MockBookingCardProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {canConnect ? (
+          {!roomReady ? (
+            <Badge variant="warning" title="Интервьюер ещё не указал ссылку на комнату">
+              Комната не указана
+            </Badge>
+          ) : canConnect ? (
             <Button asChild>
               <a href={props.roomUrl} target="_blank" rel="noopener noreferrer">
                 Подключиться

@@ -5,6 +5,7 @@ import { computeReadingMinutes } from "../lib/utils/markdown";
 import { ACCESS_RULES_SETTING_KEY, DEFAULT_ACCESS_RULES_TEXT } from "../lib/services/settings";
 import { seedAchievements } from "../lib/services/achievements";
 import { seedRubricTemplates } from "../lib/services/feedback";
+import { ROOM_URL_PLACEHOLDER } from "../lib/constants";
 
 // Dev seed: stage 1 — owner + 2 mentors from SEED_* env (fresh DB is loginable);
 // stage 2 — tracks (ds/nlp/ai) + the demo course from spec 18 (1 module,
@@ -465,7 +466,7 @@ async function seedInterviewerProfiles(): Promise<void> {
       update: {},
       create: {
         userId: interviewer.id,
-        roomUrl: "https://telemost.yandex.ru/PLACEHOLDER-замени-в-кабинете",
+        roomUrl: ROOM_URL_PLACEHOLDER,
         active: true,
       },
     });

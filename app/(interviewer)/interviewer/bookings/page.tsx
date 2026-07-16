@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireInterviewerZone } from "@/lib/auth/guards";
 import { getInterviewerBookings, type InterviewerBookingRow } from "@/lib/services/mock-queries";
 import { cancelByInterviewerAction } from "@/lib/actions/interviewer";
-import { MOCK_TYPE_LABEL } from "@/lib/constants";
+import { isRoomUrlReady, MOCK_TYPE_LABEL } from "@/lib/constants";
 import { formatDateTimeRu } from "@/lib/utils/dates";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,13 +33,25 @@ function BookingCard({ row, timezone }: { row: InterviewerBookingRow; timezone: 
             · {MOCK_TYPE_LABEL[row.type]}
           </p>
         </div>
-        <Badge variant="accent">{MOCK_TYPE_LABEL[row.type]}</Badge>
+        {isRoomUrlReady(row.roomUrl) ? (
+          <Badge variant="accent">{MOCK_TYPE_LABEL[row.type]}</Badge>
+        ) : (
+          <Badge variant="warning" title="Укажи ссылку на комнату в расписании">
+            Комната не указана
+          </Badge>
+        )}
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="secondary" size="sm">
-            <a href={row.roomUrl} target="_blank" rel="noopener noreferrer">
+          {isRoomUrlReady(row.roomUrl) ? (
+            <Button asChild variant="secondary" size="sm">
+              <a href={row.roomUrl} target="_blank" rel="noopener noreferrer">
+                Открыть комнату
+              </a>
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" disabled title="Ссылка на комнату не указана">
               Открыть комнату
-            </a>
-          </Button>
+            </Button>
+          )}
           {row.canRun ? (
             <Button asChild size="sm">
               <Link href={`/interviewer/run/${row.bookingId}`}>Провести</Link>

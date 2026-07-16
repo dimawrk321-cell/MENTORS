@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, TriangleAlert } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireInterviewerZone } from "@/lib/auth/guards";
 import { getInterviewerProfile } from "@/lib/services/mock-admin";
 import { getSchedulePreview } from "@/lib/services/slots";
+import { isRoomUrlReady } from "@/lib/constants";
 import { formatDateOnlyRu, formatDayHeadingRu, formatTimeRu } from "@/lib/utils/dates";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -52,9 +53,28 @@ export default async function InterviewerSchedulePage() {
     getSchedulePreview(prisma, { interviewerId: user.id, timezone: user.timezone, now }),
   ]);
 
+  const roomMissing = !isRoomUrlReady(profile?.roomUrl);
+
   return (
     <div className="flex flex-col gap-8">
       <h1 className="text-[24px] font-semibold">Расписание</h1>
+
+      {/* Баннер незаполненной комнаты (acceptance-фикс г) */}
+      {roomMissing && (
+        <Card className="border-l-warning border-l-2">
+          <CardContent className="flex gap-3">
+            <TriangleAlert size={18} strokeWidth={1.75} className="text-warning mt-0.5 shrink-0" />
+            <div>
+              <p className="text-[15px] font-medium">Укажи ссылку на комнату</p>
+              <p className="text-text-2 mt-1 text-[13px]">
+                Пока стоит плейсхолдер, ученики видят «Комната не указана» вместо кнопки
+                «Подключиться». Вставь постоянную ссылку Телемоста ниже — она подтянется и в уже
+                оформленные брони.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Профиль интервьюера (spec 8.4): room_url редактируется здесь. */}
       <section className="flex flex-col gap-3">

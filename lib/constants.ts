@@ -75,3 +75,19 @@ export const STRIKE_LOCK_DAYS = 14;
 /** Waitlist (spec 7.8): заявка живёт 14 дней, hold предложения — 2 часа. */
 export const WAITLIST_TTL_DAYS = 14;
 export const OFFER_HOLD_HOURS = 2;
+
+/** Правила брони одной строкой (spec 7.8) — показывается на шаге подтверждения. */
+export const BOOKING_RULES_LINE =
+  "Отмена бесплатна за 24 часа. Поздняя отмена или неявка — страйк; два страйка — пауза брони 14 дней";
+
+/** Сид-плейсхолдер комнаты интервьюера: профиль ещё не заполнен настоящей ссылкой. */
+export const ROOM_URL_PLACEHOLDER = "https://telemost.yandex.ru/PLACEHOLDER-замени-в-кабинете";
+
+/**
+ * Готова ли комната к подключению (spec 7.8, acceptance-фикс): непустая ссылка,
+ * не сид-плейсхолдер. Пустой/плейсхолдерный room_url → бронь разрешена, но кнопка
+ * «Подключиться» показывает «Комната не указана», а не мёртвую ссылку.
+ */
+export function isRoomUrlReady(url: string | null | undefined): boolean {
+  return !!url && url.trim().length > 0 && !url.includes("PLACEHOLDER");
+}

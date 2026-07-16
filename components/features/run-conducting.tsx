@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, ExternalLink } from "lucide-react";
 import type { RunScreenData, RunQuestion } from "@/lib/services/mock-queries";
-import { MOCK_MARK_LABEL, MOCK_TYPE_LABEL, MOCK_VERDICT_LABEL } from "@/lib/constants";
+import {
+  isRoomUrlReady,
+  MOCK_MARK_LABEL,
+  MOCK_TYPE_LABEL,
+  MOCK_VERDICT_LABEL,
+} from "@/lib/constants";
 import { categoryColorVar } from "@/lib/utils/category-color";
 import { cn } from "@/lib/utils/cn";
 import { Card, CardContent } from "@/components/ui/card";
@@ -268,12 +273,18 @@ export function RunConducting({ data }: { data: RunScreenData }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="secondary" size="sm">
-            <a href={data.booking.roomUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink size={14} strokeWidth={1.75} aria-hidden="true" />
-              Комната
-            </a>
-          </Button>
+          {isRoomUrlReady(data.booking.roomUrl) ? (
+            <Button asChild variant="secondary" size="sm">
+              <a href={data.booking.roomUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink size={14} strokeWidth={1.75} aria-hidden="true" />
+                Комната
+              </a>
+            </Button>
+          ) : (
+            <Badge variant="warning" title="Укажи ссылку на комнату в расписании">
+              Комната не указана
+            </Badge>
+          )}
           {data.canNoShow && (
             <Button
               variant="ghost"

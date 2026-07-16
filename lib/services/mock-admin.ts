@@ -1,5 +1,6 @@
 import type { Booking, MockType, PrismaClient, WaitlistStatus } from "@prisma/client";
 import type { Db } from "@/lib/db";
+import { isRoomUrlReady } from "@/lib/constants";
 import { writeAudit } from "@/lib/services/audit";
 import { computeBookingLock, type BookingLock } from "@/lib/services/mocks";
 
@@ -199,8 +200,10 @@ export async function upsertInterviewerProfile(
     roomUrl: string;
     bio?: string | null;
     active: boolean;
+    now?: Date;
   },
 ): Promise<UpsertProfileResult> {
+  const now = input.now ?? new Date();
   const user = await db.user.findUnique({
     where: { id: input.userId },
     select: { isInterviewer: true },
@@ -227,6 +230,32 @@ export async function upsertInterviewerProfile(
       before: before ? { roomUrl: before.roomUrl, active: before.active } : undefined,
       after: { roomUrl: input.roomUrl, active: input.active },
     });
+
+    // Acceptance-фикс (в): при сохранении НАСТОЯЩЕЙ ссылки мигрируем её в будущие
+    // booked-брони этого интервьюера, чтобы уже забронированные ученики не получили
+    // мёртвую кнопку «Подключиться». Плейсхолдер в брони не переносим. Одна аудит-запись.
+    if (isRoomUrlReady(input.roomUrl) && input.roomUrl !== before?.roomUrl) {
+      const future = await tx.booking.findMany({
+        where: {
+          status: "booked",
+          slot: { interviewerId: input.userId, startsAt: { gt: now } },
+        },
+        select: { id: true },
+      });
+      if (future.length > 0) {
+        await tx.booking.updateMany({
+          where: { id: { in: future.map((b) => b.id) } },
+          data: { roomUrl: input.roomUrl },
+        });
+        await writeAudit(tx, {
+          actorId: input.actorId,
+          action: "interviewer.room_url_migrated",
+          entityType: "interviewer_profile",
+          entityId: input.userId,
+          after: { roomUrl: input.roomUrl, bookingsUpdated: future.length },
+        });
+      }
+    }
   });
   return { ok: true };
 }

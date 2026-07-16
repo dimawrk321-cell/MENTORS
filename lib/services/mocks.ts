@@ -395,7 +395,10 @@ export async function bookMock(
     const profile = await tx.interviewerProfile.findUnique({
       where: { userId: slot.interviewer_id },
     });
-    if (!profile || !profile.active || !profile.roomUrl) return { ok: false, code: "no_room" };
+    // Acceptance-фикс: бронь разрешена даже с незаполненным/плейсхолдерным room_url —
+    // копия попадёт в бронь, а UI покажет «Комната не указана». Когда интервьюер
+    // сохранит настоящую ссылку, она мигрирует в будущие booked-брони (upsertInterviewerProfile).
+    if (!profile || !profile.active) return { ok: false, code: "no_room" };
 
     await tx.slot.update({ where: { id: input.slotId }, data: { status: "booked" } });
     const booking = await tx.booking.create({

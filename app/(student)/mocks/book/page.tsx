@@ -8,7 +8,7 @@ import {
   getMocksPageData,
   listBookableInterviewers,
 } from "@/lib/services/mock-queries";
-import { MOCK_TYPE_LABEL } from "@/lib/constants";
+import { BOOKING_RULES_LINE, MOCK_TYPE_LABEL } from "@/lib/constants";
 import { formatDateRu, formatDateTimeRu } from "@/lib/utils/dates";
 import { categoryColorVar } from "@/lib/utils/category-color";
 import { Card, CardContent } from "@/components/ui/card";
@@ -247,9 +247,7 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
             </div>
           </CardContent>
         </Card>
-        <p className="text-text-2 text-[13px]">
-          Отмена бесплатна за 24 часа до старта. Позже — страйк. Неявка — страйк.
-        </p>
+        <p className="text-text-2 text-[13px]">{BOOKING_RULES_LINE}</p>
         <div>
           <ConfirmBookButton slotId={slot.id} type={type} />
         </div>
