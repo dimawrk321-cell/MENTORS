@@ -22,16 +22,17 @@ import {
 } from "@/lib/auth/action-helpers";
 import { onboardingSchema, reportContentSchema, savePositionSchema } from "@/lib/utils/validation";
 import { toFeedback, type GamificationFeedback } from "@/lib/gamification";
+import { touchRecentItem } from "@/lib/services/recent";
 
 /** Fired once on lesson open; impersonation views must not fake student activity. */
 export async function startLessonAction(lessonId: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
     const auth = await requireActionStudent();
     if (auth.impersonated || auth.accessExpired) return undefined; // silent no-op
-    await startLesson(prisma, {
-      userId: auth.user.id,
-      lessonId: parseInput(z.string().min(1), lessonId),
-    });
+    const id = parseInput(z.string().min(1), lessonId);
+    await startLesson(prisma, { userId: auth.user.id, lessonId: id });
+    // Recency index for the palette (spec 7.11) — every open bumps it.
+    await touchRecentItem(prisma, { userId: auth.user.id, itemType: "lesson", entityId: id });
     return undefined;
   });
 }

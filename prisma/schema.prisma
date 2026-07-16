@@ -12,11 +12,17 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Stage 8 (search): postgresqlExtensions lets Prisma own `pg_trgm` so both
+  // `migrate` and `db push` create it before the trgm GIN indexes that need it.
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  // plpgsql is Postgres' always-present built-in — declared so enabling
+  // postgresqlExtensions doesn't read it as drift (it is never created/dropped).
+  extensions = [pg_trgm, plpgsql]
 }
 
 enum Role {
@@ -137,6 +143,9 @@ model User {
   // Stage 7: library & guides.
   recordingViews RecordingView[]
   bookmarks      Bookmark[]
+
+  // Stage 8: search recency index (CommandPalette «Недавнее»).
+  recentItems RecentItem[]
 
   @@index([status, accessUntil])
   @@map("users")
@@ -410,9 +419,16 @@ model Lesson {
   reports          ContentReport[]
   questionLinks    QuestionLesson[]
   quizAnswers      QuizAnswer[]
+  // Stage 8 (search): tsvector kept current by a DB trigger (title 'A' +
+  // content_md 'B'); the client never reads it — queried via raw SQL only.
+  searchVector     Unsupported("tsvector")? @map("search_vector")
 
   @@unique([moduleId, slug])
   @@index([moduleId])
+  // FTS + typo-tolerant fallback (spec 6 «FTS»): GIN over the tsvector and a
+  // pg_trgm GIN over the title. Trigger/backfill live in the stage8 migration.
+  @@index([searchVector], type: Gin)
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "lessons_title_trgm_idx")
   @@map("lessons")
 }
 
@@ -521,9 +537,14 @@ model Question {
   reports         ContentReport[]
   srsCards        SrsCard[]
   mockMarks       MockQuestionMark[]
+  // Stage 8 (search): tsvector (text_md 'A' + answer_md 'B'), DB-trigger-kept.
+  searchVector    Unsupported("tsvector")? @map("search_vector")
 
   @@index([categoryId])
   @@index([status, type])
+  // Questions have no title — the trgm fallback (spec 6) rides on text_md.
+  @@index([searchVector], type: Gin)
+  @@index([textMd(ops: raw("gin_trgm_ops"))], type: Gin, map: "questions_text_trgm_idx")
   @@map("questions")
 }
 
@@ -1151,6 +1172,8 @@ model Recording {
   chapters  Json?
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
+  // Stage 8 (search): tsvector over the title only (spec 6), DB-trigger-kept.
+  searchVector Unsupported("tsvector")? @map("search_vector")
 
   views RecordingView[]
 
@@ -1158,6 +1181,8 @@ model Recording {
   @@index([direction])
   @@index([status])
   @@index([linkUpdatedAt])
+  @@index([searchVector], type: Gin)
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "recordings_title_trgm_idx")
   @@map("recordings")
 }
 
@@ -1188,9 +1213,13 @@ model Guide {
   updatedAt DateTime      @updatedAt @map("updated_at")
 
   bookmarks Bookmark[]
+  // Stage 8 (search): tsvector (title 'A' + content_md 'B'), DB-trigger-kept.
+  searchVector Unsupported("tsvector")? @map("search_vector")
 
   @@index([section, order])
   @@index([status])
+  @@index([searchVector], type: Gin)
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "guides_title_trgm_idx")
   @@map("guides")
 }
 
@@ -1205,4 +1234,30 @@ model Bookmark {
   @@unique([userId, guideId])
   @@index([guideId])
   @@map("bookmarks")
+}
+
+// --- Stage 8: search (spec 7.11 «Поиск») ---
+
+enum RecentItemType {
+  lesson
+  question
+  guide
+  recording
+}
+
+// Powers the CommandPalette «Недавнее» first screen (spec 7.11). One row per
+// (user, entity): every open upserts openedAt so re-opens resurface; the last
+// ~20 per user are kept (older pruned on write). Distinct from analytics_events
+// (the immutable log) — this is a small, always-current recency index.
+model RecentItem {
+  id       String         @id @default(cuid())
+  userId   String         @map("user_id")
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemType RecentItemType @map("item_type")
+  entityId String         @map("entity_id")
+  openedAt DateTime       @default(now()) @map("opened_at")
+
+  @@unique([userId, itemType, entityId])
+  @@index([userId, openedAt])
+  @@map("recent_items")
 }

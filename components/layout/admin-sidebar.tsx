@@ -21,6 +21,7 @@ import {
 import type { Role } from "@prisma/client";
 import { cn } from "@/lib/utils/cn";
 import { logoutAction } from "@/lib/actions/auth";
+import { SearchTriggerBar, SearchTriggerIcon } from "@/components/features/search-trigger";
 
 interface NavItem {
   href: string;
@@ -88,6 +89,7 @@ export function AdminNav({ brandName, role, isInterviewer, userName }: AdminNavP
           <div className="text-[15px] font-semibold tracking-tight">{brandName}</div>
           <div className="text-text-3 text-[11px]">Админка</div>
         </div>
+        <SearchTriggerBar className="mb-2" />
         <nav aria-label="Разделы админки" className="flex flex-1 flex-col gap-1 overflow-y-auto">
           {visible.map((item) => {
             const Icon = item.icon;
@@ -147,6 +149,7 @@ export function AdminNav({ brandName, role, isInterviewer, userName }: AdminNavP
         aria-label="Разделы админки"
         className="border-border flex items-center gap-1 overflow-x-auto border-b px-4 py-2 md:hidden"
       >
+        <SearchTriggerIcon className="size-9 shrink-0" />
         {visible.map((item) => {
           const active = isActive(pathname, item.href);
           return (

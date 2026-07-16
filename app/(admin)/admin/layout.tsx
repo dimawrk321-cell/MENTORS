@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AdminNav } from "@/components/layout/admin-sidebar";
+import { CommandPalette } from "@/components/features/command-palette";
 import { requireAdminZone } from "@/lib/auth/guards";
 
 // Spec 0.5: brand name only from env, never hardcoded.
@@ -21,6 +22,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <main className="flex-1">
         <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">{children}</div>
       </main>
+      {/* Palette opens in the admin zone too, searching the same four types (spec 7.11). */}
+      <CommandPalette zone="admin" />
     </div>
   );
 }

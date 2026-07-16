@@ -11,6 +11,7 @@ import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants"
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
 import { AddToSrsButton } from "@/components/features/add-to-srs-button";
 import { FlipCard } from "@/components/features/flip-card";
+import { QuestionOpenLogger } from "@/components/features/question-open-logger";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { categoryColorVar } from "@/lib/utils/category-color";
@@ -52,6 +53,8 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      {/* Logs question.opened + palette recency once on mount (spec 7.11/7.13). */}
+      <QuestionOpenLogger questionId={question.id} />
       <Link
         href="/questions"
         className="text-text-3 ease-app hover:text-text-1 flex w-fit items-center gap-1.5 text-[13px] transition-colors duration-150"

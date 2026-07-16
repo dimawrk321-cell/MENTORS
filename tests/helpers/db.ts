@@ -4,8 +4,10 @@ import { testDatabaseUrl } from "./db-url";
 
 export const testDb = new PrismaClient({ datasourceUrl: testDatabaseUrl() });
 
-/** Wipes all stage-1/2/3/4/5/6/7 tables in FK-safe order. */
+/** Wipes all stage-1/2/3/4/5/6/7/8 tables in FK-safe order. */
 export async function resetDb(): Promise<void> {
+  // Stage 8 (search) — recency index references users/entities.
+  await testDb.recentItem.deleteMany();
   // Stage 7 (library & guides) — views/bookmarks reference recordings/guides/users.
   await testDb.recordingView.deleteMany();
   await testDb.bookmark.deleteMany();

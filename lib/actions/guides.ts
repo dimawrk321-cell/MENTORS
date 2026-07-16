@@ -28,6 +28,7 @@ import {
   saveGuideContentSchema,
   toggleBookmarkSchema,
 } from "@/lib/utils/validation";
+import { touchRecentItem } from "@/lib/services/recent";
 
 // Guides actions (spec 7.10). Students read/bookmark; mentor+ author.
 
@@ -41,6 +42,8 @@ export async function openGuideAction(guideId: string): Promise<ActionResult<und
     const { guideId: id } = parseInput(z.object({ guideId: z.string().min(1) }), { guideId });
     if (!auth.impersonated) {
       await logGuideOpen(prisma, { userId: auth.user.id, guideId: id });
+      // Recency index for the palette (spec 7.11).
+      await touchRecentItem(prisma, { userId: auth.user.id, itemType: "guide", entityId: id });
     }
     return undefined;
   });

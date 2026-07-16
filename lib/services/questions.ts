@@ -124,6 +124,26 @@ export async function getQuestionPublic(db: Db, id: string) {
   return question;
 }
 
+/**
+ * Logs a question open (spec 7.13: question.opened — analytics only, no dedup).
+ * Wired at stage 8 for the palette «Недавнее» recency signal; it also feeds the
+ * rapid-content security flag (spec 7.2), which already counts these events.
+ */
+export async function logQuestionOpen(
+  db: PrismaClient,
+  input: { userId: string; questionId: string; now?: Date },
+): Promise<void> {
+  await emitEvent(
+    db,
+    "question.opened",
+    { questionId: input.questionId },
+    {
+      userId: input.userId,
+      now: input.now,
+    },
+  );
+}
+
 // --- Lesson blocks (spec 7.3/7.5) ---
 
 /** «Ключевые вопросы урока»: is_key links, published questions. */

@@ -19,6 +19,7 @@ import {
   type ActionResult,
 } from "@/lib/auth/action-helpers";
 import { recordingIdSchema, recordingUpsertSchema } from "@/lib/utils/validation";
+import { touchRecentItem } from "@/lib/services/recent";
 
 // Library actions (spec 7.9). Students log opens; mentor+ manage recordings.
 
@@ -50,6 +51,8 @@ export async function openRecordingAction(
 
     const res = await logRecordingOpen(prisma, { userId: auth.user.id, recordingId: id });
     if (!res.ok) throw new ActionError("not_found", "Запись не найдена");
+    // Recency index for the palette (spec 7.11).
+    await touchRecentItem(prisma, { userId: auth.user.id, itemType: "recording", entityId: id });
     return { url: res.url, embedUrl: res.embedUrl };
   });
 }

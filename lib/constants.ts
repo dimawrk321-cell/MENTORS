@@ -213,3 +213,33 @@ export const GUIDE_SECTIONS = [
   "ask_interviewer",
   "job_search",
 ] as const;
+
+// --- Stage 8: search & CommandPalette (spec 7.11) — client-safe ---
+
+/** Сложность урока (spec 6: intro|base|advanced) — чип и мета поиска. */
+export const LESSON_DIFFICULTY_LABEL: Record<string, string> = {
+  intro: "интро",
+  base: "база",
+  advanced: "продвинутый",
+};
+
+/** Заголовки групп результатов (spec 7.11). «Действия» — клиентские, не из API. */
+export const SEARCH_GROUP_LABEL: Record<string, string> = {
+  lessons: "Уроки",
+  questions: "Вопросы",
+  guides: "Гайды",
+  recordings: "Записи",
+};
+
+/** Порядок групп в палитре (spec 7.11: Уроки · Вопросы · Гайды · Записи). */
+export const SEARCH_GROUP_ORDER = ["lessons", "questions", "guides", "recordings"] as const;
+
+/** Валидация запроса (spec 7.11): от 2 до 100 символов; лимит 5 на группу. */
+export const SEARCH_MIN_QUERY = 2;
+export const SEARCH_MAX_QUERY = 100;
+export const SEARCH_GROUP_LIMIT = 5;
+/** Клиентский дебаунс перед /api/search (spec 7.11). */
+export const SEARCH_DEBOUNCE_MS = 150;
+/** «Недавнее» (spec 7.11): хранится последних 20, показывается 5. */
+export const RECENT_KEEP = 20;
+export const RECENT_SHOW = 5;

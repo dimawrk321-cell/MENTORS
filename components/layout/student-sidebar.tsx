@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { SearchTriggerBar } from "@/components/features/search-trigger";
 
 interface NavItem {
   href: string;
@@ -83,6 +84,8 @@ export function StudentSidebar({
         {/* Full brand name stays in the accessibility tree on the tablet rail. */}
         <span className="sr-only lg:not-sr-only">{brandName}</span>
       </div>
+      {/* Search trigger (spec 7.11): opens the palette, hints ⌘K on desktop. */}
+      <SearchTriggerBar className="mb-2 md:px-0 lg:px-3" />
       <nav aria-label="Основная навигация" className="flex flex-1 flex-col gap-1">
         {items.map((item) => (
           <SidebarLink key={item.href} item={item} active={isActive(pathname, item.href)} />
