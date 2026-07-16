@@ -9,6 +9,7 @@ import {
   upsertRecording,
   type RecordingData,
 } from "@/lib/services/library";
+import { isLinkStale } from "@/lib/constants";
 
 // Stage 7 library service (spec 7.9): checklist publication gate, per-open view
 // logging, per-student toggle.
@@ -106,6 +107,19 @@ describe("library — checklist publication gate (spec 7.9)", () => {
     expect((await listRecordingsCatalog(testDb, { stage: "livecoding" })).length).toBe(1);
     expect((await listRecordingsCatalog(testDb, { direction: "ds" })).length).toBe(1);
     expect((await listRecordingsCatalog(testDb, { stage: "screening" })).length).toBe(0);
+  });
+});
+
+describe("library — link staleness (spec 7.9)", () => {
+  const now = new Date("2026-07-16T12:00:00.000Z");
+  const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
+
+  it("flags links strictly older than 30 days — header count and row highlight share one rule", () => {
+    expect(isLinkStale(daysAgo(29), now)).toBe(false);
+    expect(isLinkStale(daysAgo(30), now)).toBe(false); // exactly 30 days is not «старше 30»
+    // The (30, 31) window: previously the header counted it but the floored row did not.
+    expect(isLinkStale(daysAgo(30.5), now)).toBe(true);
+    expect(isLinkStale(daysAgo(31), now)).toBe(true);
   });
 });
 

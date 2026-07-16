@@ -180,6 +180,15 @@ export function isChecklistComplete(checklist: unknown): boolean {
 /** Ссылка на Я.Диск считается устаревшей после стольких дней (spec 7.9). */
 export const LINK_STALE_DAYS = 30;
 
+/**
+ * true, когда ссылка старше LINK_STALE_DAYS (spec 7.9). Единая точка для счётчика
+ * в шапке и подсветки строки — без неё они расходились из-за разного округления.
+ */
+export function isLinkStale(linkUpdatedAt: Date, now: Date | number = Date.now()): boolean {
+  const nowMs = typeof now === "number" ? now : now.getTime();
+  return (nowMs - linkUpdatedAt.getTime()) / (24 * 60 * 60 * 1000) > LINK_STALE_DAYS;
+}
+
 /** Предупреждение на странице просмотра (spec 7.9): личный доступ. */
 export const RECORDING_ACCESS_WARNING =
   "Запись доступна лично тебе. Передача ссылки — нарушение условий доступа.";

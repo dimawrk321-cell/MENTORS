@@ -16,6 +16,7 @@ import {
   COMPANY_TYPES,
   COMPANY_TYPE_LABEL,
   isChecklistComplete,
+  isLinkStale,
   LINK_STALE_DAYS,
   RECORDING_DIRECTIONS,
   RECORDING_DIRECTION_LABEL,
@@ -41,8 +42,6 @@ import { Library } from "lucide-react";
 export const metadata: Metadata = {
   title: "Библиотека — админка",
 };
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 type FilterKey = "stage" | "direction" | "grade" | "outcome" | "companyType" | "status";
 const STATUSES = ["draft", "published"] as const;
@@ -131,9 +130,7 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
     status: filters.status as ContentStatus | undefined,
   });
   const now = Date.now();
-  const staleCount = recordings.filter(
-    (r) => (now - r.linkUpdatedAt.getTime()) / DAY_MS > LINK_STALE_DAYS,
-  ).length;
+  const staleCount = recordings.filter((r) => isLinkStale(r.linkUpdatedAt, now)).length;
   const hasFilter = Object.values(filters).some(Boolean);
 
   return (
@@ -234,8 +231,7 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
             <tbody>
               {recordings.map((recording) => {
                 const complete = isChecklistComplete(recording.checklist);
-                const staleDays = Math.floor((now - recording.linkUpdatedAt.getTime()) / DAY_MS);
-                const stale = staleDays > LINK_STALE_DAYS;
+                const stale = isLinkStale(recording.linkUpdatedAt, now);
                 const formValue: RecordingFormValue = {
                   id: recording.id,
                   title: recording.title,
