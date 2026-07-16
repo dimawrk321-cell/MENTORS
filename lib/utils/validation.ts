@@ -91,6 +91,104 @@ export const reviewCardSchema = z.object({
   grade: z.enum(["again", "hard", "good"]),
 });
 
+// --- Stage 6: mocks (spec 7.8) ---
+
+const timeSchema = z
+  .string("Укажи время")
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Укажи время в формате ЧЧ:ММ");
+
+export const mockTypeSchema = z.enum(["theory", "legend"], "Выбери тип мока");
+
+export const bookMockSchema = z.object({
+  slotId: z.string().min(1),
+  type: mockTypeSchema,
+});
+
+export const bookingIdSchema = z.object({ bookingId: z.string().min(1) });
+
+export const joinWaitlistSchema = z.object({
+  type: mockTypeSchema,
+  interviewerId: z.string().min(1).nullable().optional(),
+});
+
+export const claimOfferSchema = z.object({ waitlistId: z.string().min(1) });
+
+export const availabilityRuleSchema = z
+  .object({
+    weekday: z.number().int().min(1, "День недели 1–7").max(7, "День недели 1–7"),
+    startTime: timeSchema,
+    endTime: timeSchema,
+  })
+  .refine((v) => v.startTime < v.endTime, {
+    message: "Начало окна должно быть раньше конца",
+    path: ["endTime"],
+  });
+
+export const deleteRuleSchema = z.object({ ruleId: z.string().min(1) });
+
+export const availabilityExceptionSchema = z
+  .object({
+    date: z.iso.date("Укажи дату"),
+    kind: z.enum(["day_off", "extra"], "Выбери тип исключения"),
+    startTime: timeSchema.optional(),
+    endTime: timeSchema.optional(),
+  })
+  .refine((v) => v.kind === "day_off" || (v.startTime && v.endTime && v.startTime < v.endTime), {
+    message: "Для дополнительного окна укажи корректные начало и конец",
+    path: ["endTime"],
+  });
+
+export const deleteExceptionSchema = z.object({ exceptionId: z.string().min(1) });
+
+export const closeDaySchema = z.object({ date: z.iso.date("Укажи дату") });
+
+export const saveNotesSchema = z.object({
+  bookingId: z.string().min(1),
+  text: z.string().max(20000),
+});
+
+export const questionMarkSchema = z.object({
+  bookingId: z.string().min(1),
+  questionId: z.string().min(1),
+  mark: z.enum(["answered", "partial", "failed"]).nullable(),
+});
+
+export const feedbackDraftSchema = z.object({
+  bookingId: z.string().min(1),
+  scores: z.record(z.string(), z.number().int().min(1).max(5)),
+  verdict: z.enum(["ready", "needs_work", "not_ready"], "Выбери вердикт"),
+  strengths: z.string().max(5000).default(""),
+  growth: z.string().max(5000).default(""),
+  recommendedLessonIds: z.array(z.string().min(1)).max(50).default([]),
+});
+
+export const interviewerProfileSchema = z.object({
+  userId: z.string().min(1),
+  roomUrl: z.url("Укажи корректную ссылку на комнату").max(500),
+  bio: z.string().trim().max(1000).nullable().optional(),
+  active: z.boolean(),
+});
+
+export const rubricTemplateSchema = z.object({
+  type: mockTypeSchema,
+  criteria: z
+    .array(
+      z.object({
+        key: z
+          .string()
+          .trim()
+          .min(1)
+          .max(60)
+          .regex(/^[a-z0-9_]+$/, "Ключ критерия — латиница, цифры, «_»"),
+        title: z.string().trim().min(1, "Укажи название критерия").max(120),
+      }),
+    )
+    .min(1, "Добавь хотя бы один критерий")
+    .max(20),
+});
+
+export const removeStrikeSchema = z.object({ strikeId: z.string().min(1) });
+
 export const extendAccessSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("days"),

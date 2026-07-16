@@ -4,8 +4,20 @@ import { testDatabaseUrl } from "./db-url";
 
 export const testDb = new PrismaClient({ datasourceUrl: testDatabaseUrl() });
 
-/** Wipes all stage-1/2/3/4/5 tables in FK-safe order. */
+/** Wipes all stage-1/2/3/4/5/6 tables in FK-safe order. */
 export async function resetDb(): Promise<void> {
+  // Stage 6 (mocks) — children first (marks/feedback/strikes/waitlist reference
+  // bookings/slots/questions/users), then bookings, slots, availability, profiles.
+  await testDb.mockQuestionMark.deleteMany();
+  await testDb.feedback.deleteMany();
+  await testDb.bookingStrike.deleteMany();
+  await testDb.waitlist.deleteMany();
+  await testDb.booking.deleteMany();
+  await testDb.slot.deleteMany();
+  await testDb.availabilityException.deleteMany();
+  await testDb.availabilityRule.deleteMany();
+  await testDb.rubricTemplate.deleteMany();
+  await testDb.interviewerProfile.deleteMany();
   await testDb.xpEvent.deleteMany();
   await testDb.streakEvent.deleteMany();
   await testDb.streak.deleteMany();
@@ -50,6 +62,7 @@ interface TestUserInput {
   timezone?: string;
   studyDays?: number[];
   dailyGoalXp?: number;
+  isInterviewer?: boolean;
 }
 
 export async function createTestUser(input: TestUserInput) {
@@ -65,6 +78,7 @@ export async function createTestUser(input: TestUserInput) {
       timezone: input.timezone ?? "Europe/Moscow",
       ...(input.studyDays ? { studyDays: input.studyDays } : {}),
       ...(input.dailyGoalXp ? { dailyGoalXp: input.dailyGoalXp } : {}),
+      ...(input.isInterviewer ? { isInterviewer: true } : {}),
       avatarColor: paletteIndex(input.email),
     },
   });

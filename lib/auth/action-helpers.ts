@@ -78,6 +78,15 @@ export async function requireActionStudent(): Promise<ZoneAuth> {
   return auth;
 }
 
+/** Interviewer-cabinet actions (spec 2/8.4): guarded by the is_interviewer flag. */
+export async function requireActionInterviewer(): Promise<ZoneAuth> {
+  const auth = await requireActionAuth();
+  if (!auth.user.isInterviewer) {
+    throw new ActionError("forbidden", "Действие доступно только интервьюерам");
+  }
+  return auth;
+}
+
 /** Impersonation is strictly read-only (spec 7.2): every mutation calls this. */
 export function assertNotImpersonating(auth: ZoneAuth): void {
   if (auth.impersonated) {

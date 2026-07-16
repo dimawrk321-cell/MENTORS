@@ -6,10 +6,11 @@ import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getContinueTarget, getHeatmapData } from "@/lib/services/dashboard";
 import { getSrsQueue, getNextReviewDate, getLaggingCategories } from "@/lib/services/srs";
+import { getActiveBooking } from "@/lib/services/mocks";
 import { listCoursesForStudent } from "@/lib/services/content";
 import { getStreakState, processStreakDay } from "@/lib/services/streak";
 import { getTodayXp, getXpSummary } from "@/lib/services/xp";
-import { formatDateOnlyRu, localDateStr, pluralRu } from "@/lib/utils/dates";
+import { formatDateOnlyRu, formatDateTimeRu, localDateStr, pluralRu } from "@/lib/utils/dates";
 import { categoryColorVar } from "@/lib/utils/category-color";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import { GoalRing } from "@/components/features/goal-ring";
 import { StreakBadge } from "@/components/features/streak-badge";
 import { LevelBadge } from "@/components/features/level-badge";
 import { Heatmap } from "@/components/features/heatmap";
+import { MockBookingCard } from "@/components/features/mock-booking-card";
 
 export const metadata: Metadata = {
   title: "Главная",
@@ -45,21 +47,23 @@ export default async function DashboardPage() {
   // Ленивый «конец дня»: разрешаем пропущенные учебные дни до первого чтения серии.
   await processStreakDay(prisma, { userId: user.id, now });
 
-  const [streak, xp, todayXp, cont, queue, courses, lagging, heatmap] = await Promise.all([
-    getStreakState(prisma, {
-      userId: user.id,
-      now,
-      timezone: user.timezone,
-      studyDays: user.studyDays,
-    }),
-    getXpSummary(prisma, user.id),
-    getTodayXp(prisma, user.id, now, user.timezone),
-    getContinueTarget(prisma, user.id, user.track),
-    getSrsQueue(prisma, { userId: user.id, now }),
-    listCoursesForStudent(prisma, user.id, user.track),
-    getLaggingCategories(prisma, { userId: user.id, now }),
-    loadHeatmap(user.id, user.timezone, todayStr),
-  ]);
+  const [streak, xp, todayXp, cont, queue, courses, lagging, heatmap, activeMock] =
+    await Promise.all([
+      getStreakState(prisma, {
+        userId: user.id,
+        now,
+        timezone: user.timezone,
+        studyDays: user.studyDays,
+      }),
+      getXpSummary(prisma, user.id),
+      getTodayXp(prisma, user.id, now, user.timezone),
+      getContinueTarget(prisma, user.id, user.track),
+      getSrsQueue(prisma, { userId: user.id, now }),
+      listCoursesForStudent(prisma, user.id, user.track),
+      getLaggingCategories(prisma, { userId: user.id, now }),
+      loadHeatmap(user.id, user.timezone, todayStr),
+      getActiveBooking(prisma, user.id, now),
+    ]);
   const nextReview =
     queue.total === 0 ? await getNextReviewDate(prisma, { userId: user.id, now }) : null;
 
@@ -160,7 +164,18 @@ export default async function DashboardPage() {
             />
           </Card>
         )}
-        {/* Слот карточки ближайшего мока — появится на этапе 6 (spec 8.3). */}
+        {/* Карточка ближайшего мока (spec 8.3): countdown + «Подключиться» за 15 мин. */}
+        {activeMock && (
+          <MockBookingCard
+            bookingId={activeMock.bookingId}
+            type={activeMock.type}
+            interviewerName={activeMock.interviewerName}
+            roomUrl={activeMock.roomUrl}
+            whenLabel={formatDateTimeRu(activeMock.startsAt, user.timezone)}
+            startsAtMs={activeMock.startsAt.getTime()}
+            endsAtMs={activeMock.endsAt.getTime()}
+          />
+        )}
       </section>
 
       {/* Прогресс по курсам (spec 8.3): мини-карточки, % по обязательным урокам */}

@@ -1,22 +1,195 @@
 import type { Metadata } from "next";
 import { CalendarDays } from "lucide-react";
+import { prisma } from "@/lib/db";
+import { requireInterviewerZone } from "@/lib/auth/guards";
+import { getInterviewerProfile } from "@/lib/services/mock-admin";
+import { getSchedulePreview } from "@/lib/services/slots";
+import { formatDateOnlyRu, formatDayHeadingRu, formatTimeRu } from "@/lib/utils/dates";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  AddExceptionForm,
+  AddRuleForm,
+  CloseDayForm,
+  DeleteExceptionButton,
+  DeleteRuleButton,
+  ProfileForm,
+} from "@/components/features/schedule-controls";
 
 export const metadata: Metadata = {
   title: "Расписание",
 };
 
-export default function InterviewerSchedulePage() {
+const WEEKDAY_LABEL = ["", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+const SLOT_STATUS_LABEL: Record<string, string> = {
+  open: "свободен",
+  booked: "занят",
+  closed: "закрыт",
+};
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-[18px] font-semibold">{children}</h2>;
+}
+
+/** /interviewer/schedule (spec 8.4): профиль, правила доступности, исключения,
+ *  предпросмотр слотов на 2 недели, «Закрыть день». */
+export default async function InterviewerSchedulePage() {
+  const { user } = await requireInterviewerZone();
+  const now = new Date();
+
+  const [profile, rules, exceptions, preview] = await Promise.all([
+    getInterviewerProfile(prisma, user.id),
+    prisma.availabilityRule.findMany({
+      where: { interviewerId: user.id },
+      orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
+    }),
+    prisma.availabilityException.findMany({
+      where: { interviewerId: user.id, date: { gte: new Date(Date.now() - 86_400_000) } },
+      orderBy: [{ date: "asc" }],
+    }),
+    getSchedulePreview(prisma, { interviewerId: user.id, timezone: user.timezone, now }),
+  ]);
+
   return (
-    <>
-      <h1 className="mb-6 text-[24px] font-semibold">Расписание</h1>
-      {/* DECISION: availability rules (recurring windows, exceptions, slot preview)
-          are stage-6 functionality — placeholder only for now. */}
-      <EmptyState
-        icon={CalendarDays}
-        title="Правил доступности пока нет"
-        description="Здесь появятся повторяющиеся окна, исключения и предпросмотр слотов"
-      />
-    </>
+    <div className="flex flex-col gap-8">
+      <h1 className="text-[24px] font-semibold">Расписание</h1>
+
+      {/* Профиль интервьюера (spec 8.4): room_url редактируется здесь. */}
+      <section className="flex flex-col gap-3">
+        <SectionTitle>Профиль</SectionTitle>
+        <Card>
+          <CardContent>
+            <ProfileForm
+              roomUrl={profile?.roomUrl ?? ""}
+              bio={profile?.bio ?? null}
+              active={profile?.active ?? true}
+            />
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Правила доступности (spec 8.4) */}
+      <section className="flex flex-col gap-3">
+        <SectionTitle>Повторяющиеся окна</SectionTitle>
+        <Card>
+          <CardContent className="flex flex-col gap-4">
+            {rules.length === 0 ? (
+              <p className="text-text-2 text-[14px]">
+                Пока нет окон. Добавь повторяющееся окно — слоты появятся автоматически.
+              </p>
+            ) : (
+              <ul className="divide-border divide-y">
+                {rules.map((rule) => (
+                  <li key={rule.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+                    <span className="w-10 text-[14px] font-medium">
+                      {WEEKDAY_LABEL[rule.weekday]}
+                    </span>
+                    <span className="text-text-2 flex-1 text-[14px] tabular-nums">
+                      {rule.startTime}–{rule.endTime}
+                    </span>
+                    <DeleteRuleButton ruleId={rule.id} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="border-border border-t pt-4">
+              <AddRuleForm />
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Исключения (spec 8.4) */}
+      <section className="flex flex-col gap-3">
+        <SectionTitle>Исключения</SectionTitle>
+        <Card>
+          <CardContent className="flex flex-col gap-4">
+            {exceptions.length === 0 ? (
+              <p className="text-text-2 text-[14px]">
+                Выходные и дополнительные окна на конкретные даты появятся здесь.
+              </p>
+            ) : (
+              <ul className="divide-border divide-y">
+                {exceptions.map((exception) => (
+                  <li
+                    key={exception.id}
+                    className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
+                  >
+                    <span className="text-[14px] font-medium">
+                      {formatDateOnlyRu(exception.date)}
+                    </span>
+                    <span className="text-text-2 flex-1 text-[14px]">
+                      {exception.kind === "day_off"
+                        ? "Выходной"
+                        : `Доп. окно ${exception.startTime}–${exception.endTime}`}
+                    </span>
+                    <DeleteExceptionButton exceptionId={exception.id} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="border-border border-t pt-4">
+              <AddExceptionForm />
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Закрыть день (spec 7.8/8.4) */}
+      <section className="flex flex-col gap-3">
+        <SectionTitle>Закрыть день</SectionTitle>
+        <Card>
+          <CardContent>
+            <CloseDayForm />
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Предпросмотр слотов на 2 недели (spec 8.4) */}
+      <section className="flex flex-col gap-3">
+        <SectionTitle>Слоты на 2 недели</SectionTitle>
+        {preview.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={CalendarDays}
+              title="Слотов пока нет"
+              description="Добавь повторяющееся окно — слоты материализуются на 14 дней вперёд"
+            />
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col gap-4">
+              {preview.map((day) => (
+                <div key={day.dateStr} className="flex flex-col gap-2">
+                  <h3 className="text-text-2 text-[13px] font-medium first-letter:uppercase">
+                    {formatDayHeadingRu(day.slots[0]!.startsAt, user.timezone)}
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {day.slots.map((slot) => (
+                      <Badge
+                        key={slot.id}
+                        variant={
+                          slot.status === "booked"
+                            ? "accent"
+                            : slot.status === "closed"
+                              ? "default"
+                              : "success"
+                        }
+                        title={SLOT_STATUS_LABEL[slot.status]}
+                        className={slot.status === "closed" ? "line-through opacity-60" : ""}
+                      >
+                        {formatTimeRu(slot.startsAt, user.timezone)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+      </section>
+    </div>
   );
 }

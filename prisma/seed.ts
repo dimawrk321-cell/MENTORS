@@ -4,6 +4,7 @@ import { paletteIndex } from "../lib/utils/crypto";
 import { computeReadingMinutes } from "../lib/utils/markdown";
 import { ACCESS_RULES_SETTING_KEY, DEFAULT_ACCESS_RULES_TEXT } from "../lib/services/settings";
 import { seedAchievements } from "../lib/services/achievements";
+import { seedRubricTemplates } from "../lib/services/feedback";
 
 // Dev seed: stage 1 — owner + 2 mentors from SEED_* env (fresh DB is loginable);
 // stage 2 — tracks (ds/nlp/ai) + the demo course from spec 18 (1 module,
@@ -451,10 +452,34 @@ async function seedDemoQuestions(categoryIds: Map<string, string>): Promise<void
   console.log("+ тест демо-модуля (3 вопроса, порог 80%, кулдаун 45 мин)");
 }
 
+// --- Stage 6: interviewer profiles + rubric templates (spec 7.8/18) ---
+
+async function seedInterviewerProfiles(): Promise<void> {
+  const interviewers = await prisma.user.findMany({ where: { isInterviewer: true } });
+  for (const interviewer of interviewers) {
+    // DECISION (spec 7.8/task): room_url starts as a placeholder — the interviewer
+    // replaces it with a real Телемост link in their cabinet. Re-runs never
+    // clobber an already-edited URL.
+    await prisma.interviewerProfile.upsert({
+      where: { userId: interviewer.id },
+      update: {},
+      create: {
+        userId: interviewer.id,
+        roomUrl: "https://telemost.yandex.ru/PLACEHOLDER-замени-в-кабинете",
+        active: true,
+      },
+    });
+  }
+  if (interviewers.length > 0) {
+    console.log(`+ профили интервьюеров (${interviewers.length}) с плейсхолдер room_url`);
+  }
+}
+
 async function main(): Promise<void> {
   for (const spec of SEED_USERS) {
     await seedUser(spec);
   }
+  await seedInterviewerProfiles();
 
   await prisma.appSetting.upsert({
     where: { key: ACCESS_RULES_SETTING_KEY },
@@ -470,6 +495,10 @@ async function main(): Promise<void> {
   // Stage 5: справочник достижений (spec 7.7) — сидится из ACHIEVEMENTS.
   await seedAchievements(prisma);
   console.log("+ справочник достижений (spec 7.7)");
+
+  // Stage 6: дефолтные рубрики фидбека (spec 7.8).
+  await seedRubricTemplates(prisma);
+  console.log("+ рубрики фидбека theory/legend (spec 7.8)");
 
   console.log("Dev-seed готов.");
 }

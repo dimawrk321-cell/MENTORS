@@ -8,6 +8,10 @@ import { writeAudit } from "@/lib/services/audit";
 import { revokeSessions } from "@/lib/services/sessions";
 import { pauseStreak, unpauseStreak } from "@/lib/services/streak";
 import { getTotalXp } from "@/lib/services/xp";
+import {
+  cancelFutureBookingsForInactiveStudents,
+  getMocksCompletedCount,
+} from "@/lib/services/mocks";
 import { sendAccessExpiryReminderEmail, sendInviteEmail } from "@/lib/services/mail";
 
 // Student access lifecycle (spec 7.1): manual invite, 90 days from activation,
@@ -245,7 +249,12 @@ export async function extendAccess(
 
 // --- Expiry (spec 7.1.5): status flip; scheduled by the stage-9 worker ---
 
-/** Flips overdue active students to expired. Booking cancellation joins at stage 6. */
+/**
+ * Flips overdue active students to expired and cancels their future bookings
+ * (spec 7.1.5). The booking sweep also catches students the lazy request/login
+ * flip already moved to expired (the worker query would miss them otherwise), so
+ * every expired/blocked student's future mocks get cancelled and re-offered.
+ */
 export async function expireOverdueAccess(
   db: PrismaClient,
   now: Date = new Date(),
@@ -262,6 +271,9 @@ export async function expireOverdueAccess(
       await emitEvent(tx, "access.expired", { via: "worker" }, { userId: id });
     });
   }
+  // Spec 7.1.5: future bookings of inactive students → cancelled, slots reopen
+  // and go to waitlist, interviewer notified (system-marked in the audit log).
+  await cancelFutureBookingsForInactiveStudents(db, now);
   return overdue.length;
 }
 
@@ -290,14 +302,13 @@ export async function sendAccessExpiryReminders(db: Db, now: Date = new Date()):
 
 /** Totals for the /expired farewell screen (spec 7.1.6). */
 export async function getExpiredSummary(db: Db, userId: string) {
-  // DECISION: mocks join at stage 6 — until then that total is zero; lessons/XP/
-  // streak are wired here now that stage 5 owns those tables (spec 7.1.6).
-  const [lessonsCompleted, totalXp, streak] = await Promise.all([
+  const [lessonsCompleted, totalXp, streak, mocksCompleted] = await Promise.all([
     db.lessonProgress.count({ where: { userId, status: "completed" } }),
     getTotalXp(db, userId),
     db.streak.findUnique({ where: { userId }, select: { best: true } }),
+    getMocksCompletedCount(db, userId),
   ]);
-  return { lessonsCompleted, totalXp, bestStreak: streak?.best ?? 0, mocksCompleted: 0 };
+  return { lessonsCompleted, totalXp, bestStreak: streak?.best ?? 0, mocksCompleted };
 }
 
 // --- Admin: block / unblock / reset sessions (spec 2, 7.1.8) ---

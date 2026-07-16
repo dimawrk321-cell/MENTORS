@@ -1,9 +1,14 @@
 // Date helpers (spec 0.6): storage is UTC, presentation is per-user timezone.
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
+export const MINUTE_MS = 60 * 1000;
 
 export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS);
+}
+
+export function addMinutes(date: Date, minutes: number): Date {
+  return new Date(date.getTime() + minutes * MINUTE_MS);
 }
 
 /** «5 октября 2026» in the user's timezone. */
@@ -82,6 +87,64 @@ export function zonedDateEndUtc(dateStr: string, timeZone: string): Date {
     guess = new Date(guess.getTime() + diff);
   }
   return guess;
+}
+
+/**
+ * UTC instant of a local wall-clock time (YYYY-MM-DD + HH:MM) in a timezone —
+ * the storage form of «время в TZ интервьюера» for slot materialization (spec
+ * 0.6/7.8). Same convergent offset correction as zonedDateEndUtc (two passes
+ * cover DST boundaries).
+ */
+export function zonedDateTimeToUtc(dateStr: string, timeStr: string, timeZone: string): Date {
+  const [y = 1970, m = 1, d = 1] = dateStr.split("-").map(Number);
+  const [hh = 0, mm = 0] = timeStr.split(":").map(Number);
+  const desired = Date.UTC(y, m - 1, d, hh, mm, 0);
+  let guess = new Date(desired);
+  for (let i = 0; i < 2; i += 1) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(guess);
+    const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+    const actual = Date.UTC(
+      get("year"),
+      get("month") - 1,
+      get("day"),
+      get("hour"),
+      get("minute"),
+      get("second"),
+    );
+    const diff = desired - actual;
+    if (diff === 0) break;
+    guess = new Date(guess.getTime() + diff);
+  }
+  return guess;
+}
+
+/** «14:32» — часы:минуты инстанта в таймзоне (чипы слотов в TZ ученика, spec 7.8). */
+export function formatTimeRu(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).format(date);
+}
+
+/** «вторник, 5 октября» — заголовок дня SlotPicker в TZ ученика (spec 7.8). */
+export function formatDayHeadingRu(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone,
+  }).format(date);
 }
 
 /** Calendar date «YYYY-MM-DD» of an instant in a timezone (spec 0.6: «сегодня» — в TZ пользователя). */

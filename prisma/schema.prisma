@@ -74,31 +74,31 @@ enum AuthAttemptKind {
 }
 
 model User {
-  id     String     @id @default(cuid())
-  email  String     @unique
+  id             String     @id @default(cuid())
+  email          String     @unique
   // DECISION: spec 6 lists password_hash as required, but an invited user has
   // no password until the invite is accepted — nullable expresses that state.
-  passwordHash  String?    @map("password_hash")
-  name          String
-  role          Role       @default(student)
-  isInterviewer Boolean    @default(false) @map("is_interviewer")
-  timezone      String     @default("Europe/Moscow")
-  theme         Theme      @default(system)
-  track         Track?
-  dailyGoalXp   Int        @default(60) @map("daily_goal_xp")
-  studyDays     Int[]      @default([1, 2, 3, 4, 5, 6, 7]) @map("study_days")
-  digestTime    String     @default("09:00") @map("digest_time")
-  status        UserStatus @default(invited)
-  activatedAt   DateTime?  @map("activated_at")
-  accessUntil   DateTime?  @map("access_until")
+  passwordHash   String?    @map("password_hash")
+  name           String
+  role           Role       @default(student)
+  isInterviewer  Boolean    @default(false) @map("is_interviewer")
+  timezone       String     @default("Europe/Moscow")
+  theme          Theme      @default(system)
+  track          Track?
+  dailyGoalXp    Int        @default(60) @map("daily_goal_xp")
+  studyDays      Int[]      @default([1, 2, 3, 4, 5, 6, 7]) @map("study_days")
+  digestTime     String     @default("09:00") @map("digest_time")
+  status         UserStatus @default(invited)
+  activatedAt    DateTime?  @map("activated_at")
+  accessUntil    DateTime?  @map("access_until")
   // DECISION: avatar_color has no type in spec 6 — stored as an index (0..7)
   // into the muted category palette (spec 5.1), assigned from email hash.
-  avatarColor    Int       @map("avatar_color")
-  lastSeenAt     DateTime? @map("last_seen_at")
-  mentorNote     String?   @map("mentor_note")
-  libraryEnabled Boolean   @default(true) @map("library_enabled")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  avatarColor    Int        @map("avatar_color")
+  lastSeenAt     DateTime?  @map("last_seen_at")
+  mentorNote     String?    @map("mentor_note")
+  libraryEnabled Boolean    @default(true) @map("library_enabled")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
 
   sessions             Session[]         @relation("UserSessions")
   impersonatedSessions Session[]         @relation("SessionImpersonator")
@@ -121,6 +121,18 @@ model User {
   streak               Streak?
   streakEvents         StreakEvent[]
   userAchievements     UserAchievement[]
+
+  // Stage 6: mocks. An interviewer (is_interviewer) owns a profile, availability,
+  // slots and gives feedback; every user (student) can hold bookings/strikes/waitlist.
+  interviewerProfile     InterviewerProfile?
+  availabilityRules      AvailabilityRule[]
+  availabilityExceptions AvailabilityException[]
+  interviewerSlots       Slot[]
+  bookings               Booking[]
+  bookingStrikes         BookingStrike[]
+  waitlistEntries        Waitlist[]              @relation("WaitlistUser")
+  waitlistAsInterviewer  Waitlist[]              @relation("WaitlistInterviewer")
+  feedbacksGiven         Feedback[]
 
   @@index([status, accessUntil])
   @@map("users")
@@ -174,30 +186,30 @@ model AccessExtension {
 }
 
 model Session {
-  id        String  @id @default(cuid())
-  userId    String  @map("user_id")
-  user      User    @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String  @unique @map("token_hash")
+  id             String               @id @default(cuid())
+  userId         String               @map("user_id")
+  user           User                 @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash      String               @unique @map("token_hash")
   // DECISION: nullable — impersonation sessions belong to the admin's browser
   // and must not occupy one of the student's two device slots. SetNull (not
   // Cascade): deleting an evicted device must keep revoked session rows so the
   // displaced browser can still render the eviction screen.
-  deviceId  String? @map("device_id")
-  device    Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
-  ip        String
-  city      String?
-  country   String?
-  expiresAt      DateTime  @map("expires_at")
-  lastActiveAt   DateTime  @default(now()) @map("last_active_at")
-  impersonatorId String?   @map("impersonator_id")
-  impersonator   User?     @relation("SessionImpersonator", fields: [impersonatorId], references: [id], onDelete: Cascade)
+  deviceId       String?              @map("device_id")
+  device         Device?              @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  ip             String
+  city           String?
+  country        String?
+  expiresAt      DateTime             @map("expires_at")
+  lastActiveAt   DateTime             @default(now()) @map("last_active_at")
+  impersonatorId String?              @map("impersonator_id")
+  impersonator   User?                @relation("SessionImpersonator", fields: [impersonatorId], references: [id], onDelete: Cascade)
   // DECISION: evicted sessions are kept (revoked_at + reason) instead of being
   // deleted so the displaced request can render the dedicated «Вход выполнен на
   // другом устройстве» screen (spec 7.2); sessionCleanup purges them at stage 9.
-  revokedAt     DateTime?            @map("revoked_at")
-  revokedReason SessionRevokeReason? @map("revoked_reason")
-  createdAt     DateTime             @default(now()) @map("created_at")
-  updatedAt     DateTime             @updatedAt @map("updated_at")
+  revokedAt      DateTime?            @map("revoked_at")
+  revokedReason  SessionRevokeReason? @map("revoked_reason")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
 
   @@index([userId])
   @@index([deviceId])
@@ -368,28 +380,28 @@ model Module {
 }
 
 model Lesson {
-  id         String        @id @default(cuid())
-  moduleId   String        @map("module_id")
-  module     Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  id               String           @id @default(cuid())
+  moduleId         String           @map("module_id")
+  module           Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   // DECISION: spec 6 does not scope lesson slug uniqueness; routes are id-based
   // (/lessons/[id]), so the slug is unique per module — enough for anchors/import.
-  slug       String
-  title      String
-  order      Int           @default(0)
-  status     ContentStatus @default(draft)
-  difficulty LessonDifficulty @default(base)
-  isOptional Boolean       @default(false) @map("is_optional")
-  contentMd  String        @default("") @map("content_md")
+  slug             String
+  title            String
+  order            Int              @default(0)
+  status           ContentStatus    @default(draft)
+  difficulty       LessonDifficulty @default(base)
+  isOptional       Boolean          @default(false) @map("is_optional")
+  contentMd        String           @default("") @map("content_md")
   // Recomputed on save: words / 180 (spec 6).
-  readingMinutes   Int         @default(1) @map("reading_minutes")
-  videoUrl         String?     @map("video_url")
-  videoStatus      VideoStatus @default(unchecked) @map("video_status")
-  videoCheckedAt   DateTime?   @map("video_checked_at")
-  publishedAt      DateTime?   @map("published_at")
+  readingMinutes   Int              @default(1) @map("reading_minutes")
+  videoUrl         String?          @map("video_url")
+  videoStatus      VideoStatus      @default(unchecked) @map("video_status")
+  videoCheckedAt   DateTime?        @map("video_checked_at")
+  publishedAt      DateTime?        @map("published_at")
   // Bumped only when content_md changes — powers the «урок обновлён» badge.
-  contentUpdatedAt DateTime    @default(now()) @map("content_updated_at")
-  createdAt        DateTime    @default(now()) @map("created_at")
-  updatedAt        DateTime    @updatedAt @map("updated_at")
+  contentUpdatedAt DateTime         @default(now()) @map("content_updated_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
   progress         LessonProgress[]
   reports          ContentReport[]
   questionLinks    QuestionLesson[]
@@ -469,31 +481,42 @@ model QuestionCategory {
 }
 
 model Question {
-  id            String           @id @default(cuid())
-  type          QuestionType
-  categoryId    String           @map("category_id")
-  category      QuestionCategory @relation(fields: [categoryId], references: [id])
-  textMd        String           @map("text_md")
-  /** Эталон открытого вопроса (может содержать изображения/KaTeX). */
-  answerMd      String?          @map("answer_md")
-  /** Разбор закрытого вопроса — показывается в квизе и успешном тесте. */
-  explanationMd String?          @map("explanation_md")
-  /** [{id,text,correct}] для single|multi|tf. */
-  options       Json?
-  /** string[] для short_text (сравнение через нормализацию 7.4). */
-  acceptedAnswers Json?          @map("accepted_answers")
-  difficulty    Int              @default(2)
-  status        ContentStatus    @default(draft)
-  /** Флаг импортера: ответ был картинкой, формулы надо переписать в KaTeX. */
-  needsLatex    Boolean          @default(false) @map("needs_latex")
-  source        QuestionSource   @default(manual)
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt @map("updated_at")
-  lessonLinks    QuestionLesson[]
-  quizAnswers    QuizAnswer[]
-  attemptAnswers TestAttemptAnswer[]
-  reports        ContentReport[]
-  srsCards       SrsCard[]
+  id              String              @id @default(cuid())
+  type            QuestionType
+  categoryId      String              @map("category_id")
+  category        QuestionCategory    @relation(fields: [categoryId], references: [id])
+  textMd          String              @map("text_md")
+  /**
+   * Эталон открытого вопроса (может содержать изображения/KaTeX).
+   */
+  answerMd        String?             @map("answer_md")
+  /**
+   * Разбор закрытого вопроса — показывается в квизе и успешном тесте.
+   */
+  explanationMd   String?             @map("explanation_md")
+  /**
+   * [{id,text,correct}] для single|multi|tf.
+   */
+  options         Json?
+  /**
+   * string[] для short_text (сравнение через нормализацию 7.4).
+   */
+  acceptedAnswers Json?               @map("accepted_answers")
+  difficulty      Int                 @default(2)
+  status          ContentStatus       @default(draft)
+  /**
+   * Флаг импортера: ответ был картинкой, формулы надо переписать в KaTeX.
+   */
+  needsLatex      Boolean             @default(false) @map("needs_latex")
+  source          QuestionSource      @default(manual)
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  lessonLinks     QuestionLesson[]
+  quizAnswers     QuizAnswer[]
+  attemptAnswers  TestAttemptAnswer[]
+  reports         ContentReport[]
+  srsCards        SrsCard[]
+  mockMarks       MockQuestionMark[]
 
   @@index([categoryId])
   @@index([status, type])
@@ -506,12 +529,16 @@ model QuestionLesson {
   question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   lessonId   String   @map("lesson_id")
   lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  /** Ключевой вопрос урока → в SRS при завершении (этап 4). */
-  isKey  Boolean @default(false) @map("is_key")
-  /** Участвует в квизе урока. */
-  inQuiz Boolean @default(false) @map("in_quiz")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  /**
+   * Ключевой вопрос урока → в SRS при завершении (этап 4).
+   */
+  isKey      Boolean  @default(false) @map("is_key")
+  /**
+   * Участвует в квизе урока.
+   */
+  inQuiz     Boolean  @default(false) @map("in_quiz")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@unique([questionId, lessonId])
   @@index([lessonId])
@@ -533,20 +560,22 @@ model ModuleTest {
 }
 
 model TestAttempt {
-  id       String   @id @default(cuid())
-  userId   String   @map("user_id")
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  moduleId String   @map("module_id")
-  module   Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  kind     TestKind @default(module)
-  /** Зафиксированная выборка вопросов (string[] в порядке показа). */
-  questionIds Json      @map("question_ids")
-  score       Int       @default(0)
-  passed      Boolean   @default(false)
-  startedAt   DateTime  @default(now()) @map("started_at")
-  finishedAt  DateTime? @map("finished_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id          String              @id @default(cuid())
+  userId      String              @map("user_id")
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moduleId    String              @map("module_id")
+  module      Module              @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  kind        TestKind            @default(module)
+  /**
+   * Зафиксированная выборка вопросов (string[] в порядке показа).
+   */
+  questionIds Json                @map("question_ids")
+  score       Int                 @default(0)
+  passed      Boolean             @default(false)
+  startedAt   DateTime            @default(now()) @map("started_at")
+  finishedAt  DateTime?           @map("finished_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
   answers     TestAttemptAnswer[]
 
   @@index([userId, moduleId, kind])
@@ -578,10 +607,12 @@ model QuizAnswer {
   lessonId   String   @map("lesson_id")
   lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   correct    Boolean
-  /** Первый правильный ответ на вопрос — для разовой выдачи XP (этап 5). */
-  first     Boolean  @default(false)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  /**
+   * Первый правильный ответ на вопрос — для разовой выдачи XP (этап 5).
+   */
+  first      Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@index([userId, questionId])
   @@index([lessonId])
@@ -608,23 +639,29 @@ enum SrsAddedFrom {
 }
 
 model SrsCard {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  questionId String   @map("question_id")
-  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  /** 0–4 — лестница STEPS, 5 — «выучен» (контрольный показ раз в 90 дней). */
-  step Int @default(0)
-  /** Календарная дата в TZ пользователя, хранится как date (полночь UTC). */
+  id           String       @id @default(cuid())
+  userId       String       @map("user_id")
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId   String       @map("question_id")
+  question     Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  /**
+   * 0–4 — лестница STEPS, 5 — «выучен» (контрольный показ раз в 90 дней).
+   */
+  step         Int          @default(0)
+  /**
+   * Календарная дата в TZ пользователя, хранится как date (полночь UTC).
+   */
   nextReviewAt DateTime     @map("next_review_at") @db.Date
   addedFrom    SrsAddedFrom @map("added_from")
-  /** Считает только оценку «Не знаю» — сбросы источников его не трогают. */
-  lapses       Int       @default(0)
-  reviewsCount Int       @default(0) @map("reviews_count")
-  lastGrade    SrsGrade? @map("last_grade")
-  suspended    Boolean   @default(false)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  /**
+   * Считает только оценку «Не знаю» — сбросы источников его не трогают.
+   */
+  lapses       Int          @default(0)
+  reviewsCount Int          @default(0) @map("reviews_count")
+  lastGrade    SrsGrade?    @map("last_grade")
+  suspended    Boolean      @default(false)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
   reviews      SrsReview[]
 
   @@unique([userId, questionId])
@@ -650,11 +687,11 @@ model SrsReview {
 }
 
 model ContentReport {
-  id       String  @id @default(cuid())
-  userId   String  @map("user_id")
-  user     User    @relation("ReportAuthor", fields: [userId], references: [id], onDelete: Cascade)
-  lessonId String? @map("lesson_id")
-  lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  id           String              @id @default(cuid())
+  userId       String              @map("user_id")
+  user         User                @relation("ReportAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  lessonId     String?             @map("lesson_id")
+  lesson       Lesson?             @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   questionId   String?             @map("question_id")
   question     Question?           @relation(fields: [questionId], references: [id], onDelete: SetNull)
   blockAnchor  String?             @map("block_anchor")
@@ -678,14 +715,16 @@ model ContentReport {
 // писатель; уникальный индекс (user, type, ref) — барьер exactly-once (в т.ч. для
 // queue.completed из двух вкладок). Все XP-начисления несут непустой ref (гарантия кода).
 model XpEvent {
-  id      String  @id @default(cuid())
-  userId  String  @map("user_id")
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type    String
-  amount  Int
-  refType String? @map("ref_type")
-  refId   String? @map("ref_id")
-  /** Календарная дата начисления в TZ пользователя (полночь UTC, @db.Date). */
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  amount    Int
+  refType   String?  @map("ref_type")
+  refId     String?  @map("ref_id")
+  /**
+   * Календарная дата начисления в TZ пользователя (полночь UTC, @db.Date).
+   */
   day       DateTime @map("day") @db.Date
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -697,18 +736,22 @@ model XpEvent {
 }
 
 model Streak {
-  id      String @id @default(cuid())
-  userId  String @unique @map("user_id")
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  current Int    @default(0)
-  best    Int    @default(0)
-  /** Заморозки 0–2: +1 за каждые 7 подряд засчитанных дней (spec 7.7). */
+  id              String    @id @default(cuid())
+  userId          String    @unique @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  current         Int       @default(0)
+  best            Int       @default(0)
+  /**
+   * Заморозки 0–2: +1 за каждые 7 подряд засчитанных дней (spec 7.7).
+   */
   freezes         Int       @default(0)
   lastCountedDate DateTime? @map("last_counted_date") @db.Date
-  /** true при истёкшем доступе (spec 7.1.5): дни не считаются вовсе. */
-  paused    Boolean  @default(false)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  /**
+   * true при истёкшем доступе (spec 7.1.5): дни не считаются вовсе.
+   */
+  paused          Boolean   @default(false)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@map("streaks")
 }
@@ -747,9 +790,9 @@ model Achievement {
 }
 
 model UserAchievement {
-  id     String @id @default(cuid())
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   // DECISION: plain string, no FK to achievements — granting must not depend on
   // the dictionary being seeded (keeps the event dispatcher robust); definitions
   // (title/icon/hidden) live in the ACHIEVEMENTS code constant, the table mirrors it.
@@ -760,4 +803,267 @@ model UserAchievement {
   @@unique([userId, achievementKey])
   @@index([userId])
   @@map("user_achievements")
+}
+
+// --- Stage 6: mocks (spec 6 «Моки», логика — spec 7.8) ---
+
+enum MockType {
+  theory
+  legend
+}
+
+enum SlotStatus {
+  open
+  booked
+  closed
+}
+
+enum BookingStatus {
+  booked
+  completed
+  cancelled_student
+  cancelled_interviewer
+  no_show
+}
+
+enum StrikeReason {
+  late_cancel
+  no_show
+}
+
+enum WaitlistStatus {
+  waiting
+  offered
+  expired
+  converted
+}
+
+enum AvailabilityExceptionKind {
+  day_off
+  extra
+}
+
+enum FeedbackVerdict {
+  ready
+  needs_work
+  not_ready
+}
+
+enum FeedbackStatus {
+  draft
+  published
+}
+
+enum MockMark {
+  answered
+  partial
+  failed
+}
+
+model InterviewerProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /**
+   * Постоянная комната Телемоста (spec 7.8) — копируется в бронь при бронировании.
+   */
+  roomUrl   String   @map("room_url")
+  bio       String?
+  photo     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("interviewer_profiles")
+}
+
+model AvailabilityRule {
+  id            String   @id @default(cuid())
+  interviewerId String   @map("interviewer_id")
+  interviewer   User     @relation(fields: [interviewerId], references: [id], onDelete: Cascade)
+  /**
+   * ISO weekday 1–7 (spec 6).
+   */
+  weekday       Int
+  // DECISION: spec 6 leaves start_time/end_time typeless; stored as "HH:MM" local
+  // to the interviewer (same shape as users.digest_time). Slot materialization
+  // converts (date + "HH:MM", interviewer TZ) → UTC instants (spec 0.6/7.8).
+  startTime     String   @map("start_time")
+  endTime       String   @map("end_time")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([interviewerId])
+  @@map("availability_rules")
+}
+
+model AvailabilityException {
+  id            String                    @id @default(cuid())
+  interviewerId String                    @map("interviewer_id")
+  interviewer   User                      @relation(fields: [interviewerId], references: [id], onDelete: Cascade)
+  /**
+   * Календарная дата в TZ интервьюера (полночь UTC, @db.Date).
+   */
+  date          DateTime                  @db.Date
+  kind          AvailabilityExceptionKind
+  /**
+   * Заданы только для kind=extra (дополнительное окно).
+   */
+  startTime     String?                   @map("start_time")
+  endTime       String?                   @map("end_time")
+  createdAt     DateTime                  @default(now()) @map("created_at")
+  updatedAt     DateTime                  @updatedAt @map("updated_at")
+
+  @@index([interviewerId, date])
+  @@map("availability_exceptions")
+}
+
+model Slot {
+  id             String     @id @default(cuid())
+  interviewerId  String     @map("interviewer_id")
+  interviewer    User       @relation(fields: [interviewerId], references: [id], onDelete: Cascade)
+  /**
+   * 60 мин; сетка с шагом 75 мин (spec 7.8). Хранится в UTC.
+   */
+  startsAt       DateTime   @map("starts_at")
+  endsAt         DateTime   @map("ends_at")
+  status         SlotStatus @default(open)
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  booking        Booking?
+  waitlistOffers Waitlist[] @relation("WaitlistOfferedSlot")
+
+  @@unique([interviewerId, startsAt])
+  // Spec 12: составной индекс (starts_at, status) под выборку доступных слотов.
+  @@index([startsAt, status])
+  @@index([interviewerId])
+  @@map("slots")
+}
+
+model Booking {
+  id            String             @id @default(cuid())
+  slotId        String             @unique @map("slot_id")
+  slot          Slot               @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  userId        String             @map("user_id")
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          MockType
+  status        BookingStatus      @default(booked)
+  cancelledAt   DateTime?          @map("cancelled_at")
+  /**
+   * Заметки интервьюера, автосейв (spec 7.8).
+   */
+  notesDraft    String?            @map("notes_draft")
+  /**
+   * Копия room_url на момент брони (spec 7.8).
+   */
+  roomUrl       String             @map("room_url")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  strikes       BookingStrike[]
+  feedback      Feedback?
+  questionMarks MockQuestionMark[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("bookings")
+}
+
+model BookingStrike {
+  id        String       @id @default(cuid())
+  userId    String       @map("user_id")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingId String       @map("booking_id")
+  booking   Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  reason    StrikeReason
+  // Append-only (как streak_events): spec 6 перечисляет только created_at.
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([bookingId])
+  @@map("booking_strikes")
+}
+
+model Waitlist {
+  id             String         @id @default(cuid())
+  userId         String         @map("user_id")
+  user           User           @relation("WaitlistUser", fields: [userId], references: [id], onDelete: Cascade)
+  type           MockType
+  /**
+   * null = любой интервьюер (spec 7.8).
+   */
+  interviewerId  String?        @map("interviewer_id")
+  interviewer    User?          @relation("WaitlistInterviewer", fields: [interviewerId], references: [id], onDelete: Cascade)
+  untilDate      DateTime       @map("until_date") @db.Date
+  status         WaitlistStatus @default(waiting)
+  /**
+   * Предложенный слот на время hold (spec 7.8): слот недоступен другим 2 часа.
+   */
+  offeredSlotId  String?        @map("offered_slot_id")
+  offeredSlot    Slot?          @relation("WaitlistOfferedSlot", fields: [offeredSlotId], references: [id], onDelete: SetNull)
+  offerExpiresAt DateTime?      @map("offer_expires_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@index([interviewerId])
+  @@index([offeredSlotId])
+  @@map("waitlist")
+}
+
+model RubricTemplate {
+  id        String   @id @default(cuid())
+  type      MockType @unique
+  /**
+   * [{key,title}] — редактируется в админке (spec 6/7.8); дефолты — сид.
+   */
+  criteria  Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("rubric_templates")
+}
+
+model Feedback {
+  id                   String          @id @default(cuid())
+  bookingId            String          @unique @map("booking_id")
+  booking              Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  interviewerId        String          @map("interviewer_id")
+  interviewer          User            @relation(fields: [interviewerId], references: [id])
+  /**
+   * {key: 1–5} по критериям rubric_templates[type].
+   */
+  scores               Json
+  // DECISION: spec 6 lists verdict as required; a draft is created on first
+  // autosave before the interviewer picks one, so it carries a default until then.
+  verdict              FeedbackVerdict @default(needs_work)
+  strengths            String          @default("")
+  growth               String          @default("")
+  /**
+   * string[] — рекомендованные уроки (мультиселект, spec 7.8).
+   */
+  recommendedLessonIds Json            @map("recommended_lesson_ids")
+  status               FeedbackStatus  @default(draft)
+  publishedAt          DateTime?       @map("published_at")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  @@index([interviewerId])
+  @@map("feedbacks")
+}
+
+model MockQuestionMark {
+  id         String   @id @default(cuid())
+  bookingId  String   @map("booking_id")
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  questionId String   @map("question_id")
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  mark       MockMark
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([bookingId, questionId])
+  @@index([questionId])
+  @@map("mock_question_marks")
 }
