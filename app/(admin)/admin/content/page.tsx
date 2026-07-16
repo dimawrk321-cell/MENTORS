@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { requireAdminZone } from "@/lib/auth/guards";
 import { getContentTree } from "@/lib/services/content-admin";
+import { ContentStudioTabs } from "@/components/features/content-studio-tabs";
 import { ContentTree, type TreeCourse } from "./content-tree";
 
 export const metadata: Metadata = {
@@ -42,5 +43,10 @@ export default async function ContentPage() {
     })),
   }));
 
-  return <ContentTree courses={tree} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <ContentStudioTabs />
+      <ContentTree courses={tree} />
+    </div>
+  );
 }
