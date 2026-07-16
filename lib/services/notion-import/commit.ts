@@ -1,7 +1,7 @@
 import type { Db } from "@/lib/db";
 import { computeReadingMinutes } from "@/lib/utils/markdown";
 import { questionHash } from "./plan";
-import type { ImportPlan, PlannedCategory, PlannedLesson } from "./types";
+import type { ImportPlan, PlannedCategory, PlannedGuide, PlannedLesson } from "./types";
 
 // Idempotent committer (spec 7.14 «Правила безопасности импорта»). Everything is
 // created as draft; nothing publishes. Skip-if-exists keys: course by slug,
@@ -29,6 +29,8 @@ export interface CommitResult {
   keyLinks: Counts;
   /** «просто привязан» links from «Категории вопросов…». */
   categoryLinks: Counts;
+  /** Guides (importer part 2). */
+  guides: Counts;
 }
 
 function zero(): Counts {
@@ -46,6 +48,7 @@ class Committer {
     keyQuestions: zero(),
     keyLinks: zero(),
     categoryLinks: zero(),
+    guides: zero(),
   };
   /** «parentTitle|title» → category id — disambiguates same-named subcats. */
   private readonly categoryIdByComposite = new Map<string, string | null>();
@@ -78,7 +81,31 @@ class Committer {
       );
     }
     for (const course of this.plan.courses) await this.ensureCourse(course);
+    for (const guide of this.plan.guides) await this.ensureGuide(guide);
     return this.result;
+  }
+
+  // --- Guides (importer part 2) ---
+
+  /** Skip-if-exists by slug (spec 7.14 part 2); created as draft. */
+  private async ensureGuide(guide: PlannedGuide): Promise<void> {
+    const existing = await this.db.guide.findUnique({ where: { slug: guide.slug } });
+    if (existing) {
+      this.result.guides.skipped += 1;
+      return;
+    }
+    this.result.guides.created += 1;
+    if (this.dryRun) return;
+    await this.db.guide.create({
+      data: {
+        slug: guide.slug,
+        section: guide.section,
+        title: guide.title,
+        order: guide.order,
+        contentMd: guide.contentMd,
+        status: "draft",
+      },
+    });
   }
 
   // --- Categories ---

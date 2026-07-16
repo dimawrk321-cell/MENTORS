@@ -1,4 +1,5 @@
-import type { ImportPlan } from "./types";
+import { GUIDE_SECTION_LABEL } from "@/lib/constants";
+import type { GuideSectionKey, ImportPlan } from "./types";
 import type { CommitResult, Counts } from "./commit";
 
 // Import report (spec 7.14 п.6): created/skipped per type + anomalies. Rendered
@@ -8,6 +9,15 @@ function countLine(label: string, c: Counts): string {
   return `- ${label}: создано ${c.created}, пропущено ${c.skipped}`;
 }
 
+const GUIDE_SECTION_ORDER: GuideSectionKey[] = [
+  "tools",
+  "resume",
+  "legend",
+  "stages",
+  "ask_interviewer",
+  "job_search",
+];
+
 export function renderReport(
   plan: ImportPlan,
   result: CommitResult,
@@ -16,7 +26,7 @@ export function renderReport(
   const a = plan.anomalies;
   const lines: string[] = [];
 
-  lines.push(`# Отчёт импортера Notion — часть 1`);
+  lines.push(`# Отчёт импортера Notion — части 1 + 2`);
   lines.push("");
   lines.push(`Файл: \`${meta.file}\``);
   lines.push(
@@ -34,7 +44,20 @@ export function renderReport(
   lines.push(countLine("Вопросы «Проверка себя» (ключевые)", result.keyQuestions));
   lines.push(countLine("Привязки ключевых вопросов (is_key)", result.keyLinks));
   lines.push(countLine("Привязки по «Категориям…» (просто привязан)", result.categoryLinks));
+  lines.push(countLine("Гайды (справочник, часть 2)", result.guides));
   lines.push(`- Изображения: скопировано ${meta.imagesCopied}, отсутствует ${meta.imagesMissing}`);
+  lines.push("");
+
+  // Гайды по секциям (spec 7.14 part 2: отчёт дополняется секцией guides).
+  lines.push(`## Гайды по секциям`);
+  if (plan.guides.length === 0) {
+    lines.push(`_нет_`);
+  } else {
+    for (const section of GUIDE_SECTION_ORDER) {
+      const count = plan.guides.filter((g) => g.section === section).length;
+      if (count > 0) lines.push(`- ${GUIDE_SECTION_LABEL[section] ?? section}: ${count}`);
+    }
+  }
   lines.push("");
 
   const section = (title: string, rows: string[]) => {

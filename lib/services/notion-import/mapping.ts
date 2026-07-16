@@ -1,25 +1,31 @@
-import type { PlanDifficulty } from "./types";
+import type { GuideSectionKey, PlanDifficulty } from "./types";
 
 // Static mapping of the export's top level to the platform (spec 7.14 п.2/п.3).
 
-export type SectionRoute =
-  { kind: "courses" } | { kind: "questions" } | { kind: "skip"; reason: string };
+/**
+ * A top-level guide group. Most map 1:1 to a guide section; `resume_legend` is
+ * one export section («Гайды по резюме и легенде») that yields two sections
+ * (resume + legend) from its nested «Резюме»/«Легенда» nodes (spec 7.14 part 2).
+ */
+export type GuideGroup = GuideSectionKey | "resume_legend";
 
-/** Routes a top-level `- **Section**` node by its title (spec 7.14 п.2). */
+export type SectionRoute =
+  | { kind: "courses" }
+  | { kind: "questions" }
+  | { kind: "guides"; group: GuideGroup }
+  | { kind: "skip"; reason: string };
+
+/** Routes a top-level `- **Section**` node by its title (spec 7.14 п.2 / part 2). */
 export function routeTopLevelSection(title: string): SectionRoute {
   const t = title.trim();
   if (/^Спринты/i.test(t)) return { kind: "courses" };
   if (/^Вопросы с собеседований/i.test(t)) return { kind: "questions" };
 
   // Guides — importer part 2, stage 7 (spec changelog 7.14/17).
-  if (/резюме|легенд/i.test(t))
-    return { kind: "skip", reason: "гайды (резюме/легенда) — часть 2, этап 7" };
-  if (/которые нужно задать/i.test(t))
-    return { kind: "skip", reason: "гайд «вопросы интервьюеру» — часть 2, этап 7" };
-  if (/успешному прохождению/i.test(t))
-    return { kind: "skip", reason: "гайд по этапам собеседований — часть 2, этап 7" };
-  if (/поиска работы/i.test(t))
-    return { kind: "skip", reason: "гайд «поиск работы» — часть 2, этап 7" };
+  if (/резюме|легенд/i.test(t)) return { kind: "guides", group: "resume_legend" };
+  if (/которые нужно задать/i.test(t)) return { kind: "guides", group: "ask_interviewer" };
+  if (/успешному прохождению/i.test(t)) return { kind: "guides", group: "stages" };
+  if (/поиска работы/i.test(t)) return { kind: "guides", group: "job_search" };
   if (/^Собеседования/i.test(t))
     return { kind: "skip", reason: "ссылка на Я.Диск — библиотека наполняется вручную" };
 
@@ -43,13 +49,13 @@ export interface CourseSpec {
   splitByModule?: Array<{ headingMatch: RegExp; slug: string; title: string; order: number }>;
 }
 
-/** «Основные инструменты» is NOT a course → guides(tools), part 2 (spec 7.14 п.3). */
-export const SKIPPED_TRACKS: Array<{ match: RegExp; reason: string }> = [
-  {
-    match: /Основные инструменты/i,
-    reason: "«Основные инструменты» → guides(tools), часть 2, этап 7",
-  },
+/** Tracks under «Спринты» that are NOT courses but guide groups (spec 7.14 part 2). */
+export const GUIDE_TRACKS: Array<{ match: RegExp; group: GuideGroup }> = [
+  { match: /Основные инструменты/i, group: "tools" },
 ];
+
+/** Tracks under «Спринты» skipped entirely (none at part 2 — kept for anomalies). */
+export const SKIPPED_TRACKS: Array<{ match: RegExp; reason: string }> = [];
 
 /**
  * Track → course(s) (spec 7.14 п.3). Technical courses are strict; Soft Skills

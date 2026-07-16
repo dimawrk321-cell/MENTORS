@@ -68,6 +68,19 @@ export interface PlannedQuestion {
   sourceLine: number;
 }
 
+/** Guide destined for the reference section (importer part 2, spec 7.10/7.14). */
+export type GuideSectionKey =
+  "tools" | "resume" | "legend" | "stages" | "ask_interviewer" | "job_search";
+
+export interface PlannedGuide {
+  slug: string;
+  section: GuideSectionKey;
+  title: string;
+  order: number;
+  contentMd: string;
+  sourceLine: number;
+}
+
 export interface ImageRef {
   /** Decoded original path relative to the export root. */
   originalDecodedPath: string;
@@ -94,6 +107,8 @@ export interface ImportPlan {
   courses: PlannedCourse[];
   categories: PlannedCategory[];
   questions: PlannedQuestion[];
+  /** Guides (importer part 2, stage 7). */
+  guides: PlannedGuide[];
   /** Distinct images referenced by imported content (for copy + rewrite). */
   images: ImageRef[];
   anomalies: ImportAnomalies;

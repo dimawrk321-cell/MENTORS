@@ -156,6 +156,78 @@ export function convertLessonBody(rawBody: string, resolver: ImageResolver): Con
   return { contentMd, videoUrl, keyQuestions, categoryLinkNames, todoImages };
 }
 
+export interface ConvertedGuide {
+  contentMd: string;
+  todoImages: Array<{ path: string }>;
+}
+
+// A guide video line: an optional media emoji (🎥🎬📹📺▶🔗) prefix, an optional
+// blockquote marker, then a markdown link or a bare URL. Guides have no
+// video_url field so every YouTube link is inlined as a :::video block.
+const GUIDE_VIDEO_LINK_RE =
+  /^\s*(?:[🎥🎬📹📺▶🔗]️?\s*)*(?:>?\s*)\[([^\]]*)\]\((https?:\/\/[^)]+)\)\s*$/u;
+const GUIDE_VIDEO_BARE_RE = /^\s*(?:[🎥🎬📹📺▶🔗]️?\s*)*(?:>?\s*)(https?:\/\/\S+)\s*$/u;
+
+/**
+ * Guide body → platform markdown (importer part 2, spec 7.10/7.14). Same emoji /
+ * block conversion rules as lessons, but guides have no video_url field, so ALL
+ * YouTube links become inline `:::video` blocks, and «Проверка себя» stays as
+ * plain content (guides carry no key questions or category links).
+ */
+export function convertGuideBody(rawBody: string, resolver: ImageResolver): ConvertedGuide {
+  const todoImages: Array<{ path: string }> = [];
+  const withImages = rewriteImages(rawBody, resolver, todoImages);
+
+  const src = withImages.split("\n");
+  const out: string[] = [];
+
+  for (let i = 0; i < src.length; i += 1) {
+    let line = src[i]!;
+
+    // Every standalone YouTube link → inline :::video (no header video for guides).
+    const vLink = GUIDE_VIDEO_LINK_RE.exec(line);
+    const vLinkYt = vLink ? canonicalYouTube(vLink[2]!) : null;
+    if (vLinkYt) {
+      const title = vLink![1]!.replace(/\*\*/g, "").replace(/"/g, "").trim();
+      out.push(
+        title ? `:::video{url="${vLinkYt}" title="${title}"}` : `:::video{url="${vLinkYt}"}`,
+        ":::",
+      );
+      continue;
+    }
+    const vBare = GUIDE_VIDEO_BARE_RE.exec(line);
+    const vBareYt = vBare ? canonicalYouTube(vBare[1]!) : null;
+    if (vBareYt) {
+      out.push(`:::video{url="${vBareYt}"}`, ":::");
+      continue;
+    }
+
+    if (/^\s*\*\*Практика\*\*/.test(line)) {
+      const { block, next } = takeLabeledBlock(src, i);
+      out.push(":::practice", ...block, ":::");
+      i = next - 1;
+      continue;
+    }
+    if (/^\s*\*\*Материал[:*]/.test(line) || /^\s*\*\*Материал\*\*/.test(line)) {
+      const { block, next } = takeLabeledBlock(src, i);
+      out.push(':::callout{type="material"}', ...block, ":::");
+      i = next - 1;
+      continue;
+    }
+
+    line = line.replace(HEADING_EMOJI_RE, "$1");
+    line = line.replace(LEADING_MARKER_RE, "$1");
+    out.push(line);
+  }
+
+  const contentMd = out
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return { contentMd, todoImages };
+}
+
 export interface ConvertedAnswer {
   answerMd: string;
   needsLatex: boolean;

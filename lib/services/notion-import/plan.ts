@@ -5,6 +5,7 @@ import { stripMarkdown } from "@/lib/utils/text";
 import { parseNotionExport, nodeBody, dedent, type ParsedDoc, type ParsedNode } from "./parser";
 import {
   convertLessonBody,
+  convertGuideBody,
   convertQuestionAnswer,
   extractOptional,
   cleanNodeTitle,
@@ -19,15 +20,19 @@ import {
 import {
   routeTopLevelSection,
   COURSE_SPECS,
+  GUIDE_TRACKS,
   SKIPPED_TRACKS,
   inferDifficulty,
   type CourseSpec,
+  type GuideGroup,
 } from "./mapping";
 import type {
   ImportPlan,
   ImportAnomalies,
+  GuideSectionKey,
   PlannedCategory,
   PlannedCourse,
+  PlannedGuide,
   PlannedLesson,
   PlannedModule,
   PlannedQuestion,
@@ -71,6 +76,8 @@ class PlanBuilder {
   private readonly seenQuestions = new Set<string>();
   private readonly categoryByKey = new Map<string, PlannedCategory>();
   private nextColorIndex = SEED_ROOT_CATEGORIES.length;
+  /** Global guide slugs — /guides/[slug] is unique across all sections. */
+  private readonly guideSlugs = new Set<string>();
 
   constructor(
     private readonly doc: ParsedDoc,
@@ -81,6 +88,7 @@ class PlanBuilder {
       courses: [],
       categories: [],
       questions: [],
+      guides: [],
       images: [],
       anomalies: emptyAnomalies(),
     };
@@ -97,6 +105,7 @@ class PlanBuilder {
       if (section.kind !== "bullet") continue;
       const route = routeTopLevelSection(section.title);
       if (route.kind === "courses") this.processCourses(section);
+      else if (route.kind === "guides") this.processGuidesGroup(section, route.group);
       else if (route.kind === "skip") {
         this.plan.anomalies.skippedSections.push({
           title: section.title,
@@ -107,6 +116,79 @@ class PlanBuilder {
     }
     this.plan.images = this.resolver.refs();
     return this.plan;
+  }
+
+  // --- Guides (importer part 2, spec 7.10/7.14) ---
+
+  /** Slug unique across all guides (global route namespace /guides/[slug]). */
+  private uniqueGuideSlug(title: string): string {
+    const base = slugify(title) || "guide";
+    if (!this.guideSlugs.has(base)) {
+      this.guideSlugs.add(base);
+      return base;
+    }
+    for (let i = 2; ; i += 1) {
+      const candidate = `${base}-${i}`;
+      if (!this.guideSlugs.has(candidate)) {
+        this.guideSlugs.add(candidate);
+        return candidate;
+      }
+    }
+  }
+
+  private addGuide(node: ParsedNode, section: GuideSectionKey, order: number): void {
+    const title = cleanNodeTitle(node.title);
+    if (!title) return;
+    const converted = convertGuideBody(nodeBody(this.doc, node), this.resolver);
+    for (const todo of converted.todoImages) {
+      this.plan.anomalies.todoImages.push({
+        path: todo.path,
+        where: `гайд «${title.slice(0, 60)}»`,
+        line: node.line + 1,
+      });
+    }
+    const guide: PlannedGuide = {
+      slug: this.uniqueGuideSlug(title),
+      section,
+      title,
+      order,
+      contentMd: converted.contentMd,
+      sourceLine: node.line + 1,
+    };
+    this.plan.guides.push(guide);
+  }
+
+  /** Each bullet child of `parent` → its own guide in `section` (tools/stages/…). */
+  private addGuidesFromChildren(parent: ParsedNode, section: GuideSectionKey): void {
+    let order = 0;
+    for (const child of parent.children) {
+      if (child.kind !== "bullet") continue;
+      this.addGuide(child, section, order);
+      order += 1;
+    }
+  }
+
+  /** Route a top-level (or track-level) guide group to its section(s). */
+  private processGuidesGroup(section: ParsedNode, group: GuideGroup): void {
+    switch (group) {
+      case "tools":
+      case "ask_interviewer":
+      case "stages":
+        this.addGuidesFromChildren(section, group);
+        break;
+      case "job_search":
+        // No sub-pages — the whole section body is one guide.
+        this.addGuide(section, "job_search", 0);
+        break;
+      case "resume_legend":
+        // «Резюме»/«Легенда» nested nodes → two sections, one guide per sub-page.
+        for (const child of section.children) {
+          if (child.kind !== "bullet") continue;
+          if (/резюме/i.test(child.title)) this.addGuidesFromChildren(child, "resume");
+          else if (/легенд/i.test(child.title)) this.addGuidesFromChildren(child, "legend");
+        }
+        break;
+    }
   }
 
   // --- Question bank (spec 7.14 п.5) ---
@@ -270,6 +352,13 @@ class PlanBuilder {
   private processCourses(section: ParsedNode): void {
     for (const track of section.children) {
       if (track.kind !== "bullet") continue;
+
+      // Guide-track under «Спринты» («Основные инструменты» → guides(tools)).
+      const guideTrack = GUIDE_TRACKS.find((g) => g.match.test(track.title));
+      if (guideTrack) {
+        this.processGuidesGroup(track, guideTrack.group);
+        continue;
+      }
 
       const skipped = SKIPPED_TRACKS.find((s) => s.match.test(track.title));
       if (skipped) {
