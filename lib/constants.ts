@@ -91,3 +91,116 @@ export const ROOM_URL_PLACEHOLDER = "https://telemost.yandex.ru/PLACEHOLDER-за
 export function isRoomUrlReady(url: string | null | undefined): boolean {
   return !!url && url.trim().length > 0 && !url.includes("PLACEHOLDER");
 }
+
+// --- Stage 7: library (spec 7.9) — client-safe labels + business constants ---
+
+/**
+ * Этап собеседования в карточке — строчными, как в acceptance-флоу 10
+ * («лайфкодинг · NLP · middle»). Значения enum RecordingStage (spec 6).
+ */
+export const RECORDING_STAGE_LABEL: Record<string, string> = {
+  screening: "скрининг",
+  theory: "теория",
+  livecoding: "лайфкодинг",
+  soft: "софт",
+  final: "финал",
+};
+
+export const RECORDING_DIRECTION_LABEL: Record<string, string> = {
+  ds: "DS",
+  nlp: "NLP",
+  ai: "AI",
+  classic_ml: "Classic ML",
+};
+
+export const RECORDING_GRADE_LABEL: Record<string, string> = {
+  junior: "junior",
+  middle: "middle",
+  senior: "senior",
+};
+
+export const RECORDING_OUTCOME_LABEL: Record<string, string> = {
+  offer: "Оффер",
+  reject: "Отказ",
+  unknown: "Исход неизвестен",
+};
+
+export const COMPANY_TYPE_LABEL: Record<string, string> = {
+  bigtech: "Бигтех",
+  fintech: "Финтех",
+  product: "Продуктовая",
+  startup: "Стартап",
+};
+
+/** Порядок значений для фильтров каталога (spec 7.9). */
+export const RECORDING_STAGES = ["screening", "theory", "livecoding", "soft", "final"] as const;
+export const RECORDING_DIRECTIONS = ["ds", "nlp", "ai", "classic_ml"] as const;
+export const RECORDING_GRADES = ["junior", "middle", "senior"] as const;
+export const RECORDING_OUTCOMES = ["offer", "reject", "unknown"] as const;
+export const COMPANY_TYPES = ["bigtech", "fintech", "product", "startup"] as const;
+
+/**
+ * Карточка записи (spec 7.9): title = «{Этап} · {Направление} · {грейд}» —
+ * анонимизированный ярлык, который видит ученик (реальный `title` — админ-поле).
+ */
+export function recordingCardTitle(input: {
+  stage: string;
+  direction: string;
+  grade: string;
+}): string {
+  const stage = RECORDING_STAGE_LABEL[input.stage] ?? input.stage;
+  const direction = RECORDING_DIRECTION_LABEL[input.direction] ?? input.direction;
+  const grade = RECORDING_GRADE_LABEL[input.grade] ?? input.grade;
+  return `${stage} · ${direction} · ${grade}`;
+}
+
+/**
+ * Чеклист анонимизации (spec 7.9): все четыре обязательны для публикации —
+ * дисциплина, встроенная в интерфейс. Ключи = поля recordings.checklist.
+ */
+export const RECORDING_CHECKLIST_ITEMS = [
+  { key: "faces", label: "Лица скрыты" },
+  { key: "voice", label: "Голос изменён" },
+  { key: "names", label: "Имена и названия вырезаны" },
+  { key: "consent", label: "Согласие донора получено" },
+] as const;
+
+export type RecordingChecklistKey = (typeof RECORDING_CHECKLIST_ITEMS)[number]["key"];
+
+/**
+ * true только когда отмечены все четыре пункта чеклиста (гейт публикации).
+ * Принимает `unknown` — checklist приходит и как typed-объект, и как Prisma Json.
+ */
+export function isChecklistComplete(checklist: unknown): boolean {
+  if (!checklist || typeof checklist !== "object") return false;
+  const c = checklist as Record<string, unknown>;
+  return RECORDING_CHECKLIST_ITEMS.every((item) => c[item.key] === true);
+}
+
+/** Ссылка на Я.Диск считается устаревшей после стольких дней (spec 7.9). */
+export const LINK_STALE_DAYS = 30;
+
+/** Предупреждение на странице просмотра (spec 7.9): личный доступ. */
+export const RECORDING_ACCESS_WARNING =
+  "Запись доступна лично тебе. Передача ссылки — нарушение условий доступа.";
+
+// --- Stage 7: guides (spec 7.10) — client-safe labels ---
+
+/** Русские названия секций справочника (spec 7.10). Порядок = порядок сайдбара. */
+export const GUIDE_SECTION_LABEL: Record<string, string> = {
+  tools: "Инструменты индустрии",
+  resume: "Резюме",
+  legend: "Легенда",
+  stages: "Этапы собеседований",
+  ask_interviewer: "Вопросы интервьюеру",
+  job_search: "Поиск работы",
+};
+
+export const GUIDE_SECTIONS = [
+  "tools",
+  "resume",
+  "legend",
+  "stages",
+  "ask_interviewer",
+  "job_search",
+] as const;

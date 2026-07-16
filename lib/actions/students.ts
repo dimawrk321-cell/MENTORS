@@ -17,6 +17,7 @@ import {
   stopImpersonation,
   validateSessionToken,
 } from "@/lib/services/sessions";
+import { setLibraryEnabled } from "@/lib/services/library";
 import {
   clearedCookieOptions,
   IMPERSONATION_RETURN_COOKIE,
@@ -33,7 +34,11 @@ import {
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
-import { extendAccessSchema, inviteStudentSchema } from "@/lib/utils/validation";
+import {
+  extendAccessSchema,
+  inviteStudentSchema,
+  toggleLibrarySchema,
+} from "@/lib/utils/validation";
 import { formatDateRu } from "@/lib/utils/dates";
 
 // Admin student management (spec 2: доступ выдаёт admin+). Every mutation is
@@ -160,6 +165,25 @@ export async function resetStudentSessionsAction(userId: string): Promise<Action
     if (!res.ok) {
       throw new ActionError(res.code, "Ученик не найден");
     }
+    revalidateStudent(userId);
+    return undefined;
+  });
+}
+
+/** Per-student library toggle (spec 7.9 / 8.5) — admin controls in the card. */
+export async function toggleLibraryAction(
+  userId: string,
+  enabled: boolean,
+): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionRole("admin");
+    const parsed = parseInput(toggleLibrarySchema, { userId, enabled });
+    const res = await setLibraryEnabled(prisma, {
+      actorId: auth.user.id,
+      userId: parsed.userId,
+      enabled: parsed.enabled,
+    });
+    if (!res.ok) throw new ActionError(res.code, "Ученик не найден");
     revalidateStudent(userId);
     return undefined;
   });

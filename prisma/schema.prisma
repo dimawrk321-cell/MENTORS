@@ -134,6 +134,10 @@ model User {
   waitlistAsInterviewer  Waitlist[]              @relation("WaitlistInterviewer")
   feedbacksGiven         Feedback[]
 
+  // Stage 7: library & guides.
+  recordingViews RecordingView[]
+  bookmarks      Bookmark[]
+
   @@index([status, accessUntil])
   @@map("users")
 }
@@ -1066,4 +1070,139 @@ model MockQuestionMark {
   @@unique([bookingId, questionId])
   @@index([questionId])
   @@map("mock_question_marks")
+}
+
+// Stage 7 (spec section 17): library of anonymized interview recordings +
+// the guides reference section. Recording enums per spec 6 «Библиотека записей».
+
+enum RecordingStage {
+  screening
+  theory
+  livecoding
+  soft
+  final
+}
+
+enum RecordingDirection {
+  ds
+  nlp
+  ai
+  classic_ml
+}
+
+enum RecordingGrade {
+  junior
+  middle
+  senior
+}
+
+enum RecordingOutcome {
+  offer
+  reject
+  unknown
+}
+
+enum CompanyType {
+  bigtech
+  fintech
+  product
+  startup
+}
+
+enum GuideSection {
+  tools
+  resume
+  legend
+  stages
+  ask_interviewer
+  job_search
+}
+
+model Recording {
+  id        String             @id @default(cuid())
+  title     String
+  stage     RecordingStage
+  direction RecordingDirection
+  grade     RecordingGrade
+  outcome   RecordingOutcome   @default(unknown)
+  // DECISION: spec 6 lists company names are never published — only company_type.
+  companyType     CompanyType @map("company_type")
+  durationMinutes Int         @map("duration_minutes")
+  /**
+   * Я.Диск share URL (spec 7.9). Ротация раз в месяц; свежесть отслеживается по
+   * link_updated_at (Пульт подсвечивает записи старше 30 дней).
+   */
+  url             String
+  /**
+   * Опциональный embed-URL для iframe-плеера поверх Watermark; при отсутствии —
+   * кнопка «Открыть запись» в новой вкладке (spec 7.9).
+   */
+  embedUrl        String?     @map("embed_url")
+  linkUpdatedAt   DateTime    @default(now()) @map("link_updated_at")
+  /**
+   * {faces,voice,names,consent}:bool — гейт публикации (spec 7.9): публикация
+   * возможна только при всех true. Инвариант держит сервисный слой.
+   */
+  checklist Json
+  status    ContentStatus @default(draft)
+  /**
+   * Таймкоды-главы (V1) — nullable, в MVP не заполняется.
+   */
+  chapters  Json?
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  views RecordingView[]
+
+  @@index([stage])
+  @@index([direction])
+  @@index([status])
+  @@index([linkUpdatedAt])
+  @@map("recordings")
+}
+
+model RecordingView {
+  id          String    @id @default(cuid())
+  recordingId String    @map("recording_id")
+  recording   Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  openedAt    DateTime  @default(now()) @map("opened_at")
+
+  @@index([recordingId])
+  @@index([userId])
+  @@map("recording_views")
+}
+
+model Guide {
+  id      String       @id @default(cuid())
+  // DECISION (spec 6 «Справочник»): slug is globally unique — routes go by
+  // /guides/[slug]; the importer disambiguates cross-section title collisions.
+  slug      String        @unique
+  section   GuideSection
+  title     String
+  order     Int           @default(0)
+  contentMd String        @map("content_md")
+  status    ContentStatus @default(draft)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  bookmarks Bookmark[]
+
+  @@index([section, order])
+  @@index([status])
+  @@map("guides")
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guideId   String   @map("guide_id")
+  guide     Guide    @relation(fields: [guideId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, guideId])
+  @@index([guideId])
+  @@map("bookmarks")
 }

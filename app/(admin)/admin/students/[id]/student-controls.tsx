@@ -1,12 +1,16 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { Eye } from "lucide-react";
 import { ActionButton } from "@/components/features/action-button";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "@/components/ui/toast";
 import {
   blockStudentAction,
   impersonateAction,
   resendInviteAction,
   resetStudentSessionsAction,
+  toggleLibraryAction,
   unblockStudentAction,
 } from "@/lib/actions/students";
 
@@ -70,5 +74,39 @@ export function ResendInviteButton({ userId }: { userId: string }) {
     >
       Отправить инвайт повторно
     </ActionButton>
+  );
+}
+
+/** Per-student library toggle (spec 7.9 / 8.5) — optimistic Switch. */
+export function LibraryToggle({ userId, enabled }: { userId: string; enabled: boolean }) {
+  const [on, setOn] = useState(enabled);
+  const [pending, startTransition] = useTransition();
+
+  function change(next: boolean): void {
+    setOn(next); // optimistic (spec 15: safe optimistic updates)
+    startTransition(async () => {
+      const res = await toggleLibraryAction(userId, next);
+      if (res && !res.ok) {
+        setOn(!next);
+        toast({ title: res.error.message, variant: "danger" });
+      } else if (res?.ok) {
+        toast({
+          title: next ? "Библиотека открыта ученику" : "Библиотека скрыта у ученика",
+          variant: "success",
+        });
+      }
+    });
+  }
+
+  return (
+    <label className="flex items-center gap-2.5 text-[14px]">
+      <Switch
+        checked={on}
+        onCheckedChange={change}
+        disabled={pending}
+        aria-label="Доступ к библиотеке"
+      />
+      Доступ к библиотеке записей
+    </label>
   );
 }

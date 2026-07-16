@@ -189,6 +189,98 @@ export const rubricTemplateSchema = z.object({
 
 export const removeStrikeSchema = z.object({ strikeId: z.string().min(1) });
 
+// --- Stage 7: library & guides (spec 7.9 / 7.10) ---
+
+const recordingChecklistSchema = z.object({
+  faces: z.boolean(),
+  voice: z.boolean(),
+  names: z.boolean(),
+  consent: z.boolean(),
+});
+
+/**
+ * Recording create/update (spec 7.9). Publication gate is a refinement: status
+ * may be `published` only when all four checklist items are true — the same
+ * discipline the «Опубликовать» button enforces client-side (defense in depth).
+ */
+export const recordingUpsertSchema = z
+  .object({
+    id: z.string().min(1).nullable().optional(),
+    title: z
+      .string("Укажи название")
+      .trim()
+      .min(1, "Укажи название")
+      .max(200, "Слишком длинное название"),
+    stage: z.enum(["screening", "theory", "livecoding", "soft", "final"], "Выбери этап"),
+    direction: z.enum(["ds", "nlp", "ai", "classic_ml"], "Выбери направление"),
+    grade: z.enum(["junior", "middle", "senior"], "Выбери грейд"),
+    outcome: z.enum(["offer", "reject", "unknown"]),
+    companyType: z.enum(["bigtech", "fintech", "product", "startup"], "Выбери тип компании"),
+    durationMinutes: z
+      .number("Укажи длительность")
+      .int()
+      .min(1, "Длительность должна быть положительной")
+      .max(600, "Слишком большая длительность"),
+    url: z.url("Укажи корректную ссылку на запись").max(1000),
+    embedUrl: z
+      .union([z.literal(""), z.url("Некорректная ссылка embed")])
+      .transform((value) => value || null),
+    checklist: recordingChecklistSchema,
+    status: z.enum(["draft", "published"]),
+  })
+  .refine(
+    (v) =>
+      v.status !== "published" ||
+      (v.checklist.faces && v.checklist.voice && v.checklist.names && v.checklist.consent),
+    {
+      message: "Опубликовать можно только когда отмечены все четыре пункта чеклиста",
+      path: ["status"],
+    },
+  );
+
+export const toggleLibrarySchema = z.object({
+  userId: z.string().min(1),
+  enabled: z.boolean(),
+});
+
+export const recordingIdSchema = z.object({ recordingId: z.string().min(1) });
+
+const guideSectionSchema = z.enum(
+  ["tools", "resume", "legend", "stages", "ask_interviewer", "job_search"],
+  "Выбери секцию",
+);
+
+export const createGuideSchema = z.object({
+  section: guideSectionSchema,
+  title: z
+    .string("Укажи название")
+    .trim()
+    .min(1, "Укажи название")
+    .max(200, "Слишком длинное название"),
+});
+
+export const guideMetaSchema = z.object({
+  guideId: z.string().min(1),
+  title: z
+    .string("Укажи название")
+    .trim()
+    .min(1, "Укажи название")
+    .max(200, "Слишком длинное название"),
+  slug: z
+    .string("Укажи slug")
+    .trim()
+    .regex(/^[a-z0-9-]{1,80}$/, "Slug — латиница, цифры и дефисы"),
+  section: guideSectionSchema,
+  order: z.number().int().min(0).max(10000),
+});
+
+export const saveGuideContentSchema = z.object({
+  guideId: z.string().min(1),
+  contentMd: z.string().max(300_000, "Слишком большой документ"),
+});
+
+export const toggleBookmarkSchema = z.object({ guideId: z.string().min(1) });
+
 export const extendAccessSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("days"),

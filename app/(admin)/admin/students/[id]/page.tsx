@@ -17,6 +17,7 @@ import { ExtendAccessControls } from "./extend-access-controls";
 import {
   BlockButton,
   ImpersonateButton,
+  LibraryToggle,
   ResendInviteButton,
   ResetSessionsButton,
   UnblockButton,
@@ -226,6 +227,20 @@ export default async function StudentPage({ params }: StudentPageProps) {
           )}
         </CardContent>
       </Card>
+
+      {canManage && user.status !== "invited" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Библиотека записей</CardTitle>
+            <CardDescription>
+              Тумблер скрывает раздел «Библиотека» и его страницы у этого ученика (spec 7.9).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <LibraryToggle userId={user.id} enabled={user.libraryEnabled} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
