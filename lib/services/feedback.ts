@@ -1,7 +1,7 @@
 import { Prisma, type FeedbackVerdict, type MockType, type PrismaClient } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { emitEvent } from "@/lib/services/events";
-import { enqueueNotification } from "@/lib/services/notifications";
+import { notify } from "@/lib/services/notifications";
 
 // Рубрики и фидбек моков (spec 7.8). Критерии рубрики — rubric_templates[type]
 // (дефолты — сид/константа ниже, редактируются в админке). Черновик фидбека
@@ -174,12 +174,7 @@ export async function publishFeedback(
       { bookingId: booking.id, type: booking.type, verdict: booking.feedback!.verdict },
       { userId: booking.userId, now },
     );
-    await enqueueNotification(tx, {
-      userId: booking.userId,
-      type: "mock_feedback",
-      title: "Фидбек по моку готов",
-      url: `/mocks/${booking.id}`,
-    });
+    await notify(tx, booking.userId, "mock_feedback", { bookingId: booking.id });
   });
   return { ok: true };
 }

@@ -193,6 +193,58 @@ export function zonedDayUtcRange(dateStr: string, timeZone: string): { start: Da
   };
 }
 
+/** Minutes since local midnight (0–1439) of an instant in a timezone. */
+export function localMinutesOfDay(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return get("hour") * 60 + get("minute");
+}
+
+/** «HH:MM» → minutes since midnight (0–1439). Invalid input → 0. */
+export function hhmmToMinutes(hhmm: string): number {
+  const [h = 0, m = 0] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * Whether `now` falls inside the user's quiet-hours window (spec 7.12). The
+ * window is defined by two local «HH:MM» bounds and may wrap midnight
+ * (22:00–08:00). Equal bounds ⇒ empty window (never quiet).
+ */
+export function isWithinQuietHours(
+  now: Date,
+  timeZone: string,
+  startHHMM: string,
+  endHHMM: string,
+): boolean {
+  const startM = hhmmToMinutes(startHHMM);
+  const endM = hhmmToMinutes(endHHMM);
+  if (startM === endM) return false; // empty window
+  const nowM = localMinutesOfDay(now, timeZone);
+  return startM < endM
+    ? nowM >= startM && nowM < endM // same-day window
+    : nowM >= startM || nowM < endM; // wraps midnight
+}
+
+/**
+ * UTC instant of the next local occurrence of «HH:MM» at/after `now` (spec 7.12:
+ * deferred email is released when quiet hours end). If the target time already
+ * passed today (local), it resolves to tomorrow's occurrence.
+ */
+export function nextLocalTimeUtc(now: Date, timeZone: string, timeHHMM: string): Date {
+  const targetM = hhmmToMinutes(timeHHMM);
+  const nowM = localMinutesOfDay(now, timeZone);
+  const todayStr = localDateStr(now, timeZone);
+  const dateStr =
+    nowM < targetM ? todayStr : localDateStr(addDays(dateOnlyUtc(todayStr), 1), "UTC");
+  return zonedDateTimeToUtc(dateStr, timeHHMM, timeZone);
+}
+
 /** Russian pluralization: pluralRu(5, "день", "дня", "дней") → «дней». */
 export function pluralRu(n: number, one: string, few: string, many: string): string {
   const abs = Math.abs(n) % 100;

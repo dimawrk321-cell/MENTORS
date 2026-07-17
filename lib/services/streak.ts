@@ -1,7 +1,7 @@
 import type { PrismaClient, Streak } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { addDays, dateOnlyUtc, isoWeekday, localDateStr, localHour } from "@/lib/utils/dates";
-import { enqueueNotification } from "@/lib/services/notifications";
+import { notify } from "@/lib/services/notifications";
 
 // Стрик — серия учебных дней (spec 7.7). Модель: day засчитан, если за день (TZ)
 // случилось качественное событие И это учебный день (users.study_days).
@@ -94,13 +94,8 @@ async function runCatchUp(
       snap.freezes -= 1;
       snap.lastCountedStr = day; // заморозка покрыла день — цепочка продолжается с него
       events.push({ userId, date: dateOnlyUtc(day), kind: "freeze_used" });
-      // Автоприменение заморозки — с уведомлением-заглушкой (spec 7.7/7.12).
-      await enqueueNotification(db, {
-        userId,
-        type: "freeze_used",
-        title: "Серия спасена заморозкой",
-        body: `Осталось заморозок: ${snap.freezes}`,
-      });
+      // Автоприменение заморозки — уведомление freeze_used (spec 7.7/7.12).
+      await notify(db, userId, "freeze_used", { freezesLeft: snap.freezes });
     } else {
       snap.current = 0;
       snap.lastCountedStr = null; // серия порвана — стартует заново со следующей активности
@@ -208,7 +203,21 @@ export async function processStreakDay(
   if (lastStr >= todayStr) return;
   if (studyDatesBetween(lastStr, todayStr, user.studyDays).length === 0) return;
 
-  await db.$transaction((tx) => runCatchUp(tx, input.userId, streak, todayStr, user.studyDays));
+  await db.$transaction(async (tx) => {
+    // Lock the streak row and re-read fresh INSIDE the tx: the checks above use an
+    // unlocked snapshot (cheap early-out), but the worker (streakProcess) and the
+    // first-visit dashboard render can call this concurrently — without the lock
+    // both would see the same pre-state and double-apply catch-up (duplicate
+    // freeze_used notification + streak_events). The loser blocks here, then sees
+    // the advanced last_counted_date and no-ops.
+    await tx.$queryRaw`SELECT id FROM streaks WHERE user_id = ${input.userId} FOR UPDATE`;
+    const fresh = await tx.streak.findUnique({ where: { userId: input.userId } });
+    if (!fresh || fresh.paused || !fresh.lastCountedDate) return;
+    const freshLastStr = localDateStr(fresh.lastCountedDate, "UTC");
+    if (freshLastStr >= todayStr) return;
+    if (studyDatesBetween(freshLastStr, todayStr, user.studyDays).length === 0) return;
+    await runCatchUp(tx, input.userId, fresh, todayStr, user.studyDays);
+  });
 }
 
 /** Ставит серию на паузу при истечении доступа (spec 7.1.5): дни не считаются. */

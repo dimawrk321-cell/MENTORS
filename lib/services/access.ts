@@ -1,7 +1,16 @@
 import type { PrismaClient, User } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { addDays, DAY_MS, daysUntil, formatDateRu, zonedDateEndUtc } from "@/lib/utils/dates";
+import { logger } from "@/lib/logger";
+import {
+  addDays,
+  DAY_MS,
+  daysUntil,
+  formatDateRu,
+  localDateStr,
+  zonedDateEndUtc,
+  zonedDayUtcRange,
+} from "@/lib/utils/dates";
 import { generateToken, paletteIndex } from "@/lib/utils/crypto";
 import { emitEvent } from "@/lib/services/events";
 import { writeAudit } from "@/lib/services/audit";
@@ -12,7 +21,8 @@ import {
   cancelFutureBookingsForInactiveStudents,
   getMocksCompletedCount,
 } from "@/lib/services/mocks";
-import { sendAccessExpiryReminderEmail, sendInviteEmail } from "@/lib/services/mail";
+import { sendInviteEmail } from "@/lib/services/mail";
+import { notify } from "@/lib/services/notifications";
 
 // Student access lifecycle (spec 7.1): manual invite, 90 days from activation,
 // extensions that never eat dead days, soft-lock on expiry.
@@ -280,7 +290,9 @@ export async function expireOverdueAccess(
 /**
  * Expiry reminders for 14/3/0 days left (spec 7.1.3).
  * DECISION: stage-1 stub — sends via the dev-log mailer when called; the
- * stage-9 worker (expiryNotify) will schedule it daily and add the in-app bell.
+ * stage-9 worker (expiryNotify) schedules it daily; delivery (email + in-app
+ * bell) goes through notify() (access_* — email+inapp, always on — spec 7.12).
+ * Idempotent per local day: each 14/3/0 threshold fires at most once (spec DoD).
  */
 export async function sendAccessExpiryReminders(db: Db, now: Date = new Date()): Promise<number> {
   const students = await db.user.findMany({
@@ -288,13 +300,34 @@ export async function sendAccessExpiryReminders(db: Db, now: Date = new Date()):
   });
   let sent = 0;
   for (const student of students) {
-    const left = daysUntil(student.accessUntil!, now);
-    if ((EXPIRY_REMINDER_DAYS as readonly number[]).includes(left)) {
-      await sendAccessExpiryReminderEmail(
-        student.email,
-        formatDateRu(student.accessUntil!, student.timezone),
+    try {
+      const left = daysUntil(student.accessUntil!, now);
+      let type: "access_14d" | "access_3d" | "access_0d" | null = null;
+      if (left === 14) type = "access_14d";
+      else if (left === 3) type = "access_3d";
+      else if (left === 0) type = "access_0d";
+      if (!type) continue;
+
+      // Once per local day: guards against a same-day worker re-run (restart).
+      const dayStart = zonedDayUtcRange(
+        localDateStr(now, student.timezone),
+        student.timezone,
+      ).start;
+      const already = await db.notification.count({
+        where: { userId: student.id, type, createdAt: { gte: dayStart } },
+      });
+      if (already > 0) continue;
+
+      await notify(
+        db,
+        student.id,
+        type,
+        { untilText: formatDateRu(student.accessUntil!, student.timezone) },
+        { now },
       );
       sent += 1;
+    } catch (err) {
+      logger.warn({ err, userId: student.id }, "access reminders: skipping student after error");
     }
   }
   return sent;

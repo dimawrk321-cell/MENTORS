@@ -296,3 +296,53 @@ export const extendAccessSchema = z.discriminatedUnion("kind", [
     comment: z.string().trim().max(500).optional(),
   }),
 ]);
+
+// --- Stage 9: notifications, quiet hours, announcements (spec 7.12/8.5) ---
+
+/** «HH:MM» 24h time (digest_time, quiet hours). */
+export const hhmmSchema = z
+  .string("Укажи время")
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Время в формате ЧЧ:ММ");
+
+export const notificationSettingsSchema = z.object({
+  digestTime: hhmmSchema,
+  quietHoursStart: hhmmSchema,
+  quietHoursEnd: hhmmSchema,
+  // Toggleable matrix — only channels the type actually exposes are honored
+  // server-side; extra keys are ignored (updateNotificationPrefs clamps).
+  prefs: z.record(
+    z.string(),
+    z.object({ inapp: z.boolean().optional(), email: z.boolean().optional() }),
+  ),
+});
+
+export const createAnnouncementSchema = z
+  .object({
+    title: z
+      .string("Укажи заголовок")
+      .trim()
+      .min(1, "Укажи заголовок")
+      .max(200, "Слишком длинный заголовок"),
+    bodyMd: z
+      .string("Добавь текст")
+      .trim()
+      .min(1, "Добавь текст")
+      .max(10_000, "Слишком длинный текст"),
+    kind: z.enum(["banner", "notification"]),
+    // "all" | "mock_this_week" | "course:{id}"
+    segment: z
+      .string()
+      .refine(
+        (s) => s === "all" || s === "mock_this_week" || /^course:.+/.test(s),
+        "Некорректный сегмент",
+      ),
+    // <input type="datetime-local"> / date values; empty startsAt ⇒ now (action fills).
+    startsAt: z.string().optional(),
+    endsAt: z.string().optional(),
+  })
+  .refine((v) => !(v.endsAt && v.startsAt && v.endsAt <= v.startsAt), {
+    message: "Дата окончания должна быть позже начала",
+    path: ["endsAt"],
+  });
+
+export const dismissBannerSchema = z.object({ announcementId: z.string().min(1) });

@@ -90,20 +90,21 @@ services:
         condition: service_healthy
     command: ["pnpm", "db:seed"]
 
-  # worker — заготовка (spec 3/7.15). node-cron-обвязка и джобы приходят
-  # этапом 9; сейчас worker/index.ts только экспортирует реестр джоб без
-  # долгоживущего процесса, поэтому сервис закомментирован.
-  # worker:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #     target: builder
-  #   restart: unless-stopped
-  #   env_file: .env.prod
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   command: ["pnpm", "exec", "tsx", "worker/index.ts"]
+  # worker — node-cron background jobs (spec 3/7.15): slots, streaks, digests,
+  # reminders, monitors, email flush. Same image as web (builder target — tsx runs
+  # the TS source), its own command. Reads DATABASE_URL/SMTP_* from .env.prod.
+  # DECISION: enabled at stage 9; deploy to the stend happens on the owner's word.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    restart: unless-stopped
+    env_file: .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["pnpm", "exec", "tsx", "worker/index.ts"]
 
 volumes:
   pgdata:

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { NotificationBell } from "@/components/features/notification-bell";
 import { requireInterviewerZone } from "@/lib/auth/guards";
 
 // Spec 0.5: brand name only from env, never hardcoded.
@@ -29,12 +30,15 @@ export default async function InterviewerLayout({ children }: { children: ReactN
             </Link>
           </nav>
         </div>
-        <Link
-          href="/admin"
-          className="text-text-2 ease-app hover:text-text-1 text-[13px] transition-colors duration-150"
-        >
-          В админку
-        </Link>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <Link
+            href="/admin"
+            className="text-text-2 ease-app hover:text-text-1 text-[13px] transition-colors duration-150"
+          >
+            В админку
+          </Link>
+        </div>
       </header>
       <main className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">{children}</main>
     </div>

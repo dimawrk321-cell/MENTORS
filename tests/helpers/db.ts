@@ -4,8 +4,13 @@ import { testDatabaseUrl } from "./db-url";
 
 export const testDb = new PrismaClient({ datasourceUrl: testDatabaseUrl() });
 
-/** Wipes all stage-1/2/3/4/5/6/7/8 tables in FK-safe order. */
+/** Wipes all stage-1..9 tables in FK-safe order. */
 export async function resetDb(): Promise<void> {
+  // Stage 9 (notifications & announcements) — reference users/announcements.
+  await testDb.announcementRead.deleteMany();
+  await testDb.announcement.deleteMany();
+  await testDb.notificationPref.deleteMany();
+  await testDb.notification.deleteMany();
   // Stage 8 (search) — recency index references users/entities.
   await testDb.recentItem.deleteMany();
   // Stage 7 (library & guides) — views/bookmarks reference recordings/guides/users.
@@ -70,6 +75,9 @@ interface TestUserInput {
   studyDays?: number[];
   dailyGoalXp?: number;
   isInterviewer?: boolean;
+  digestTime?: string;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
 }
 
 export async function createTestUser(input: TestUserInput) {
@@ -86,6 +94,9 @@ export async function createTestUser(input: TestUserInput) {
       ...(input.studyDays ? { studyDays: input.studyDays } : {}),
       ...(input.dailyGoalXp ? { dailyGoalXp: input.dailyGoalXp } : {}),
       ...(input.isInterviewer ? { isInterviewer: true } : {}),
+      ...(input.digestTime ? { digestTime: input.digestTime } : {}),
+      ...(input.quietHoursStart ? { quietHoursStart: input.quietHoursStart } : {}),
+      ...(input.quietHoursEnd ? { quietHoursEnd: input.quietHoursEnd } : {}),
       avatarColor: paletteIndex(input.email),
     },
   });

@@ -5,6 +5,7 @@ import {
   addMinutes,
   DAY_MS,
   dateOnlyUtc,
+  formatDateTimeRu,
   localDateStr,
   zonedDayUtcRange,
 } from "@/lib/utils/dates";
@@ -17,7 +18,7 @@ import {
   OFFER_HOLD_HOURS,
 } from "@/lib/constants";
 import { emitEvent } from "@/lib/services/events";
-import { enqueueNotification } from "@/lib/services/notifications";
+import { notify } from "@/lib/services/notifications";
 import { addSrsCardForFailure } from "@/lib/services/srs";
 import { completeLesson } from "@/lib/services/content";
 import { writeAudit } from "@/lib/services/audit";
@@ -160,13 +161,7 @@ export async function offerSlotToWaitlist(
       { waitlistId: entry.id, slotId: slot.id, type: entry.type },
       { userId: entry.userId },
     );
-    await enqueueNotification(db, {
-      userId: entry.userId,
-      type: "waitlist_offer",
-      title: "Освободился слот для мока",
-      body: "Успей забронировать — предложение действует 2 часа",
-      url: `/mocks/book`,
-    });
+    await notify(db, entry.userId, "waitlist_offer", {});
     return { offered: true };
   }
   return { offered: false };
@@ -349,7 +344,7 @@ export async function bookMock(
   const now = input.now ?? new Date();
   const user = await db.user.findUnique({
     where: { id: input.userId },
-    select: { role: true, status: true, accessUntil: true },
+    select: { role: true, status: true, accessUntil: true, name: true, timezone: true },
   });
   if (!user || user.role !== "student" || user.status !== "active") {
     return { ok: false, code: "not_found" };
@@ -417,18 +412,23 @@ export async function bookMock(
       { bookingId: booking.id, type: input.type, interviewerId: slot.interviewer_id },
       { userId: input.userId },
     );
-    // Уведомления обоим — заглушка до этапа 9 (spec 7.8/7.12).
-    await enqueueNotification(tx, {
-      userId: input.userId,
-      type: "mock_booked",
-      title: "Мок забронирован",
-      url: `/mocks/${booking.id}`,
+    // Подтверждение брони обоим (spec 7.8/7.12, mock_booked — всегда включён).
+    const interviewer = await tx.user.findUnique({
+      where: { id: slot.interviewer_id },
+      select: { timezone: true },
     });
-    await enqueueNotification(tx, {
-      userId: slot.interviewer_id,
-      type: "mock_booked",
-      title: "Новая бронь мока",
-      url: `/interviewer/bookings`,
+    const interviewerTz = interviewer?.timezone ?? "Europe/Moscow";
+    await notify(tx, input.userId, "mock_booked", {
+      role: "student",
+      bookingId: booking.id,
+      whenText: formatDateTimeRu(slot.starts_at, user.timezone),
+      mockType: input.type,
+    });
+    await notify(tx, slot.interviewer_id, "mock_booked", {
+      role: "interviewer",
+      whenText: formatDateTimeRu(slot.starts_at, interviewerTz),
+      mockType: input.type,
+      studentName: user.name,
     });
     return { ok: true, bookingId: booking.id };
   });
@@ -489,11 +489,9 @@ export async function cancelBooking(
       { bookingId: booking.id, by: "student", late },
       { userId: input.userId },
     );
-    await enqueueNotification(tx, {
-      userId: booking.slot.interviewerId,
-      type: "mock_cancelled",
-      title: "Ученик отменил мок",
-      url: `/interviewer/bookings`,
+    await notify(tx, booking.slot.interviewerId, "mock_cancelled", {
+      audience: "interviewer",
+      by: "student",
     });
     if (freesSlot) {
       await offerSlotToWaitlist(tx, { slotId: booking.slotId, now });
@@ -552,13 +550,7 @@ async function cancelByInterviewerTx(
     { bookingId: booking.id, by: "interviewer", late: false },
     { userId: booking.userId },
   );
-  await enqueueNotification(tx, {
-    userId: booking.userId,
-    type: "mock_cancelled",
-    title: "Интервьюер отменил мок",
-    body: "Твоя заявка в листе ожидания получила приоритет",
-    url: `/mocks/mine`,
-  });
+  await notify(tx, booking.userId, "mock_cancelled", { audience: "student" });
   await prioritizeWaitlistForVictim(tx, { userId: booking.userId, type: booking.type, now });
 }
 
@@ -810,11 +802,9 @@ export async function cancelFutureBookingsForInactiveStudents(
         { bookingId: booking.id, by: "system", late: false },
         { userId: booking.userId },
       );
-      await enqueueNotification(tx, {
-        userId: booking.slot.interviewerId,
-        type: "mock_cancelled",
-        title: "Мок отменён: у ученика истёк доступ",
-        url: `/interviewer/bookings`,
+      await notify(tx, booking.slot.interviewerId, "mock_cancelled", {
+        audience: "interviewer",
+        by: "system",
       });
       await offerSlotToWaitlist(tx, { slotId: booking.slotId, now });
     });

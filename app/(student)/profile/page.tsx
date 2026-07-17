@@ -4,12 +4,14 @@ import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
 import { getUserAchievements } from "@/lib/services/achievements";
+import { getNotificationMatrix } from "@/lib/services/notifications";
 import { logoutAction } from "@/lib/actions/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AchievementIcon } from "@/components/features/achievement-icon";
 import { ChangePasswordForm } from "./change-password-form";
+import { NotificationSettings } from "./notification-settings";
 import { RevokeOtherSessionsButton } from "./revoke-others-button";
 
 export const metadata: Metadata = {
@@ -21,9 +23,10 @@ export const metadata: Metadata = {
 // stages 2/5/9 per plan.
 export default async function ProfilePage() {
   const { user, session } = await requireStudentZone();
-  const [devices, achievements] = await Promise.all([
+  const [devices, achievements, notificationMatrix] = await Promise.all([
     prisma.device.findMany({ where: { userId: user.id }, orderBy: { lastSeenAt: "desc" } }),
     getUserAchievements(prisma, user.id),
+    getNotificationMatrix(prisma, user.id),
   ]);
 
   return (
@@ -60,6 +63,25 @@ export default async function ProfilePage() {
         </CardHeader>
         <CardContent>
           <ChangePasswordForm />
+        </CardContent>
+      </Card>
+
+      {/* Уведомления (spec 7.12/8.3): матрица тумблеров, тихие часы, дайджест. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Уведомления</CardTitle>
+          <CardDescription>
+            Выбери, о чём напоминать и куда. Важные уведомления (фидбек, отмены, доступ) приходят
+            всегда.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NotificationSettings
+            matrix={notificationMatrix}
+            digestTime={user.digestTime}
+            quietHoursStart={user.quietHoursStart}
+            quietHoursEnd={user.quietHoursEnd}
+          />
         </CardContent>
       </Card>
 

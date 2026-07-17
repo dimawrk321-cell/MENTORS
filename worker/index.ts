@@ -1,23 +1,41 @@
+import { schedule } from "node-cron";
 import { prisma } from "@/lib/db";
-import { runStreakProcessJob } from "@/worker/jobs/streak-process";
-import { runSlotsGenerateJob } from "@/worker/jobs/slots-generate";
-import { runWaitlistHoldsJob } from "@/worker/jobs/waitlist-holds";
+import { logger } from "@/lib/logger";
+import { runJob } from "@/worker/lib/run-job";
+import { getLockClient } from "@/worker/lib/lock-client";
+import { JOBS } from "@/worker/registry";
 
-// Worker-процесс (spec 3/7.15): отдельный node-cron-процесс для фоновых задач —
-// дайджесты, мониторы, генерация слотов, обработка серий. Полная обвязка и
-// расписания — этап 9; здесь заведён реестр джоб с заглушками (streakProcess —
-// этап 5; slotsGenerate + waitlistHolds — этап 6), чтобы точки интеграции
-// существовали заранее.
-//
-// TODO(stage 9): зарегистрировать node-cron по расписаниям spec 7.15
-// (slotsGenerate 02:00, streakProcess каждые 30 мин, digest каждые 15 мин,
-// expiryNotify 09:00, youtubeCheck 04:00, waitlistHolds каждые 10 мин,
-// sessionCleanup 05:00, linkRotationReminder 1-е число) и запустить процесс.
-export const jobs = {
-  /** spec 7.15: каждые 30 мин. */
-  streakProcess: () => runStreakProcessJob(prisma),
-  /** spec 7.15: 02:00 ежедневно — материализация слотов на 14 дней. */
-  slotsGenerate: () => runSlotsGenerateJob(prisma),
-  /** spec 7.15: каждые 10 мин — истечение hold-предложений waitlist. */
-  waitlistHolds: () => runWaitlistHoldsJob(prisma),
-};
+// Worker process (spec 3/7.15): a long-lived node-cron scheduler for background
+// jobs — slots, streaks, digests, reminders, monitors, email flush. Crons run in
+// UTC; per-user time-zone logic lives inside each job. Every run is advisory-
+// locked (spec «защита от параллельного запуска»), logs to stdout, and is
+// idempotent so a restart between ticks self-heals. Run with `tsx worker/index.ts`.
+
+const lockClient = getLockClient();
+
+function startWorker(): void {
+  logger.info(
+    { jobs: JOBS.map((job) => `${job.name} @ ${job.schedule}`) },
+    "worker starting — scheduling jobs (UTC)",
+  );
+  for (const job of JOBS) {
+    // RETURN the promise (not `void`): node-cron's noOverlap awaits it to skip a
+    // tick while the previous run is still pending — the same-process guard.
+    schedule(job.schedule, () => runJob(lockClient, job.name, () => job.run(prisma)), {
+      timezone: "UTC",
+      noOverlap: true,
+    });
+  }
+  logger.info({ count: JOBS.length }, "worker ready");
+}
+
+async function shutdown(signal: string): Promise<void> {
+  logger.info({ signal }, "worker shutting down");
+  await Promise.allSettled([prisma.$disconnect(), lockClient.$disconnect()]);
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
+
+startWorker();

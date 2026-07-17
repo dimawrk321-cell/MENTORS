@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
   // produces .next/standalone/server.js with a pruned node_modules trace.
   output: "standalone",
   // Native/node-oriented packages must not be bundled by the RSC compiler.
-  serverExternalPackages: ["@node-rs/argon2", "maxmind", "pino"],
+  serverExternalPackages: ["@node-rs/argon2", "maxmind", "pino", "nodemailer"],
   images: {
     // YouTube poster thumbnails for the lazy VideoEmbed (spec 5.3).
     remotePatterns: [{ protocol: "https", hostname: "i.ytimg.com" }],

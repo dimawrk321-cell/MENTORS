@@ -11,7 +11,7 @@
 // Later stages append their own models incrementally.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   // Stage 8 (search): postgresqlExtensions lets Prisma own `pg_trgm` so both
   // `migrate` and `db push` create it before the trgm GIN indexes that need it.
   previewFeatures = ["postgresqlExtensions"]
@@ -80,31 +80,36 @@ enum AuthAttemptKind {
 }
 
 model User {
-  id             String     @id @default(cuid())
-  email          String     @unique
+  id              String     @id @default(cuid())
+  email           String     @unique
   // DECISION: spec 6 lists password_hash as required, but an invited user has
   // no password until the invite is accepted — nullable expresses that state.
-  passwordHash   String?    @map("password_hash")
-  name           String
-  role           Role       @default(student)
-  isInterviewer  Boolean    @default(false) @map("is_interviewer")
-  timezone       String     @default("Europe/Moscow")
-  theme          Theme      @default(system)
-  track          Track?
-  dailyGoalXp    Int        @default(60) @map("daily_goal_xp")
-  studyDays      Int[]      @default([1, 2, 3, 4, 5, 6, 7]) @map("study_days")
-  digestTime     String     @default("09:00") @map("digest_time")
-  status         UserStatus @default(invited)
-  activatedAt    DateTime?  @map("activated_at")
-  accessUntil    DateTime?  @map("access_until")
+  passwordHash    String?    @map("password_hash")
+  name            String
+  role            Role       @default(student)
+  isInterviewer   Boolean    @default(false) @map("is_interviewer")
+  timezone        String     @default("Europe/Moscow")
+  theme           Theme      @default(system)
+  track           Track?
+  dailyGoalXp     Int        @default(60) @map("daily_goal_xp")
+  studyDays       Int[]      @default([1, 2, 3, 4, 5, 6, 7]) @map("study_days")
+  digestTime      String     @default("09:00") @map("digest_time")
+  // Stage 9 (spec 7.12): quiet hours — in-app notifications are created
+  // immediately, email delivery is deferred until quiet hours end. Stored as
+  // "HH:MM" in the user's timezone (like digest_time); default 22:00–08:00.
+  quietHoursStart String     @default("22:00") @map("quiet_hours_start")
+  quietHoursEnd   String     @default("08:00") @map("quiet_hours_end")
+  status          UserStatus @default(invited)
+  activatedAt     DateTime?  @map("activated_at")
+  accessUntil     DateTime?  @map("access_until")
   // DECISION: avatar_color has no type in spec 6 — stored as an index (0..7)
   // into the muted category palette (spec 5.1), assigned from email hash.
-  avatarColor    Int        @map("avatar_color")
-  lastSeenAt     DateTime?  @map("last_seen_at")
-  mentorNote     String?    @map("mentor_note")
-  libraryEnabled Boolean    @default(true) @map("library_enabled")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
+  avatarColor     Int        @map("avatar_color")
+  lastSeenAt      DateTime?  @map("last_seen_at")
+  mentorNote      String?    @map("mentor_note")
+  libraryEnabled  Boolean    @default(true) @map("library_enabled")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
 
   sessions             Session[]         @relation("UserSessions")
   impersonatedSessions Session[]         @relation("SessionImpersonator")
@@ -146,6 +151,12 @@ model User {
 
   // Stage 8: search recency index (CommandPalette «Недавнее»).
   recentItems RecentItem[]
+
+  // Stage 9: notifications, per-type channel prefs, announcement authorship/reads.
+  notifications        Notification[]
+  notificationPrefs    NotificationPref[]
+  announcementsCreated Announcement[]     @relation("AnnouncementCreator")
+  announcementReads    AnnouncementRead[]
 
   @@index([status, accessUntil])
   @@map("users")
@@ -393,28 +404,28 @@ model Module {
 }
 
 model Lesson {
-  id               String           @id @default(cuid())
-  moduleId         String           @map("module_id")
-  module           Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  id               String                   @id @default(cuid())
+  moduleId         String                   @map("module_id")
+  module           Module                   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   // DECISION: spec 6 does not scope lesson slug uniqueness; routes are id-based
   // (/lessons/[id]), so the slug is unique per module — enough for anchors/import.
   slug             String
   title            String
-  order            Int              @default(0)
-  status           ContentStatus    @default(draft)
-  difficulty       LessonDifficulty @default(base)
-  isOptional       Boolean          @default(false) @map("is_optional")
-  contentMd        String           @default("") @map("content_md")
+  order            Int                      @default(0)
+  status           ContentStatus            @default(draft)
+  difficulty       LessonDifficulty         @default(base)
+  isOptional       Boolean                  @default(false) @map("is_optional")
+  contentMd        String                   @default("") @map("content_md")
   // Recomputed on save: words / 180 (spec 6).
-  readingMinutes   Int              @default(1) @map("reading_minutes")
-  videoUrl         String?          @map("video_url")
-  videoStatus      VideoStatus      @default(unchecked) @map("video_status")
-  videoCheckedAt   DateTime?        @map("video_checked_at")
-  publishedAt      DateTime?        @map("published_at")
+  readingMinutes   Int                      @default(1) @map("reading_minutes")
+  videoUrl         String?                  @map("video_url")
+  videoStatus      VideoStatus              @default(unchecked) @map("video_status")
+  videoCheckedAt   DateTime?                @map("video_checked_at")
+  publishedAt      DateTime?                @map("published_at")
   // Bumped only when content_md changes — powers the «урок обновлён» badge.
-  contentUpdatedAt DateTime         @default(now()) @map("content_updated_at")
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
+  contentUpdatedAt DateTime                 @default(now()) @map("content_updated_at")
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
   progress         LessonProgress[]
   reports          ContentReport[]
   questionLinks    QuestionLesson[]
@@ -501,19 +512,19 @@ model QuestionCategory {
 }
 
 model Question {
-  id              String              @id @default(cuid())
+  id              String                   @id @default(cuid())
   type            QuestionType
-  categoryId      String              @map("category_id")
-  category        QuestionCategory    @relation(fields: [categoryId], references: [id])
-  textMd          String              @map("text_md")
+  categoryId      String                   @map("category_id")
+  category        QuestionCategory         @relation(fields: [categoryId], references: [id])
+  textMd          String                   @map("text_md")
   /**
    * Эталон открытого вопроса (может содержать изображения/KaTeX).
    */
-  answerMd        String?             @map("answer_md")
+  answerMd        String?                  @map("answer_md")
   /**
    * Разбор закрытого вопроса — показывается в квизе и успешном тесте.
    */
-  explanationMd   String?             @map("explanation_md")
+  explanationMd   String?                  @map("explanation_md")
   /**
    * [{id,text,correct}] для single|multi|tf.
    */
@@ -521,16 +532,16 @@ model Question {
   /**
    * string[] для short_text (сравнение через нормализацию 7.4).
    */
-  acceptedAnswers Json?               @map("accepted_answers")
-  difficulty      Int                 @default(2)
-  status          ContentStatus       @default(draft)
+  acceptedAnswers Json?                    @map("accepted_answers")
+  difficulty      Int                      @default(2)
+  status          ContentStatus            @default(draft)
   /**
    * Флаг импортера: ответ был картинкой, формулы надо переписать в KaTeX.
    */
-  needsLatex      Boolean             @default(false) @map("needs_latex")
-  source          QuestionSource      @default(manual)
-  createdAt       DateTime            @default(now()) @map("created_at")
-  updatedAt       DateTime            @updatedAt @map("updated_at")
+  needsLatex      Boolean                  @default(false) @map("needs_latex")
+  source          QuestionSource           @default(manual)
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  updatedAt       DateTime                 @updatedAt @map("updated_at")
   lessonLinks     QuestionLesson[]
   quizAnswers     QuizAnswer[]
   attemptAnswers  TestAttemptAnswer[]
@@ -1140,15 +1151,15 @@ enum GuideSection {
 }
 
 model Recording {
-  id        String             @id @default(cuid())
-  title     String
-  stage     RecordingStage
-  direction RecordingDirection
-  grade     RecordingGrade
-  outcome   RecordingOutcome   @default(unknown)
+  id              String                   @id @default(cuid())
+  title           String
+  stage           RecordingStage
+  direction       RecordingDirection
+  grade           RecordingGrade
+  outcome         RecordingOutcome         @default(unknown)
   // DECISION: spec 6 lists company names are never published — only company_type.
-  companyType     CompanyType @map("company_type")
-  durationMinutes Int         @map("duration_minutes")
+  companyType     CompanyType              @map("company_type")
+  durationMinutes Int                      @map("duration_minutes")
   /**
    * Я.Диск share URL (spec 7.9). Ротация раз в месяц; свежесть отслеживается по
    * link_updated_at (Пульт подсвечивает записи старше 30 дней).
@@ -1158,22 +1169,22 @@ model Recording {
    * Опциональный embed-URL для iframe-плеера поверх Watermark; при отсутствии —
    * кнопка «Открыть запись» в новой вкладке (spec 7.9).
    */
-  embedUrl        String?     @map("embed_url")
-  linkUpdatedAt   DateTime    @default(now()) @map("link_updated_at")
+  embedUrl        String?                  @map("embed_url")
+  linkUpdatedAt   DateTime                 @default(now()) @map("link_updated_at")
   /**
    * {faces,voice,names,consent}:bool — гейт публикации (spec 7.9): публикация
    * возможна только при всех true. Инвариант держит сервисный слой.
    */
-  checklist Json
-  status    ContentStatus @default(draft)
+  checklist       Json
+  status          ContentStatus            @default(draft)
   /**
    * Таймкоды-главы (V1) — nullable, в MVP не заполняется.
    */
-  chapters  Json?
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime      @updatedAt @map("updated_at")
+  chapters        Json?
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  updatedAt       DateTime                 @updatedAt @map("updated_at")
   // Stage 8 (search): tsvector over the title only (spec 6), DB-trigger-kept.
-  searchVector Unsupported("tsvector")? @map("search_vector")
+  searchVector    Unsupported("tsvector")? @map("search_vector")
 
   views RecordingView[]
 
@@ -1200,7 +1211,7 @@ model RecordingView {
 }
 
 model Guide {
-  id      String       @id @default(cuid())
+  id        String        @id @default(cuid())
   // DECISION (spec 6 «Справочник»): slug is globally unique — routes go by
   // /guides/[slug]; the importer disambiguates cross-section title collisions.
   slug      String        @unique
@@ -1212,7 +1223,7 @@ model Guide {
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
 
-  bookmarks Bookmark[]
+  bookmarks    Bookmark[]
   // Stage 8 (search): tsvector (title 'A' + content_md 'B'), DB-trigger-kept.
   searchVector Unsupported("tsvector")? @map("search_vector")
 
@@ -1260,4 +1271,102 @@ model RecentItem {
   @@unique([userId, itemType, entityId])
   @@index([userId, openedAt])
   @@map("recent_items")
+}
+
+// --- Stage 9: notifications & announcements (spec 6 «Коммуникации», 7.12) ---
+
+// One delivered notification. A single row is BOTH the in-app bell entry (when
+// in_app=true) AND the email outbox record (when email_pending=true) — a type
+// may enable either or both channels for a user. In-app is written immediately;
+// email is deferred past quiet hours via scheduled_at and flushed by the worker
+// emailDispatch job (spec 7.12). `type` is a NotificationType string (config in
+// lib/services/notifications.ts) — not an enum, so new types don't need a migration.
+model Notification {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String
+  title        String
+  body         String    @default("")
+  url          String?
+  /**
+   * Visible in the bell + counts toward unread (false ⇒ email-only outbox row).
+   */
+  inApp        Boolean   @default(true) @map("in_app")
+  readAt       DateTime? @map("read_at")
+  /**
+   * Email queued but not yet sent (outbox).
+   */
+  emailPending Boolean   @default(false) @map("email_pending")
+  /**
+   * Earliest instant the email may be sent (now, or end of quiet hours).
+   */
+  scheduledAt  DateTime? @map("scheduled_at")
+  emailSentAt  DateTime? @map("email_sent_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Bell: unread count + recent 20 in-app (spec 7.12).
+  @@index([userId, inApp, readAt])
+  @@index([userId, createdAt])
+  // emailDispatch job: pending emails whose schedule is due.
+  @@index([emailPending, scheduledAt])
+  @@map("notifications")
+}
+
+// Per-user, per-type channel override (spec 6/7.12). Absent row ⇒ code defaults
+// (NOTIFICATION_TYPES). Always-on types ignore any stored row (can't be disabled);
+// the profile matrix only renders toggleable channels.
+model NotificationPref {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  email     Boolean
+  inapp     Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, type])
+  @@map("notification_prefs")
+}
+
+enum AnnouncementKind {
+  banner
+  notification
+}
+
+// Platform announcement (spec 6/8.5). `segment` is "all" | "course:{id}" |
+// "mock_this_week" (string, parsed by the service). kind=banner shows a
+// dismissible strip above student content (announcement_reads); kind=notification
+// is delivered through notify() at creation time.
+model Announcement {
+  id          String             @id @default(cuid())
+  title       String
+  bodyMd      String             @map("body_md")
+  kind        AnnouncementKind
+  segment     String
+  createdById String             @map("created_by")
+  createdBy   User               @relation("AnnouncementCreator", fields: [createdById], references: [id])
+  startsAt    DateTime           @map("starts_at")
+  endsAt      DateTime?          @map("ends_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  reads       AnnouncementRead[]
+
+  @@index([kind, startsAt])
+  @@index([createdById])
+  @@map("announcements")
+}
+
+model AnnouncementRead {
+  id             String       @id @default(cuid())
+  announcementId String       @map("announcement_id")
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId         String       @map("user_id")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@map("announcement_reads")
 }

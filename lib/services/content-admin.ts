@@ -1,6 +1,7 @@
 import type { ContentStatus, CourseGating, LessonDifficulty, PrismaClient } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { writeAudit } from "@/lib/services/audit";
+import { notify } from "@/lib/services/notifications";
 import { computeReadingMinutes } from "@/lib/utils/markdown";
 import { slugify, uniqueSlug } from "@/lib/utils/slug";
 
@@ -241,6 +242,82 @@ export async function createLesson(
   return { id: lesson.id };
 }
 
+// --- Stage 9: lesson notification triggers (spec 7.12/task) ---
+
+/**
+ * lesson_new (spec 7.12): on the FIRST publish of a lesson whose module AND
+ * course are already published, notify every active student. Fires only from
+ * the single-lesson publish (adding a lesson to a live course — acceptance flow
+ * 9); the bulk imported-draft publish runs while the course is still draft, so
+ * the course-published guard keeps it silent. DECISION: bulk publish does not
+ * emit lesson_new (would flood on the 64-draft review).
+ */
+export async function notifyLessonPublished(
+  db: PrismaClient,
+  lessonId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  const lesson = await db.lesson.findUnique({
+    where: { id: lessonId },
+    include: {
+      module: { select: { status: true, course: { select: { title: true, status: true } } } },
+    },
+  });
+  if (!lesson || lesson.status !== "published") return;
+  if (lesson.module.status !== "published" || lesson.module.course.status !== "published") return;
+
+  const students = await db.user.findMany({
+    where: { role: "student", status: "active" },
+    select: { id: true },
+  });
+  for (const student of students) {
+    await notify(
+      db,
+      student.id,
+      "lesson_new",
+      { lessonId: lesson.id, lessonTitle: lesson.title, courseTitle: lesson.module.course.title },
+      { now },
+    );
+  }
+}
+
+/**
+ * lesson_updated (spec 7.12): when a PUBLISHED lesson's content bumps, notify
+ * students who already completed it. Guarded on published (draft edits — the
+ * common case — stay silent) and deduped on the unread notification so autosave
+ * bursts collapse into one pending «урок обновлён» per student until they read it.
+ */
+export async function notifyLessonUpdated(
+  db: PrismaClient,
+  lessonId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  const lesson = await db.lesson.findUnique({
+    where: { id: lessonId },
+    select: { id: true, title: true, status: true },
+  });
+  if (!lesson || lesson.status !== "published") return;
+
+  const completers = await db.lessonProgress.findMany({
+    where: { lessonId, status: "completed" },
+    select: { userId: true },
+  });
+  const url = `/lessons/${lessonId}`;
+  for (const completer of completers) {
+    const pending = await db.notification.count({
+      where: { userId: completer.userId, type: "lesson_updated", url, inApp: true, readAt: null },
+    });
+    if (pending > 0) continue;
+    await notify(
+      db,
+      completer.userId,
+      "lesson_updated",
+      { lessonId: lesson.id, lessonTitle: lesson.title },
+      { now },
+    );
+  }
+}
+
 export async function getLessonForEditor(db: Db, lessonId: string) {
   return db.lesson.findUnique({
     where: { id: lessonId },
@@ -269,6 +346,9 @@ export async function saveLessonContent(
       where: { id: lesson.id },
       data: { contentMd: input.contentMd, readingMinutes, contentUpdatedAt: now },
     });
+    // Published lesson edited → notify completers («урок обновлён», spec 7.12).
+    // No-op for drafts (the common editing case) via the published guard inside.
+    await notifyLessonUpdated(db, lesson.id, now);
   }
   return { ok: true, readingMinutes };
 }
@@ -332,11 +412,12 @@ export async function setLessonStatus(
   });
   if (!lesson) return { ok: false, code: "not_found" };
 
+  const firstPublish = input.status === "published" && lesson.publishedAt === null;
   await db.lesson.update({
     where: { id: lesson.id },
     data: {
       status: input.status,
-      ...(input.status === "published" && lesson.publishedAt === null ? { publishedAt: now } : {}),
+      ...(firstPublish ? { publishedAt: now } : {}),
     },
   });
   await writeAudit(db, {
@@ -347,6 +428,10 @@ export async function setLessonStatus(
     before: { status: lesson.status },
     after: { status: input.status },
   });
+  // New lesson going live in a published course → lesson_new (spec 7.12).
+  if (firstPublish) {
+    await notifyLessonPublished(db, lesson.id, now);
+  }
   return { ok: true, courseSlug: lesson.module.course.slug };
 }
 

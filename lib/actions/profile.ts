@@ -1,18 +1,21 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { changePassword } from "@/lib/services/auth";
 import { revokeSessions } from "@/lib/services/sessions";
+import { updateNotificationPrefs } from "@/lib/services/notifications";
 import {
   ActionError,
   assertActiveAccess,
   assertNotImpersonating,
   parseInput,
   requireActionAuth,
+  requireActionStudent,
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
-import { changePasswordSchema } from "@/lib/utils/validation";
+import { changePasswordSchema, notificationSettingsSchema } from "@/lib/utils/validation";
 
 export type ProfileFormState = ActionResult<undefined> | null;
 
@@ -37,6 +40,33 @@ export async function changePasswordAction(
     if (!res.ok) {
       throw new ActionError(res.code, "Неверный текущий пароль");
     }
+    return undefined;
+  });
+}
+
+/**
+ * Notification settings (spec 7.12/8.3): digest time, quiet hours, and the
+ * toggleable channel matrix. Only toggleable channels are honored server-side —
+ * «всегда»-типы ignore the submitted matrix (updateNotificationPrefs clamps).
+ */
+export async function updateNotificationSettingsAction(
+  input: unknown,
+): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionStudent();
+    assertNotImpersonating(auth);
+    assertActiveAccess(auth);
+    const parsed = parseInput(notificationSettingsSchema, input);
+    await prisma.user.update({
+      where: { id: auth.user.id },
+      data: {
+        digestTime: parsed.digestTime,
+        quietHoursStart: parsed.quietHoursStart,
+        quietHoursEnd: parsed.quietHoursEnd,
+      },
+    });
+    await updateNotificationPrefs(prisma, auth.user.id, parsed.prefs);
+    revalidatePath("/profile");
     return undefined;
   });
 }
