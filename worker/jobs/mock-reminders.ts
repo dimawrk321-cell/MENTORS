@@ -42,7 +42,16 @@ export async function runMockRemindersJob(
         where: { userId: booking.userId, type: "mock_24h", url },
       });
       if (has24 === 0) {
-        await notify(db, booking.userId, "mock_24h", { bookingId: booking.id, whenText }, { now });
+        await notify(
+          db,
+          booking.userId,
+          "mock_24h",
+          { bookingId: booking.id, whenText },
+          {
+            now,
+            emailDeadline: start,
+          },
+        );
         sent24 += 1;
       }
 
@@ -52,7 +61,16 @@ export async function runMockRemindersJob(
           where: { userId: booking.userId, type: "mock_1h", url },
         });
         if (has1 === 0) {
-          await notify(db, booking.userId, "mock_1h", { bookingId: booking.id, whenText }, { now });
+          await notify(
+            db,
+            booking.userId,
+            "mock_1h",
+            { bookingId: booking.id, whenText },
+            {
+              now,
+              emailDeadline: start,
+            },
+          );
           sent1 += 1;
         }
       }

@@ -418,18 +418,31 @@ export async function bookMock(
       select: { timezone: true },
     });
     const interviewerTz = interviewer?.timezone ?? "Europe/Moscow";
-    await notify(tx, input.userId, "mock_booked", {
-      role: "student",
-      bookingId: booking.id,
-      whenText: formatDateTimeRu(slot.starts_at, user.timezone),
-      mockType: input.type,
-    });
-    await notify(tx, slot.interviewer_id, "mock_booked", {
-      role: "interviewer",
-      whenText: formatDateTimeRu(slot.starts_at, interviewerTz),
-      mockType: input.type,
-      studentName: user.name,
-    });
+    // emailDeadline = mock start: a booking confirmation past the mock is useless.
+    await notify(
+      tx,
+      input.userId,
+      "mock_booked",
+      {
+        role: "student",
+        bookingId: booking.id,
+        whenText: formatDateTimeRu(slot.starts_at, user.timezone),
+        mockType: input.type,
+      },
+      { emailDeadline: slot.starts_at },
+    );
+    await notify(
+      tx,
+      slot.interviewer_id,
+      "mock_booked",
+      {
+        role: "interviewer",
+        whenText: formatDateTimeRu(slot.starts_at, interviewerTz),
+        mockType: input.type,
+        studentName: user.name,
+      },
+      { emailDeadline: slot.starts_at },
+    );
     return { ok: true, bookingId: booking.id };
   });
 }

@@ -284,6 +284,57 @@ describe("mockReminders job (spec 7.8)", () => {
   });
 });
 
+describe("тихие часы vs срочные напоминания (§9 acceptance)", () => {
+  it("бронь за 40 минут в тихие часы → email не шлётся и не зависает в outbox", async () => {
+    const now = new Date("2026-07-15T00:00:00Z"); // 03:00 MSK — тихие часы
+    const interviewer = await createInterviewer("mi2@test.local");
+    const student = await createTestUser({
+      email: "ms2@test.local",
+      timezone: MSK,
+      role: "student",
+    });
+    const start = new Date(now.getTime() + 40 * 60_000); // 03:40 MSK
+    const slot = await createSlot(interviewer.id, start, "booked");
+    await testDb.booking.create({
+      data: { slotId: slot.id, userId: student.id, type: "theory", status: "booked", roomUrl: "r" },
+    });
+
+    await runMockRemindersJob(testDb, now);
+    // и mock_24h, и mock_1h созданы как in-app, но email НЕ поставлен в очередь
+    const notes = await testDb.notification.findMany({ where: { userId: student.id } });
+    expect(notes.map((n) => n.type).sort()).toEqual(["mock_1h", "mock_24h"]);
+    expect(notes.every((n) => n.inApp === true)).toBe(true);
+    expect(notes.every((n) => n.emailPending === false)).toBe(true);
+    expect(await testDb.notification.count({ where: { emailPending: true } })).toBe(0);
+
+    // emailDispatch ничего не отправляет и ничего не зависает
+    expect(await runEmailDispatchJob(testDb, now)).toMatchObject({ sent: 0, skipped: 0 });
+  });
+
+  it("emailDispatch пропускает просроченный email (past deadline)", async () => {
+    const now = new Date("2026-07-15T09:00:00Z");
+    const u = await createTestUser({ email: "ed2@test.local" });
+    await testDb.notification.create({
+      data: {
+        userId: u.id,
+        type: "mock_1h",
+        title: "Мок",
+        body: "…",
+        url: "/mocks/x",
+        inApp: true,
+        emailPending: true,
+        scheduledAt: new Date(now.getTime() - 60_000),
+        emailDeadline: new Date(now.getTime() - 30_000), // дедлайн в прошлом
+      },
+    });
+    const res = await runEmailDispatchJob(testDb, now);
+    expect(res).toMatchObject({ sent: 0, skipped: 1 });
+    const n = await testDb.notification.findFirst({ where: { userId: u.id } });
+    expect(n?.emailPending).toBe(false); // снят с очереди
+    expect(n?.emailSentAt).toBeNull(); // не отправлен
+  });
+});
+
 describe("emailDispatch job (spec 7.12)", () => {
   it("отправляет готовые письма, будущие — оставляет", async () => {
     const now = new Date("2026-07-15T09:00:00Z");

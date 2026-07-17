@@ -66,6 +66,14 @@ export const NOTIFICATION_TYPES = {
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;
 
+/**
+ * Types whose email must NOT be deferred past quiet hours (§9 acceptance fix): a
+ * mock reminder arriving after the mock is worse than not arriving. In quiet
+ * hours their email is dropped entirely (the in-app copy still fires immediately).
+ * All other types defer their email to the end of quiet hours as usual.
+ */
+export const EMAIL_NON_DEFERRABLE: ReadonlySet<NotificationType> = new Set(["mock_1h", "mock_24h"]);
+
 // --- Per-type payloads (data needed to render Russian title/body/url) ---
 
 export interface NotifyPayloads {
@@ -298,16 +306,20 @@ export async function resolveEffectivePref(
 
 /**
  * Single delivery seam (spec 7.12). Gates by prefs, writes the in-app row and/or
- * queues email (deferred past quiet hours), records `notification.sent`. Safe to
+ * queues email (deferred past quiet hours, except time-sensitive types which are
+ * dropped instead — §9 acceptance fix), records `notification.sent`. Safe to
  * call inside a caller transaction — no network I/O (email is flushed by the
- * worker). No-op when both channels are disabled or the user is missing.
+ * worker). No-op when nothing would be delivered or the user is missing.
+ *
+ * `opts.emailDeadline` marks the email's relevance horizon (for mock_* — the
+ * booking start): emailDispatch skips a pending email past it.
  */
 export async function notify<T extends NotificationType>(
   db: Db,
   userId: string,
   type: T,
   payload: NotifyPayloads[T],
-  opts: { now?: Date } = {},
+  opts: { now?: Date; emailDeadline?: Date | null } = {},
 ): Promise<void> {
   const now = opts.now ?? new Date();
   const pref = await resolveEffectivePref(db, userId, type);
@@ -321,7 +333,8 @@ export async function notify<T extends NotificationType>(
 
   const { title, body, url } = renderNotification(type, payload);
 
-  // In-app is created immediately; email is deferred past quiet hours (spec 7.12).
+  // In-app is created immediately; email scheduling (spec 7.12 + §9 acceptance fix).
+  let emailPending = false;
   let scheduledAt: Date | null = null;
   if (pref.email) {
     const inQuiet = isWithinQuietHours(
@@ -330,8 +343,18 @@ export async function notify<T extends NotificationType>(
       user.quietHoursStart,
       user.quietHoursEnd,
     );
-    scheduledAt = inQuiet ? nextLocalTimeUtc(now, user.timezone, user.quietHoursEnd) : now;
+    if (inQuiet && EMAIL_NON_DEFERRABLE.has(type)) {
+      // Time-sensitive: deferring past quiet hours would arrive after the mock —
+      // drop the email entirely (the in-app copy still notifies immediately).
+      emailPending = false;
+    } else {
+      emailPending = true;
+      scheduledAt = inQuiet ? nextLocalTimeUtc(now, user.timezone, user.quietHoursEnd) : now;
+    }
   }
+
+  // Nothing to deliver (e.g. in-app off + email dropped in quiet hours) → no row.
+  if (!pref.inapp && !emailPending) return;
 
   await db.notification.create({
     data: {
@@ -341,15 +364,16 @@ export async function notify<T extends NotificationType>(
       body,
       url,
       inApp: pref.inapp,
-      emailPending: pref.email,
+      emailPending,
       scheduledAt,
+      emailDeadline: emailPending ? (opts.emailDeadline ?? null) : null,
     },
   });
 
   // notification.sent per channel — без текста (spec 7.13/task «События»).
   const channels: ("inapp" | "email")[] = [];
   if (pref.inapp) channels.push("inapp");
-  if (pref.email) channels.push("email");
+  if (emailPending) channels.push("email");
   for (const channel of channels) {
     await db.analyticsEvent.create({
       data: { type: "notification.sent", payload: { notifType: type, channel }, userId },

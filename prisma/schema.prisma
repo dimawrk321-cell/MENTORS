@@ -1282,28 +1282,34 @@ model RecentItem {
 // emailDispatch job (spec 7.12). `type` is a NotificationType string (config in
 // lib/services/notifications.ts) — not an enum, so new types don't need a migration.
 model Notification {
-  id           String    @id @default(cuid())
-  userId       String    @map("user_id")
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type         String
-  title        String
-  body         String    @default("")
-  url          String?
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String
+  title         String
+  body          String    @default("")
+  url           String?
   /**
    * Visible in the bell + counts toward unread (false ⇒ email-only outbox row).
    */
-  inApp        Boolean   @default(true) @map("in_app")
-  readAt       DateTime? @map("read_at")
+  inApp         Boolean   @default(true) @map("in_app")
+  readAt        DateTime? @map("read_at")
   /**
    * Email queued but not yet sent (outbox).
    */
-  emailPending Boolean   @default(false) @map("email_pending")
+  emailPending  Boolean   @default(false) @map("email_pending")
   /**
    * Earliest instant the email may be sent (now, or end of quiet hours).
    */
-  scheduledAt  DateTime? @map("scheduled_at")
-  emailSentAt  DateTime? @map("email_sent_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
+  scheduledAt   DateTime? @map("scheduled_at")
+  /**
+   * Relevance deadline for the email (§9 acceptance fix): for mock_* it is the
+   * booking start. emailDispatch skips a pending email past its deadline so a
+   * time-sensitive reminder never arrives after the mock. null ⇒ no deadline.
+   */
+  emailDeadline DateTime? @map("email_deadline")
+  emailSentAt   DateTime? @map("email_sent_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   // Bell: unread count + recent 20 in-app (spec 7.12).
   @@index([userId, inApp, readAt])

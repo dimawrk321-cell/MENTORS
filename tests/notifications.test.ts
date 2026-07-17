@@ -119,6 +119,22 @@ describe("тихие часы (spec 7.12)", () => {
     expect(n?.scheduledAt?.toISOString()).toBe("2026-07-16T05:00:00.000Z");
   });
 
+  it("срочные типы (mock_1h/mock_24h) в тихие часы: email отбрасывается, не откладывается", async () => {
+    const u = await createTestUser({ email: "q5@test.local", timezone: MSK }); // 22:00–08:00
+    const now = msk("2026-07-15T03:00"); // тихие часы
+    await notify(
+      testDb,
+      u.id,
+      "mock_1h",
+      { bookingId: "b", whenText: "в 03:40" },
+      { now, emailDeadline: msk("2026-07-15T03:40") },
+    );
+    const n = await testDb.notification.findFirst({ where: { userId: u.id, type: "mock_1h" } });
+    expect(n?.inApp).toBe(true); // in-app остаётся
+    expect(n?.emailPending).toBe(false); // email отброшен, не в очереди
+    expect(n?.scheduledAt).toBeNull();
+  });
+
   it("вне тихих часов email уходит сразу (scheduled = now)", async () => {
     const u = await createTestUser({ email: "q2@test.local", timezone: MSK });
     const now = msk("2026-07-15T12:00");
