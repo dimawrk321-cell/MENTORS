@@ -121,17 +121,32 @@ function initCluster() {
       "-E",
       "UTF8",
     ];
-    // Prefer ICU with Russian collation (proper ORDER BY for russian content);
-    // fall back to plain C locale if ICU is unavailable in the bundle.
-    let res = run(exe("initdb"), [
-      ...base,
-      "--locale-provider=icu",
-      "--icu-locale=ru-RU",
-      "--locale=C",
-    ]);
-    if (res.status !== 0) {
-      console.log("ICU-локаль недоступна, использую locale=C ...");
+    // LC_CTYPE MUST classify Cyrillic as letters, or pg_trgm extracts no trigrams
+    // and the search typo-fallback (spec 7.11) silently returns nothing — under a
+    // `C` locale `show_trgm('метрики')` is empty. So the cluster is initialised
+    // with a Cyrillic-aware LC_CTYPE; LC_COLLATE stays `C` for deterministic,
+    // cross-platform byte ordering (Windows dev ↔ Linux prod). See
+    // mentors-dev-ops-notes. (FTS `russian` is dictionary-based and locale-safe.)
+    const localeAttempts = [
+      ["--lc-ctype=ru-RU", "--lc-collate=C"],
+      ["--lc-ctype=Russian_Russia.utf8", "--lc-collate=C"],
+    ];
+    let res;
+    let localed = false;
+    for (const loc of localeAttempts) {
+      res = run(exe("initdb"), [...base, ...loc]);
+      if (res.status === 0) {
+        localed = true;
+        break;
+      }
       rmSync(DATA_DIR, { recursive: true, force: true });
+    }
+    if (!localed) {
+      // Last resort: C locale — the server runs, but the search typo-fallback is
+      // degraded (silent). Prefer fixing the OS locale over shipping this.
+      console.log(
+        "Кириллическая LC_CTYPE недоступна — ставлю C (подсказки при опечатках в поиске работать не будут) ...",
+      );
       res = run(exe("initdb"), [...base, "--locale=C"]);
     }
     if (res.status !== 0) {
@@ -201,11 +216,34 @@ function ensureDatabase() {
     fail(`Не удалось проверить наличие базы:\n${check.stderr}`);
   }
   if (check.stdout.trim() === "1") return;
-  const create = run(
+  // Create from template0 with an explicit Cyrillic-aware LC_CTYPE so the search
+  // typo-fallback works even on an already-`C` cluster (spec 7.11). LC_COLLATE=C
+  // for deterministic byte order. See mentors-dev-ops-notes / initCluster.
+  const base = ["-h", DB.host, "-p", String(DB.port), "-U", DB.user];
+  let create = run(
     exe("createdb"),
-    ["-h", DB.host, "-p", String(DB.port), "-U", DB.user, DB.name],
+    [
+      ...base,
+      "--template",
+      "template0",
+      "--encoding",
+      "UTF8",
+      "--lc-ctype",
+      "ru-RU",
+      "--lc-collate",
+      "C",
+      DB.name,
+    ],
     env,
   );
+  if (create.status !== 0) {
+    // OS lacks a Cyrillic LC_CTYPE — fall back to the cluster default so setup
+    // still succeeds (search FTS works; only the typo-fallback is degraded).
+    console.log(
+      "Кириллическая LC_CTYPE недоступна — создаю базу в locale кластера (подсказки при опечатках работать не будут) ...",
+    );
+    create = run(exe("createdb"), [...base, DB.name], env);
+  }
   if (create.status !== 0) {
     fail(`Не удалось создать базу ${DB.name}:\n${create.stderr}`);
   }
