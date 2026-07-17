@@ -36,3 +36,7 @@ coverage
 
 # importer run output — regenerated on every `pnpm import`, not source
 /import-report.md
+
+# database dumps / backups — contain real user + content data, never commit
+/backups/
+*.dump
