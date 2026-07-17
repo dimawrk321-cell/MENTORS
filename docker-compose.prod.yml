@@ -9,10 +9,12 @@ name: mentors
 
 services:
   postgres:
-    # Debian/glibc image, NOT alpine/musl: pg_trgm keys off LC_CTYPE, and musl
-    # does not classify Cyrillic as letters (`'т' ~ '[[:alpha:]]'` = false), so on
-    # alpine the search typo-fallback (spec 7.11) silently returns nothing. glibc
-    # C.UTF-8 classifies Cyrillic correctly. See MENTORS_TZ changelog / stage 8.
+    # Debian/glibc image, NOT alpine/musl. pg_trgm's Cyrillic trigram extraction
+    # keys off the C-library LC_CTYPE; on glibc a UTF-8 ctype (here C.UTF-8) yields
+    # Cyrillic trigrams — verified on the stend: show_trgm('тест') → 5 — so the
+    # search typo-fallback (spec 7.11) works. Verify with show_trgm, NOT
+    # `~ '[[:alpha:]]'` / lower(): those reflect the default collation
+    # (LC_COLLATE=C), not LC_CTYPE. See MENTORS_TZ changelog / stage 8.
     image: postgres:16
     restart: unless-stopped
     environment:
