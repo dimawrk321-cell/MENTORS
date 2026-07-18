@@ -259,42 +259,73 @@ export async function computeGuideStats(db: Db, now: Date, days: number): Promis
   };
 }
 
-// --- Period-scoped bundle (everything except the course funnel) ---
+// --- Serializable activity DTO (spec 12.1/A1) ---
+//
+// A1 root cause: `unstable_cache` serializes its stored value, and a `Date` field
+// round-trips to a STRING on a cache HIT. `ActivityPoint.weekStart` was a `Date`;
+// on the second render of a given period the page called `weekStart.toISOString()`
+// / `Intl.format(weekStart)` on a string → TypeError that took down the whole
+// /admin/analytics route (the period tabs live inside the failed tree, so it stayed
+// stuck). Fix: cached functions cross ONLY primitives — the week label is
+// precomputed server-side here, no Date leaves the cache boundary.
+const weekLabel = (d: Date) =>
+  new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(d);
 
-export interface AnalyticsBundle {
-  topFailed: FailedQuestion[];
-  lagging: LaggingCategory[];
-  activity: ActivityPoint[];
-  mocks: MockStats;
-  guides: GuideStats;
+export interface ActivityBar {
+  key: string;
+  label: string;
+  active: number;
 }
 
-export async function computeAnalyticsBundle(
-  db: Db,
-  now: Date,
-  days: number,
-): Promise<AnalyticsBundle> {
-  const [topFailed, lagging, activity, mocks, guides] = await Promise.all([
-    computeTopFailedQuestions(db),
-    computeLaggingCategories(db, now, days),
-    computeActivitySeries(db, now),
-    computeMockStats(db, now, days),
-    computeGuideStats(db, now, 30), // guides window fixed at 30 days (spec)
-  ]);
-  return { topFailed, lagging, activity, mocks, guides };
-}
-
-// --- Cached entry points (keyed by argument; 10 min; tag-invalidated) ---
-
-export const getAnalyticsBundle = unstable_cache(
-  async (days: number): Promise<AnalyticsBundle> =>
-    computeAnalyticsBundle(prisma, new Date(), days),
-  ["admin-analytics-bundle"],
-  { revalidate: 600, tags: [ANALYTICS_CACHE_TAG] },
-);
+// --- Cached per-widget entry points (spec 12.1/A1) ---
+//
+// Split from the old monolithic `getAnalyticsBundle` so one failing aggregate no
+// longer fails the whole page — each is wrapped in its own Suspense + error
+// boundary on the page. Each returns fully serializable data (no `Date`), keyed by
+// argument, cached 10 min, tag-invalidated. A throwing compute is NOT persisted by
+// `unstable_cache` (only resolved values are cached) — never wrap a compute in a
+// try/catch that returns an error sentinel here, or the error WOULD get cached.
 
 export const getCourseFunnel = unstable_cache(
   async (courseId: string): Promise<CourseFunnel> => computeCourseFunnel(prisma, courseId),
   ["admin-analytics-funnel"],
+  { revalidate: 600, tags: [ANALYTICS_CACHE_TAG] },
+);
+
+export const getTopFailed = unstable_cache(
+  async (): Promise<FailedQuestion[]> => computeTopFailedQuestions(prisma),
+  ["admin-analytics-top-failed"],
+  { revalidate: 600, tags: [ANALYTICS_CACHE_TAG] },
+);
+
+export const getLagging = unstable_cache(
+  async (days: number): Promise<LaggingCategory[]> =>
+    computeLaggingCategories(prisma, new Date(), days),
+  ["admin-analytics-lagging"],
+  { revalidate: 600, tags: [ANALYTICS_CACHE_TAG] },
+);
+
+export const getActivityBars = unstable_cache(
+  async (): Promise<ActivityBar[]> => {
+    const series = await computeActivitySeries(prisma, new Date());
+    return series.map((p) => ({
+      key: p.weekStart.toISOString(),
+      label: weekLabel(p.weekStart),
+      active: p.active,
+    }));
+  },
+  ["admin-analytics-activity"],
+  { revalidate: 600, tags: [ANALYTICS_CACHE_TAG] },
+);
+
+export const getMocks = unstable_cache(
+  async (days: number): Promise<MockStats> => computeMockStats(prisma, new Date(), days),
+  ["admin-analytics-mocks"],
+  { revalidate: 600, tags: [ANALYTICS_CACHE_TAG] },
+);
+
+export const getGuides = unstable_cache(
+  async (): Promise<GuideStats> => computeGuideStats(prisma, new Date(), 30),
+  ["admin-analytics-guides"],
   { revalidate: 600, tags: [ANALYTICS_CACHE_TAG] },
 );

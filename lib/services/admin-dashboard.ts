@@ -105,7 +105,9 @@ export interface OpenReport {
   type: string;
   authorName: string;
   target: string;
-  href: string;
+  // null when the report targets neither a lesson nor a question (general report):
+  // the row is then rendered as plain text, not a dead «#» link (spec 12.1/A2).
+  href: string | null;
   text: string | null;
 }
 
@@ -275,7 +277,7 @@ export async function computeRedFlags(db: Db, now: Date): Promise<RedFlags> {
             ? `/admin/content/lessons/${r.lesson.id}`
             : r.question
               ? `/admin/questions/${r.question.id}`
-              : "#",
+              : null,
         })),
       ),
   ]);

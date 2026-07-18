@@ -416,7 +416,7 @@ function CourseCard({ course }: { course: TreeCourse }) {
       </div>
 
       {/* Modules */}
-      {course.modules.length > 0 && (
+      {course.modules.length > 0 ? (
         <div className="border-border mt-1 flex flex-col gap-2 border-l pl-3">
           <SortableList
             ids={course.modules.map((m) => m.id)}
@@ -434,6 +434,11 @@ function CourseCard({ course }: { course: TreeCourse }) {
             ))}
           </SortableList>
         </div>
+      ) : (
+        // Empty course (spec 5.5/12.1-A4): don't leave a bare header with no body.
+        <p className="text-text-3 border-border mt-1 border-l py-2 pl-3 text-[13px]">
+          Пока нет модулей — добавь первый кнопкой с папкой выше.
+        </p>
       )}
 
       {/* Edit course dialog */}
@@ -636,7 +641,7 @@ function ModuleBlock({ module }: { module: TreeModule }) {
           </div>
         </div>
 
-        {module.lessons.length > 0 && (
+        {module.lessons.length > 0 ? (
           <div className="border-border mt-1 flex flex-col border-l pl-3">
             <SortableList
               ids={module.lessons.map((l) => l.id)}
@@ -654,6 +659,11 @@ function ModuleBlock({ module }: { module: TreeModule }) {
               ))}
             </SortableList>
           </div>
+        ) : (
+          // Empty module (spec 5.5/12.1-A4): show a prompt instead of a blank body.
+          <p className="text-text-3 border-border mt-1 border-l py-2 pl-3 text-[13px]">
+            Пока нет уроков — добавь первый кнопкой с плюсом выше.
+          </p>
         )}
       </div>
 

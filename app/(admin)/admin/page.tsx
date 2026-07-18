@@ -138,21 +138,34 @@ export default async function AdminDashboardPage() {
           empty="Открытых репортов нет."
           className="md:col-span-2"
         >
-          {flags.openReports.map((r) => (
-            <li key={r.id} className="flex items-start justify-between gap-3 py-1.5">
-              <Link
-                href={r.href}
-                className="ease-app hover:text-text-1 min-w-0 flex-1 text-[13px] transition-colors duration-150"
-              >
+          {flags.openReports.map((r) => {
+            const body = (
+              <>
                 <span className="text-text-1 font-medium">
                   {r.type === "error" ? "Ошибка" : "Непонятно"} · {r.target}
                 </span>
                 {r.text && <span className="text-text-3 mt-0.5 block truncate">«{r.text}»</span>}
                 <span className="text-text-3 block">{r.authorName}</span>
-              </Link>
-              <ResolveReportButton reportId={r.id} />
-            </li>
-          ))}
+              </>
+            );
+            return (
+              <li key={r.id} className="flex items-start justify-between gap-3 py-1.5">
+                {r.href ? (
+                  <Link
+                    href={r.href}
+                    className="ease-app hover:text-text-1 min-w-0 flex-1 text-[13px] transition-colors duration-150"
+                  >
+                    {body}
+                  </Link>
+                ) : (
+                  // General report (no lesson/question) — nowhere to navigate; render
+                  // as plain text so the row isn't a dead link (spec 12.1/A2).
+                  <div className="min-w-0 flex-1 text-[13px]">{body}</div>
+                )}
+                <ResolveReportButton reportId={r.id} />
+              </li>
+            );
+          })}
         </FlagWidget>
       </div>
     </div>

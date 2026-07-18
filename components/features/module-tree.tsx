@@ -117,10 +117,17 @@ export function ModuleTree({ modules }: { modules: ModuleTreeModule[] }) {
             </span>
           </header>
           <div className="flex flex-col">
-            {module.lessons.map((lesson) => (
-              <LessonRow key={lesson.id} lesson={lesson} />
-            ))}
-            {module.test && <TestRow moduleId={module.id} test={module.test} />}
+            {module.lessons.length === 0 && !module.test ? (
+              // Empty module (spec 5.5/12.1-A4): a published module with no lessons.
+              <p className="text-text-3 px-2.5 py-2 text-[13px]">В этом модуле пока нет уроков.</p>
+            ) : (
+              <>
+                {module.lessons.map((lesson) => (
+                  <LessonRow key={lesson.id} lesson={lesson} />
+                ))}
+                {module.test && <TestRow moduleId={module.id} test={module.test} />}
+              </>
+            )}
           </div>
         </section>
       ))}

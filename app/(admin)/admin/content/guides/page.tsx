@@ -36,7 +36,10 @@ export default async function AdminGuidesPage() {
                 <CreateGuideButton section={section} />
               </div>
               {items.length === 0 ? (
-                <p className="text-text-3 text-[13px]">В этой секции пока нет гайдов.</p>
+                // Spec 5.5/12.1-A4: anchored empty state per section (was a bare line).
+                <div className="rounded-control border-border text-text-3 border border-dashed px-3 py-4 text-center text-[13px]">
+                  В этой секции пока нет гайдов — создай первый кнопкой выше.
+                </div>
               ) : (
                 <div className="flex flex-col gap-1.5">
                   {items.map((guide) => (

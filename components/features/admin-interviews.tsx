@@ -346,6 +346,14 @@ function ProfilesTab({
   profiles: InterviewerProfileView[];
   canMutate: boolean;
 }) {
+  if (profiles.length === 0) {
+    // Spec 5.5/12.1-A4: no interviewer profiles → don't render an empty div.
+    return (
+      <p className="text-text-3 py-6 text-center text-[14px]">
+        Пока нет интервьюеров. Профиль появляется у пользователя с флагом интервьюера.
+      </p>
+    );
+  }
   return (
     <div className="flex flex-col gap-4">
       {profiles.map((profile) => (

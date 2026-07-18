@@ -30,6 +30,31 @@ function SmartLink({ href, children, ...props }: React.ComponentProps<"a">) {
   );
 }
 
+function ImageFrame({ src, alt, ...props }: React.ComponentProps<"img">) {
+  // Passe-partout mount (spec 12.1/A3): imported Notion screenshots are white and
+  // blind the reader in the dark theme. A white mount with padding + a hairline
+  // frame makes any content image look intentional in BOTH themes. <span> wrappers
+  // (not <div>) — a lone markdown image is wrapped in a <p>, and a block element
+  // inside <p> is invalid DOM and hydration-warns.
+  if (typeof src === "string" && (src === "TODO" || src.length === 0)) {
+    // Importer placeholder for an image that still needs manual upload (spec 7.14):
+    // src="TODO" would otherwise render a broken-image icon inside the frame.
+    return (
+      <span className="rounded-control border-border text-text-3 my-5 flex items-center justify-center border border-dashed px-4 py-6 text-center text-[13px]">
+        {alt || "Изображение будет добавлено"}
+      </span>
+    );
+  }
+  return (
+    <span className="my-5 flex justify-center">
+      <span className="inline-block rounded-[10px] border border-[rgb(0_0_0/0.08)] bg-white p-3.5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={alt ?? ""} className="block h-auto max-w-full" {...props} />
+      </span>
+    </span>
+  );
+}
+
 const components = {
   "callout-block": Callout,
   "video-embed": VideoEmbed,
@@ -38,6 +63,7 @@ const components = {
   pre: CodeBlock,
   table: TableWrap,
   a: SmartLink,
+  img: ImageFrame,
 } as unknown as Partial<Components>;
 
 export interface RenderedLessonContent {
