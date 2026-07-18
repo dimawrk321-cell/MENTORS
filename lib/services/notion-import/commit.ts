@@ -37,6 +37,16 @@ function zero(): Counts {
   return { created: 0, skipped: 0 };
 }
 
+// Synthetic-id prefix for would-create rows in dry-run. A real, persisted cuid
+// never starts with it, so `isRealId` distinguishes «this row would be created»
+// (synthetic) from «this row already exists» (real) — the basis for mirroring
+// commit's DB checks on links without writing anything.
+const DRY_ID_PREFIX = "dry:";
+
+function isRealId(id: string): boolean {
+  return !id.startsWith(DRY_ID_PREFIX);
+}
+
 class Committer {
   private readonly result: CommitResult = {
     dryRun: false,
@@ -116,7 +126,7 @@ class Committer {
 
   /** Synthetic id for a would-create row in dry-run (never collides with a cuid). */
   private dryId(kind: string, key: string): string {
-    return `dry:${kind}:${key}`;
+    return `${DRY_ID_PREFIX}${kind}:${key}`;
   }
 
   private async ensureCategory(cat: PlannedCategory): Promise<void> {
@@ -348,14 +358,30 @@ class Committer {
       return;
     }
     if (this.dryRun) {
-      // Synthetic ids: dedupe pairs in-memory so an is_key link and a later
-      // category link to the same (lesson, question) count as one create + skip.
+      // Dedupe within this run: an is_key link and a later category link to the
+      // same (lesson, question) count once (create), the rest as skips — exactly
+      // as commit does once the first row is written.
       const key = `${lessonId}|${questionId}`;
-      if (this.seenLinks.has(key)) counts.skipped += 1;
-      else {
-        this.seenLinks.add(key);
-        counts.created += 1;
+      if (this.seenLinks.has(key)) {
+        counts.skipped += 1;
+        return;
       }
+      this.seenLinks.add(key);
+      // A synthetic id means the lesson or question is itself a would-create row,
+      // so no link can pre-exist. Only when BOTH ids are real (already persisted)
+      // can the link already exist — mirror commit by checking question_lessons.
+      // Without this, a dry-run over an already-loaded DB over-counts every link
+      // as a create while commit skips all (the «55 привязок vs 0» stend bug).
+      if (isRealId(lessonId) && isRealId(questionId)) {
+        const existing = await this.db.questionLesson.findUnique({
+          where: { questionId_lessonId: { questionId, lessonId } },
+        });
+        if (existing) {
+          counts.skipped += 1;
+          return;
+        }
+      }
+      counts.created += 1;
       return;
     }
     const existing = await this.db.questionLesson.findUnique({

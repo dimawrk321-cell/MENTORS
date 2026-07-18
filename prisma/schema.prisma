@@ -158,6 +158,9 @@ model User {
   announcementsCreated Announcement[]     @relation("AnnouncementCreator")
   announcementReads    AnnouncementRead[]
 
+  // Stage 11: /admin/import run history (spec 8.5) — actor of an import.
+  importRuns ImportRun[] @relation("ImportActor")
+
   @@index([status, accessUntil])
   @@map("users")
 }
@@ -1375,4 +1378,51 @@ model AnnouncementRead {
   @@unique([announcementId, userId])
   @@index([userId])
   @@map("announcement_reads")
+}
+
+// --- Stage 11: Notion importer runs (spec 7.14 / 8.5 «/admin/import») ---
+
+enum ImportRunStatus {
+  pending
+  parsing
+  planning
+  committing
+  done
+  error
+}
+
+// One /admin/import execution (spec 8.5): who ran it, the uploaded file, mode
+// (dry_run), a phase status polled by the page, and — on completion — the
+// per-type created/skipped counts, anomaly count and the rendered CLI-identical
+// .md report. The CLI path (`pnpm import`) does not write a row; this table is
+// the admin UI's run history. The advisory lock «notion-import» (not this table)
+// is the hard cross-process guard against parallel runs.
+model ImportRun {
+  id             String          @id @default(cuid())
+  actorId        String          @map("actor_id")
+  actor          User            @relation("ImportActor", fields: [actorId], references: [id])
+  fileName       String          @map("file_name")
+  fileSize       Int             @map("file_size")
+  dryRun         Boolean         @map("dry_run")
+  status         ImportRunStatus @default(pending)
+  /**
+   * CommitResult per-type {created,skipped} + image copied/missing + guide
+   * sections. Null until the run reaches a terminal state.
+   */
+  counts         Json?
+  anomaliesCount Int             @default(0) @map("anomalies_count")
+  /**
+   * Rendered .md report (identical to the CLI's import-report.md) — shown on
+   * screen and offered as a download. Null until done.
+   */
+  report         String?
+  /** User-facing Russian error message when status=error. */
+  error          String?
+  startedAt      DateTime        @default(now()) @map("started_at")
+  finishedAt     DateTime?       @map("finished_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@index([createdAt])
+  @@map("import_runs")
 }

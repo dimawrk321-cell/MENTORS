@@ -249,3 +249,59 @@ export const RECENT_SHOW = 5;
 /** Период-селектор аналитики (spec 8.5): 7/30/90 дней. */
 export const ANALYTICS_PERIODS = [7, 30, 90] as const;
 export type AnalyticsPeriod = (typeof ANALYTICS_PERIODS)[number];
+
+// --- Stage 11: importer (/admin/import, spec 7.14/8.5) — client-safe ---
+
+/** Лимит размера md-файла экспорта (spec 7.14: «до 25 МБ»). */
+export const IMPORT_MAX_MD_MB = 25;
+/** Лимит размера опционального zip с картинками. */
+export const IMPORT_MAX_ZIP_MB = 100;
+
+/** Русские подписи фаз выполнения импорта (поллинг статуса джобы). */
+export const IMPORT_RUN_STATUS_LABEL: Record<string, string> = {
+  pending: "В очереди",
+  parsing: "Разбор файла",
+  planning: "Построение плана",
+  committing: "Запись в базу",
+  done: "Готово",
+  error: "Ошибка",
+};
+
+/** Незавершённые статусы прогона — для индикатора «идёт импорт». */
+export const IMPORT_RUN_ACTIVE_STATUSES = ["pending", "parsing", "planning", "committing"] as const;
+
+/** Подписи строк отчёта (создано/пропущено по типам) — совпадают с CLI-отчётом. */
+export const IMPORT_COUNT_LABEL: Record<string, string> = {
+  courses: "Курсы",
+  modules: "Модули",
+  lessons: "Уроки",
+  categories: "Категории вопросов",
+  questions: "Вопросы (банк)",
+  keyQuestions: "Вопросы «Проверка себя»",
+  keyLinks: "Привязки ключевых (is_key)",
+  categoryLinks: "Привязки по «Категориям…»",
+  guides: "Гайды (справочник)",
+};
+
+/** Порядок строк счётчиков в отчёте (совпадает с CLI). */
+export const IMPORT_COUNT_ORDER = [
+  "courses",
+  "modules",
+  "lessons",
+  "categories",
+  "questions",
+  "keyQuestions",
+  "keyLinks",
+  "categoryLinks",
+  "guides",
+] as const;
+
+/** Подписи типов аномалий отчёта импортера (spec 7.14 п.6). */
+export const IMPORT_ANOMALY_LABEL: Record<string, string> = {
+  questionsAtSubcategoryLevel: "Вопросы не на своём уровне",
+  unrecognizedCategoryLinks: "Нераспознанные категории",
+  needsLatex: "needs_latex (ответ был картинкой)",
+  todoImages: "TODO-изображения",
+  skippedSections: "Пропущенные разделы",
+  createdNonSeedRootCategories: "Новые корневые категории",
+};

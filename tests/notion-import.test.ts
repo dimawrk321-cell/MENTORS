@@ -31,17 +31,26 @@ const IMPORT_FIXTURE = [
   "          `list[::-1]` или `reversed()`.",
 ].join("\n");
 
+/** Every per-type counter of a CommitResult except the `dryRun` flag. */
+const COUNT_KEYS = [
+  "courses",
+  "modules",
+  "lessons",
+  "categories",
+  "questions",
+  "keyQuestions",
+  "keyLinks",
+  "categoryLinks",
+  "guides",
+] as const;
+
 function totalCreated(result: CommitResult): number {
-  return (
-    result.courses.created +
-    result.modules.created +
-    result.lessons.created +
-    result.categories.created +
-    result.questions.created +
-    result.keyQuestions.created +
-    result.keyLinks.created +
-    result.categoryLinks.created
-  );
+  return COUNT_KEYS.reduce((sum, key) => sum + result[key].created, 0);
+}
+
+/** Asserts two runs agree on ALL report counters (spec 7.14: dry-run == commit). */
+function expectSameCounts(a: CommitResult, b: CommitResult): void {
+  for (const key of COUNT_KEYS) expect({ [key]: a[key] }).toEqual({ [key]: b[key] });
 }
 
 describe("commitPlan — idempotent skip-if-exists (spec 7.14)", () => {
@@ -94,6 +103,29 @@ describe("commitPlan — idempotent skip-if-exists (spec 7.14)", () => {
     expect(dry.keyLinks).toEqual(wet.keyLinks);
     expect(dry.categoryLinks).toEqual(wet.categoryLinks); // was undercounted to 0 before the fix
     expect(wet.categoryLinks.created).toBeGreaterThanOrEqual(2);
+    expectSameCounts(dry, wet); // ALL counters, not a subset (spec 7.14)
+  });
+
+  it("dry-run mirrors commit against an already-loaded DB — links included (stend «55 vs 0» bug)", async () => {
+    const plan = buildImportPlan(IMPORT_FIXTURE, new Set());
+    // First commit loads everything, including is_key + category links.
+    const firstCommit = await commitPlan(testDb, plan, { dryRun: false });
+    expect(firstCommit.keyLinks.created + firstCommit.categoryLinks.created).toBeGreaterThanOrEqual(
+      3,
+    );
+
+    // A dry-run over the already-loaded DB must report the SAME counters a second
+    // commit would — 0 created everywhere, links skipped — not re-count every link
+    // as a create (the regression: dry-run said «создать 55 привязок», commit did 0).
+    const secondDry = await commitPlan(testDb, plan, { dryRun: true });
+    const secondCommit = await commitPlan(testDb, plan, { dryRun: false });
+
+    expectSameCounts(secondDry, secondCommit);
+    expect(totalCreated(secondDry)).toBe(0);
+    expect(secondDry.keyLinks.created).toBe(0);
+    expect(secondDry.categoryLinks.created).toBe(0);
+    expect(secondDry.keyLinks.skipped).toBe(secondCommit.keyLinks.skipped);
+    expect(secondDry.categoryLinks.skipped).toBe(secondCommit.categoryLinks.skipped);
   });
 
   it("does not collapse two lessons whose cleaned titles match (review fix B)", async () => {
