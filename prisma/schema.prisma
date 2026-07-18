@@ -45,6 +45,14 @@ enum Theme {
   light
 }
 
+// Stage 12.1 (spec C9): reading font size for lesson/guide prose. Modeled as an
+// enum like Theme; `m` is the current default sizing (body 16px / line-height 1.65).
+enum ReadingFontSize {
+  s
+  m
+  l
+}
+
 enum Track {
   ds
   nlp
@@ -108,6 +116,16 @@ model User {
   lastSeenAt      DateTime?  @map("last_seen_at")
   mentorNote      String?    @map("mentor_note")
   libraryEnabled  Boolean    @default(true) @map("library_enabled")
+  // Stage 12.1 (spec 7.9/7.10/8.3): per-student section access, mirroring
+  // library_enabled. New students get all three off (set at invite creation);
+  // existing active/invited students were backfilled to true in the migration.
+  guidesResumeEnabled Boolean @default(false) @map("guides_resume_enabled")
+  guidesLegendEnabled Boolean @default(false) @map("guides_legend_enabled")
+  // Stage 12.1 (spec 7.1): soft email verification — non-blocking, set when the
+  // student confirms the 6-digit code sent after invite activation.
+  emailVerifiedAt DateTime?       @map("email_verified_at")
+  // Stage 12.1 (spec 8.3/C9): reading font size for lesson/guide prose (S/M/L).
+  readingFontSize ReadingFontSize @default(m) @map("reading_font_size")
   createdAt       DateTime   @default(now()) @map("created_at")
   updatedAt       DateTime   @updatedAt @map("updated_at")
 
@@ -116,6 +134,7 @@ model User {
   devices              Device[]
   invitesSent          Invite[]          @relation("InviteInvitedBy")
   passwordResets       PasswordReset[]
+  emailVerifications   EmailVerification[]
   accessExtensions     AccessExtension[] @relation("ExtensionUser")
   grantedExtensions    AccessExtension[] @relation("ExtensionGrantedBy")
   securityFlags        SecurityFlag[]    @relation("FlagUser")
@@ -193,6 +212,23 @@ model PasswordReset {
 
   @@index([userId])
   @@map("password_resets")
+}
+
+// Stage 12.1 (spec 7.1): soft email verification codes. One active code per user
+// (issuing deletes prior rows); code is stored hashed (like reset tokens), TTL
+// 15 min, max 5 attempts, resend cooldown 60 s (checked against createdAt).
+model EmailVerification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String   @map("code_hash")
+  expiresAt DateTime @map("expires_at")
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("email_verifications")
 }
 
 model AccessExtension {
