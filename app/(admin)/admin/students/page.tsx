@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { UserStatusBadge } from "@/components/features/user-status-badge";
 import { InviteStudentDialog } from "./invite-student-dialog";
+import { InviteMentorDialog } from "./invite-mentor-dialog";
 
 export const metadata: Metadata = {
   title: "Ученики",
@@ -28,12 +29,17 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
   const students = await listStudents(prisma, query);
   // Spec 2: доступ выдаёт admin+; mentor видит список в режиме чтения.
   const canManage = hasRole(viewer, "admin");
+  // Spec 2: назначать роли (пригласить ментора) — только owner.
+  const canInviteMentor = hasRole(viewer, "owner");
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[24px] font-semibold">Ученики</h1>
-        {canManage && <InviteStudentDialog />}
+        <div className="flex flex-wrap items-center gap-2">
+          {canInviteMentor && <InviteMentorDialog />}
+          {canManage && <InviteStudentDialog />}
+        </div>
       </div>
 
       <form className="flex max-w-md gap-2" role="search">

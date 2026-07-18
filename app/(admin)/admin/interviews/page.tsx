@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { hasRole, requireAdminZone } from "@/lib/auth/guards";
 import {
   listAllBookings,
   listInterviewerProfiles,
@@ -38,6 +38,7 @@ export default async function AdminInterviewsPage() {
         profiles={profiles}
         rubrics={{ theory, legend }}
         timezone={user.timezone}
+        canMutate={hasRole(user, "admin")}
       />
     </div>
   );

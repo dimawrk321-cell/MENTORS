@@ -410,6 +410,29 @@ export async function getRecentNotifications(db: Db, userId: string) {
   return { items, unread };
 }
 
+/**
+ * Last N sent notifications for a user — the admin student-card «Уведомления»
+ * view (spec 8.5 stage-10: разборы «мне не пришло»). Both channels, any status.
+ */
+export async function getRecentSentNotifications(db: Db, userId: string, take = 30) {
+  return db.notification.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take,
+    select: {
+      id: true,
+      type: true,
+      title: true,
+      inApp: true,
+      readAt: true,
+      emailPending: true,
+      emailSentAt: true,
+      scheduledAt: true,
+      createdAt: true,
+    },
+  });
+}
+
 /** Marks in-app notifications read (spec 7.12): specific ids or all of a user's. */
 export async function markNotificationsRead(
   db: Db,

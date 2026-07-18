@@ -6,6 +6,7 @@ import { ArrowLeft, MonitorSmartphone } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { hasRole, requireAdminZone } from "@/lib/auth/guards";
 import { getStudentDetail } from "@/lib/services/access";
+import { getRecentSentNotifications } from "@/lib/services/notifications";
 import { daysUntil, formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +50,7 @@ export default async function StudentPage({ params }: StudentPageProps) {
 
   const { user, sessions, invite } = detail;
   const canManage = hasRole(viewer, "admin");
+  const notifications = await getRecentSentNotifications(prisma, user.id, 30);
   const now = new Date();
   const daysLeft = user.accessUntil ? daysUntil(user.accessUntil, now) : null;
 
@@ -241,6 +243,51 @@ export default async function StudentPage({ params }: StudentPageProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Уведомления (spec 8.5, этап 10): последние 30 отправленных — разбор «мне не пришло». */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Уведомления</CardTitle>
+          <CardDescription>Последние 30 отправленных — тип, канал, статус, время.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {notifications.length === 0 ? (
+            <p className="text-text-3 text-[14px]">Пока не было уведомлений.</p>
+          ) : (
+            <ul className="divide-border flex flex-col divide-y">
+              {notifications.map((n) => {
+                const channels: string[] = [];
+                if (n.inApp)
+                  channels.push(
+                    n.readAt ? "в приложении · прочитано" : "в приложении · не прочитано",
+                  );
+                if (n.emailSentAt)
+                  channels.push(
+                    `почта · отправлено ${formatDateTimeRu(n.emailSentAt, viewer.timezone)}`,
+                  );
+                else if (n.emailPending) channels.push("почта · в очереди");
+                return (
+                  <li
+                    key={n.id}
+                    className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2"
+                  >
+                    <div className="min-w-0">
+                      <span className="text-[14px]">{n.title}</span>
+                      <span className="text-text-3 ml-2 text-[12px]">{n.type}</span>
+                      <span className="text-text-3 block text-[12px]">
+                        {channels.join(" · ") || "нет активных каналов"}
+                      </span>
+                    </div>
+                    <span className="text-text-3 text-[12px]">
+                      {formatDateTimeRu(n.createdAt, viewer.timezone)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

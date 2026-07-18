@@ -186,8 +186,9 @@ export async function acceptInvite(
         passwordHash,
         status: "active",
         activatedAt: now,
-        // Spec 7.1.1: отсчёт 90 дней — с установки пароля, не с инвайта.
-        accessUntil: addDays(now, ACCESS_INITIAL_DAYS),
+        // Spec 7.1.1: отсчёт 90 дней — с установки пароля, не с инвайта. Только
+        // ученики имеют срок доступа; приглашённый ментор активируется без него.
+        accessUntil: user.role === "student" ? addDays(now, ACCESS_INITIAL_DAYS) : null,
         lastSeenAt: now,
       },
     });

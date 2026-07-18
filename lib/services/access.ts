@@ -119,6 +119,66 @@ export async function inviteStudent(
   return { ok: true, userId: user.id, inviteUrl: inviteUrlFor(token) };
 }
 
+export type InviteMentorResult =
+  | { ok: true; userId: string; inviteUrl: string }
+  | { ok: false; code: "exists" | "already_invited" };
+
+/**
+ * Invite a mentor (spec 2: назначать роли — owner-only, enforced at the action
+ * layer). Same 7-day invite flow as students but role=mentor + optional
+ * is_interviewer; no 90-day access clock (acceptInvite skips it for non-students).
+ * Closes the manual-SQL path for adding team members.
+ */
+export async function inviteMentor(
+  db: PrismaClient,
+  input: { actorId: string; email: string; name: string; isInterviewer: boolean; now?: Date },
+): Promise<InviteMentorResult> {
+  const now = input.now ?? new Date();
+  const existing = await db.user.findUnique({ where: { email: input.email } });
+  if (existing) {
+    return { ok: false, code: existing.status === "invited" ? "already_invited" : "exists" };
+  }
+
+  const token = generateToken();
+  const { user } = await db.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: input.email,
+        name: input.name,
+        role: "mentor",
+        isInterviewer: input.isInterviewer,
+        status: "invited",
+        avatarColor: paletteIndex(input.email),
+      },
+    });
+    await tx.invite.create({
+      data: {
+        email: input.email,
+        token,
+        invitedById: input.actorId,
+        expiresAt: addDays(now, INVITE_TTL_DAYS),
+        createdAt: now,
+      },
+    });
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "mentor.invited",
+      entityType: "user",
+      entityId: user.id,
+      after: {
+        email: input.email,
+        name: input.name,
+        role: "mentor",
+        isInterviewer: input.isInterviewer,
+      },
+    });
+    return { user };
+  });
+
+  await sendInviteEmail(input.email, input.name, inviteUrlFor(token));
+  return { ok: true, userId: user.id, inviteUrl: inviteUrlFor(token) };
+}
+
 export type ResendInviteResult =
   { ok: true; inviteUrl: string } | { ok: false; code: "not_invited" };
 

@@ -265,6 +265,39 @@ export async function setRecordingStatus(
   return { ok: true };
 }
 
+export type DeleteRecordingResult =
+  { ok: true } | { ok: false; code: "not_found" | "not_draft" | "has_views" };
+
+/**
+ * Delete a recording — only a draft with zero views (spec 8.5 changelog:
+ * symmetric to draft-only content deletion). A viewed recording carries
+ * recording_views access history and is never deleted. Audited.
+ */
+export async function deleteRecording(
+  db: PrismaClient,
+  input: { actorId: string; id: string },
+): Promise<DeleteRecordingResult> {
+  const recording = await db.recording.findUnique({
+    where: { id: input.id },
+    select: { id: true, title: true, status: true, _count: { select: { views: true } } },
+  });
+  if (!recording) return { ok: false, code: "not_found" };
+  if (recording.status !== "draft") return { ok: false, code: "not_draft" };
+  if (recording._count.views > 0) return { ok: false, code: "has_views" };
+
+  await db.$transaction(async (tx) => {
+    await tx.recording.delete({ where: { id: input.id } });
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "recording.deleted",
+      entityType: "recording",
+      entityId: input.id,
+      before: { title: recording.title, status: recording.status },
+    });
+  });
+  return { ok: true };
+}
+
 // --- Per-student library toggle (spec 7.9 / 8.5) ---
 
 export type ToggleLibraryResult = { ok: true } | { ok: false; code: "not_found" };

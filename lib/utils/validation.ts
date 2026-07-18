@@ -45,6 +45,13 @@ export const inviteStudentSchema = z.object({
   name: z.string("Укажи имя").trim().min(1, "Укажи имя").max(100, "Имя слишком длинное"),
 });
 
+/** Приглашение ментора (spec 2: назначать роли — owner). is_interviewer опционально. */
+export const inviteMentorSchema = z.object({
+  email: emailSchema,
+  name: z.string("Укажи имя").trim().min(1, "Укажи имя").max(100, "Имя слишком длинное"),
+  isInterviewer: z.boolean().default(false),
+});
+
 // Changelog этапа 3: is_key и in_quiz взаимоисключающие — ключевой вопрос
 // раскрывает эталон в блоке урока и не может одновременно быть вопросом квиза.
 export const QUESTION_LINK_ROLE_ERROR =

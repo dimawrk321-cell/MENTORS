@@ -245,6 +245,17 @@ export function nextLocalTimeUtc(now: Date, timeZone: string, timeHHMM: string):
   return zonedDateTimeToUtc(dateStr, timeHHMM, timeZone);
 }
 
+/**
+ * Whole local calendar days between two instants in a timezone (spec 8.5 «пропали
+ * 7+ дней» — считается в TZ пользователя). Both instants are collapsed to their
+ * local calendar date first, so the gap counts day boundaries, not 24h windows.
+ */
+export function localDaysBetween(from: Date, to: Date, timeZone: string): number {
+  const f = dateOnlyUtc(localDateStr(from, timeZone));
+  const t = dateOnlyUtc(localDateStr(to, timeZone));
+  return Math.round((t.getTime() - f.getTime()) / DAY_MS);
+}
+
 /** Russian pluralization: pluralRu(5, "день", "дня", "дней") → «дней». */
 export function pluralRu(n: number, one: string, few: string, many: string): string {
   const abs = Math.abs(n) % 100;

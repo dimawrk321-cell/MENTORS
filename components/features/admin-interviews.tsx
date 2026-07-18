@@ -49,6 +49,8 @@ interface AdminInterviewsProps {
   profiles: InterviewerProfileView[];
   rubrics: { theory: RubricCriterion[]; legend: RubricCriterion[] };
   timezone: string;
+  /** Spec 2/8.5: mentor видит списки, но мутации (страйки, рубрики, профили) — admin+. */
+  canMutate: boolean;
 }
 
 export function AdminInterviews(props: AdminInterviewsProps) {
@@ -66,16 +68,16 @@ export function AdminInterviews(props: AdminInterviewsProps) {
         <BookingsTab bookings={props.bookings} timezone={props.timezone} />
       </TabsContent>
       <TabsContent value="strikes">
-        <StrikesTab strikes={props.strikes} timezone={props.timezone} />
+        <StrikesTab strikes={props.strikes} timezone={props.timezone} canMutate={props.canMutate} />
       </TabsContent>
       <TabsContent value="waitlist">
         <WaitlistTab waitlist={props.waitlist} />
       </TabsContent>
       <TabsContent value="rubrics">
-        <RubricsTab rubrics={props.rubrics} />
+        <RubricsTab rubrics={props.rubrics} canMutate={props.canMutate} />
       </TabsContent>
       <TabsContent value="profiles">
-        <ProfilesTab profiles={props.profiles} />
+        <ProfilesTab profiles={props.profiles} canMutate={props.canMutate} />
       </TabsContent>
     </Tabs>
   );
@@ -133,7 +135,15 @@ function BookingsTab({ bookings, timezone }: { bookings: AdminBookingRow[]; time
   );
 }
 
-function StrikesTab({ strikes, timezone }: { strikes: StudentStrikeSummary[]; timezone: string }) {
+function StrikesTab({
+  strikes,
+  timezone,
+  canMutate,
+}: {
+  strikes: StudentStrikeSummary[];
+  timezone: string;
+  canMutate: boolean;
+}) {
   const [pending, start] = useTransition();
   const router = useRouter();
 
@@ -177,15 +187,17 @@ function StrikesTab({ strikes, timezone }: { strikes: StudentStrikeSummary[]; ti
                   <span className="text-text-3 text-[13px]">
                     {formatDateTimeRu(strike.createdAt, timezone)}
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-danger ml-auto"
-                    loading={pending}
-                    onClick={() => remove(strike.id)}
-                  >
-                    Снять
-                  </Button>
+                  {canMutate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-danger ml-auto"
+                      loading={pending}
+                      onClick={() => remove(strike.id)}
+                    >
+                      Снять
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -224,13 +236,15 @@ function WaitlistTab({ waitlist }: { waitlist: AdminWaitlistRow[] }) {
 
 function RubricsTab({
   rubrics,
+  canMutate,
 }: {
   rubrics: { theory: RubricCriterion[]; legend: RubricCriterion[] };
+  canMutate: boolean;
 }) {
   return (
     <div className="flex flex-col gap-6">
-      <RubricEditor type="theory" initial={rubrics.theory} />
-      <RubricEditor type="legend" initial={rubrics.legend} />
+      <RubricEditor type="theory" initial={rubrics.theory} canMutate={canMutate} />
+      <RubricEditor type="legend" initial={rubrics.legend} canMutate={canMutate} />
     </div>
   );
 }
@@ -238,9 +252,11 @@ function RubricsTab({
 function RubricEditor({
   type,
   initial,
+  canMutate,
 }: {
   type: "theory" | "legend";
   initial: RubricCriterion[];
+  canMutate: boolean;
 }) {
   const [criteria, setCriteria] = useState<RubricCriterion[]>(initial);
   const [pending, start] = useTransition();
@@ -261,6 +277,21 @@ function RubricEditor({
         toast({ title: res.error.message, variant: "danger" });
       }
     });
+
+  if (!canMutate) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col gap-2">
+          <p className="text-[15px] font-semibold">Рубрика: {MOCK_TYPE_LABEL[type]}</p>
+          <ul className="text-text-2 flex flex-col gap-1 text-[14px]">
+            {initial.map((criterion) => (
+              <li key={criterion.key}>{criterion.title}</li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -308,17 +339,29 @@ function RubricEditor({
   );
 }
 
-function ProfilesTab({ profiles }: { profiles: InterviewerProfileView[] }) {
+function ProfilesTab({
+  profiles,
+  canMutate,
+}: {
+  profiles: InterviewerProfileView[];
+  canMutate: boolean;
+}) {
   return (
     <div className="flex flex-col gap-4">
       {profiles.map((profile) => (
-        <ProfileEditor key={profile.userId} profile={profile} />
+        <ProfileEditor key={profile.userId} profile={profile} canMutate={canMutate} />
       ))}
     </div>
   );
 }
 
-function ProfileEditor({ profile }: { profile: InterviewerProfileView }) {
+function ProfileEditor({
+  profile,
+  canMutate,
+}: {
+  profile: InterviewerProfileView;
+  canMutate: boolean;
+}) {
   const [roomUrl, setRoomUrl] = useState(profile.roomUrl);
   const [active, setActive] = useState(profile.active);
   const [pending, start] = useTransition();
@@ -339,6 +382,18 @@ function ProfileEditor({ profile }: { profile: InterviewerProfileView }) {
         toast({ title: res.error.message, variant: "danger" });
       }
     });
+
+  if (!canMutate) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col gap-1">
+          <p className="text-[15px] font-semibold">{profile.name}</p>
+          <p className="text-text-2 text-[13px] break-all">{roomUrl || "комната не указана"}</p>
+          <p className="text-text-3 text-[13px]">{active ? "Принимает брони" : "Брони закрыты"}</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

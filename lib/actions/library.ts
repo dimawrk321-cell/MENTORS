@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import {
+  deleteRecording,
   getRecordingForView,
   logRecordingOpen,
   setRecordingStatus,
@@ -116,6 +117,25 @@ export async function setRecordingStatusAction(
       );
     }
     revalidateLibrary(id);
+    return undefined;
+  });
+}
+
+/** Delete a draft recording with zero views (spec 8.5 changelog). mentor+. */
+export async function deleteRecordingAction(id: string): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionRole("mentor");
+    const res = await deleteRecording(prisma, { actorId: auth.user.id, id });
+    if (!res.ok) {
+      const message =
+        res.code === "not_draft"
+          ? "Удалять можно только черновики — сначала сними с публикации"
+          : res.code === "has_views"
+            ? "Запись уже просматривали — её нельзя удалить"
+            : "Запись не найдена";
+      throw new ActionError(res.code, message);
+    }
+    revalidatePath("/admin/library");
     return undefined;
   });
 }

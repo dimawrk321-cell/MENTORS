@@ -8,6 +8,7 @@ import {
   adminResetSessions,
   blockStudent,
   extendAccess,
+  inviteMentor,
   inviteStudent,
   resendInvite,
   unblockStudent,
@@ -36,6 +37,7 @@ import {
 } from "@/lib/auth/action-helpers";
 import {
   extendAccessSchema,
+  inviteMentorSchema,
   inviteStudentSchema,
   toggleLibrarySchema,
 } from "@/lib/utils/validation";
@@ -78,6 +80,40 @@ export async function inviteStudentAction(
         res.code,
         res.code === "already_invited"
           ? "Этот email уже приглашён — открой карточку и отправь инвайт повторно"
+          : "Пользователь с таким email уже существует",
+      );
+    }
+    revalidateStudent(res.userId);
+    return { userId: res.userId, inviteUrl: res.inviteUrl, email: input.email, name: input.name };
+  });
+}
+
+/**
+ * Invite a mentor (spec 2: назначать роли — owner-only). Same invite flow, role
+ * mentor + is_interviewer checkbox — closes the manual-SQL path. Audited.
+ */
+export async function inviteMentorAction(
+  _prev: InviteFormState,
+  formData: FormData,
+): Promise<InviteFormState> {
+  return runAction<InviteCreated>(async () => {
+    const auth = await requireActionRole("owner");
+    const input = parseInput(inviteMentorSchema, {
+      email: formData.get("email"),
+      name: formData.get("name"),
+      isInterviewer: formData.get("isInterviewer") === "on",
+    });
+    const res = await inviteMentor(prisma, {
+      actorId: auth.user.id,
+      email: input.email,
+      name: input.name,
+      isInterviewer: input.isInterviewer,
+    });
+    if (!res.ok) {
+      throw new ActionError(
+        res.code,
+        res.code === "already_invited"
+          ? "Этот email уже приглашён"
           : "Пользователь с таким email уже существует",
       );
     }

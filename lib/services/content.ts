@@ -1,6 +1,7 @@
 import type { CourseGating, PrismaClient, Track } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { emitEvent, type EarnedAchievement, type EmitResult } from "@/lib/services/events";
+import { writeAudit } from "@/lib/services/audit";
 import { addSrsCardsForLessonCompletion } from "@/lib/services/srs";
 import {
   getModuleTestStates,
@@ -584,4 +585,29 @@ export async function getFirstLessonOfTrack(db: Db, track: Track | null): Promis
     }
   }
   return null;
+}
+
+/**
+ * Resolve an open content report from the Пульт widget (spec 8.5). Idempotent —
+ * already-resolved reports are a no-op. Audited.
+ */
+export async function resolveContentReport(
+  db: PrismaClient,
+  input: { actorId: string; reportId: string },
+): Promise<{ ok: boolean }> {
+  const report = await db.contentReport.findUnique({ where: { id: input.reportId } });
+  if (!report || report.status === "resolved") return { ok: false };
+  await db.$transaction(async (tx) => {
+    await tx.contentReport.update({
+      where: { id: input.reportId },
+      data: { status: "resolved", resolvedById: input.actorId },
+    });
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "content_report.resolved",
+      entityType: "content_report",
+      entityId: input.reportId,
+    });
+  });
+  return { ok: true };
 }

@@ -33,6 +33,7 @@ import {
   type RecordingFormValue,
 } from "@/components/features/recording-form-dialog";
 import { RecordingStatusButton } from "@/components/features/recording-status-button";
+import { RecordingDeleteButton } from "@/components/features/recording-delete-button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -293,6 +294,9 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
                           status={recording.status}
                           canPublish={complete}
                         />
+                        {recording.status === "draft" && recording._count.views === 0 && (
+                          <RecordingDeleteButton id={recording.id} />
+                        )}
                       </div>
                     </td>
                   </tr>

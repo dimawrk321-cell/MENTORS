@@ -243,3 +243,9 @@ export const SEARCH_DEBOUNCE_MS = 150;
 /** «Недавнее» (spec 7.11): хранится последних 20, показывается 5. */
 export const RECENT_KEEP = 20;
 export const RECENT_SHOW = 5;
+
+// --- Stage 10: analytics (spec 8.5) — client-safe period selector ---
+
+/** Период-селектор аналитики (spec 8.5): 7/30/90 дней. */
+export const ANALYTICS_PERIODS = [7, 30, 90] as const;
+export type AnalyticsPeriod = (typeof ANALYTICS_PERIODS)[number];
