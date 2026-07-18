@@ -353,3 +353,16 @@ export const createAnnouncementSchema = z
   });
 
 export const dismissBannerSchema = z.object({ announcementId: z.string().min(1) });
+
+// --- Stage 10.2: admin settings (spec 8.5) ---
+
+export const updateSettingsSchema = z.object({
+  // Может быть пустым — тогда контакт продления фоллбэчит на env.
+  renewalContact: z.string().trim().max(300, "Слишком длинно"),
+  accessRulesText: z
+    .string("Добавь текст правил")
+    .trim()
+    .min(1, "Добавь текст правил")
+    .max(5000, "Слишком длинный текст"),
+  defaultCourseGating: z.enum(["strict", "recommended", "free"]),
+});

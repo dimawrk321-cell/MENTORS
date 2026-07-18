@@ -72,6 +72,22 @@ export interface XpAward {
 export const STREAK_MILESTONE_XP: Record<number, number> = { 7: 50, 30: 250, 100: 1000 };
 
 /**
+ * Read-only XP-карта для /admin/settings (spec 8.5): зеркалит суммы `planXp`
+ * ниже и таблицу 7.7. Это витрина — правило по-прежнему живёт код-константой
+ * (spec changelog: XP-карта — код, редактирование не в MVP).
+ */
+export const XP_RULES: readonly { event: string; amount: string; rule: string }[] = [
+  { event: "Урок завершён", amount: "+20", rule: "за урок" },
+  { event: "Первый верный ответ в квизе", amount: "+5", rule: "за вопрос" },
+  { event: "Модульный тест сдан", amount: "+100", rule: "за модуль" },
+  { event: "Тест сдан с первой попытки", amount: "+50", rule: "за модуль" },
+  { event: "Экстерн сдан", amount: "+100", rule: "за модуль" },
+  { event: "Очередь повторений закрыта", amount: "+30", rule: "в день" },
+  { event: "Мок проведён", amount: "+200", rule: "за бронь" },
+  { event: "Веха серии 7 / 30 / 100", amount: "+50 / +250 / +1000", rule: "за веху" },
+];
+
+/**
  * События, у которых первое начисление — «первичное»: его ref дедуплицирует
  * ВСЁ событие (реплей — no-op). Барьер exactly-once строится на нём (spec 7.13):
  * INSERT ... ON CONFLICT DO NOTHING по уникальному индексу xp_events. Остальные

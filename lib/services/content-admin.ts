@@ -2,6 +2,7 @@ import type { ContentStatus, CourseGating, LessonDifficulty, PrismaClient } from
 import type { Db } from "@/lib/db";
 import { writeAudit } from "@/lib/services/audit";
 import { notify } from "@/lib/services/notifications";
+import { getDefaultCourseGating } from "@/lib/services/settings";
 import { computeReadingMinutes } from "@/lib/utils/markdown";
 import { slugify, uniqueSlug } from "@/lib/utils/slug";
 
@@ -46,15 +47,17 @@ export async function createCourse(
     async (candidate) => (await db.course.findUnique({ where: { slug: candidate } })) !== null,
   );
   const last = await db.course.findFirst({ orderBy: { order: "desc" }, select: { order: true } });
+  // Spec 8.5: дефолт гейтинга новых курсов — настройка (app_settings → «strict»).
+  const gating = await getDefaultCourseGating(db);
   const course = await db.course.create({
-    data: { title: input.title, slug, order: (last?.order ?? -1) + 1 },
+    data: { title: input.title, slug, order: (last?.order ?? -1) + 1, gating },
   });
   await writeAudit(db, {
     actorId: input.actorId,
     action: "course.created",
     entityType: "course",
     entityId: course.id,
-    after: { title: input.title, slug },
+    after: { title: input.title, slug, gating },
   });
   return { id: course.id };
 }

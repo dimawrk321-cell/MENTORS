@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { logger } from "@/lib/logger";
 import { env } from "@/lib/env";
+import { getRenewalContact } from "@/lib/services/settings";
 import type { EmailContent } from "@/emails/layout";
 import {
   adminSecurityAlertEmail,
@@ -82,7 +83,9 @@ export async function sendNewDeviceEmail(to: string, deviceLabel: string): Promi
 }
 
 export async function sendSuspiciousBlockEmail(to: string): Promise<void> {
-  await sendEmailSafe(to, suspiciousBlockEmail());
+  // Renewal/support contact via app_settings override → env fallback (spec 10.2).
+  const contact = await getRenewalContact();
+  await sendEmailSafe(to, suspiciousBlockEmail(contact));
 }
 
 export async function sendAdminSecurityAlertEmail(to: string, userEmail: string): Promise<void> {

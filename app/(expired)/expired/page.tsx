@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
-import { env } from "@/lib/env";
 import { requireExpiredStudent } from "@/lib/auth/guards";
 import { getExpiredSummary } from "@/lib/services/access";
+import { getRenewalContact } from "@/lib/services/settings";
 import { formatDateRu } from "@/lib/utils/dates";
 import { logoutAction } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export default async function ExpiredPage() {
   const { user } = await requireExpiredStudent();
   const summary = await getExpiredSummary(prisma, user.id);
-  const contact = env.renewalContact;
+  const contact = await getRenewalContact(prisma);
 
   const stats = [
     { label: "Уроков пройдено", value: summary.lessonsCompleted },

@@ -107,7 +107,7 @@ describe("тихие часы (spec 7.12)", () => {
       testDb,
       u.id,
       "access_14d",
-      { untilText: "5 августа" },
+      { untilText: "5 августа", contact: "@mentor" },
       {
         now: msk("2026-07-15T23:00"),
       },
@@ -148,8 +148,20 @@ describe("тихие часы (spec 7.12)", () => {
     const uMsk = await createTestUser({ email: "q3@test.local", timezone: MSK });
     const uNy = await createTestUser({ email: "q4@test.local", timezone: "America/New_York" });
     const now = new Date("2026-07-15T06:00:00Z");
-    await notify(testDb, uMsk.id, "access_0d", { untilText: "сегодня" }, { now });
-    await notify(testDb, uNy.id, "access_0d", { untilText: "сегодня" }, { now });
+    await notify(
+      testDb,
+      uMsk.id,
+      "access_0d",
+      { untilText: "сегодня", contact: "@mentor" },
+      { now },
+    );
+    await notify(
+      testDb,
+      uNy.id,
+      "access_0d",
+      { untilText: "сегодня", contact: "@mentor" },
+      { now },
+    );
     const nMsk = await testDb.notification.findFirst({ where: { userId: uMsk.id } });
     const nNy = await testDb.notification.findFirst({ where: { userId: uNy.id } });
     expect(nMsk?.scheduledAt?.getTime()).toBe(now.getTime()); // сразу

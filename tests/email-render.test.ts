@@ -59,7 +59,10 @@ describe("email templates render (без отправки)", () => {
   });
 
   it("рендер из renderNotification пригоден для письма", () => {
-    const rendered = renderNotification("access_14d", { untilText: "5 августа" });
+    const rendered = renderNotification("access_14d", {
+      untilText: "5 августа",
+      contact: "@mentor",
+    });
     const email = notificationEmail({ type: "access_14d", ...rendered });
     expect(email.html).toContain("5 августа");
   });

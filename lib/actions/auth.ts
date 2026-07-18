@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { env } from "@/lib/env";
+import { getRenewalContact } from "@/lib/services/settings";
 import {
   acceptInvite,
   login,
@@ -37,8 +37,8 @@ import {
 
 export type AuthFormState = ActionResult<undefined> | null;
 
-function blockedMessage(): string {
-  const contact = env.renewalContact ?? "нами";
+async function blockedMessage(): Promise<string> {
+  const contact = (await getRenewalContact()) ?? "нами";
   return `Аккаунт заблокирован. Свяжись с ${contact}`;
 }
 
@@ -72,7 +72,7 @@ export async function loginAction(
         throw new ActionError(res.code, "Слишком много попыток, подожди 15 минут");
       }
       if (res.code === "blocked") {
-        throw new ActionError(res.code, blockedMessage());
+        throw new ActionError(res.code, await blockedMessage());
       }
       throw new ActionError(res.code, "Неверный email или пароль");
     }

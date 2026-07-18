@@ -23,6 +23,7 @@ import {
 } from "@/lib/services/mocks";
 import { sendInviteEmail } from "@/lib/services/mail";
 import { notify } from "@/lib/services/notifications";
+import { getRenewalContact } from "@/lib/services/settings";
 
 // Student access lifecycle (spec 7.1): manual invite, 90 days from activation,
 // extensions that never eat dead days, soft-lock on expiry.
@@ -358,6 +359,9 @@ export async function sendAccessExpiryReminders(db: Db, now: Date = new Date()):
   const students = await db.user.findMany({
     where: { role: "student", status: "active", accessUntil: { not: null } },
   });
+  // Renewal contact: app_settings override → env fallback (spec 10.2). Resolved
+  // once and embedded in the notification body so it's changeable без редеплоя.
+  const contact = (await getRenewalContact(db)) ?? "своему ментору";
   let sent = 0;
   for (const student of students) {
     try {
@@ -382,7 +386,7 @@ export async function sendAccessExpiryReminders(db: Db, now: Date = new Date()):
         db,
         student.id,
         type,
-        { untilText: formatDateRu(student.accessUntil!, student.timezone) },
+        { untilText: formatDateRu(student.accessUntil!, student.timezone), contact },
         { now },
       );
       sent += 1;

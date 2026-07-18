@@ -1,6 +1,5 @@
 import type { Db } from "@/lib/db";
 import { MOCK_TYPE_LABEL } from "@/lib/constants";
-import { env } from "@/lib/env";
 import { isWithinQuietHours, nextLocalTimeUtc, pluralRu } from "@/lib/utils/dates";
 
 // Notifications service (spec 7.12). Single seam `notify(db, userId, type, payload)`
@@ -90,9 +89,9 @@ export interface NotifyPayloads {
   freeze_used: { freezesLeft: number };
   lesson_new: { lessonId: string; lessonTitle: string; courseTitle: string };
   lesson_updated: { lessonId: string; lessonTitle: string };
-  access_14d: { untilText: string };
-  access_3d: { untilText: string };
-  access_0d: { untilText: string };
+  access_14d: { untilText: string; contact: string };
+  access_3d: { untilText: string; contact: string };
+  access_0d: { untilText: string; contact: string };
   announcement: { announcementId: string; title: string; bodyText: string; url: string | null };
   link_rotation: { count: number };
 }
@@ -105,10 +104,6 @@ interface RenderedNotification {
 
 function mockLabel(type: string): string {
   return MOCK_TYPE_LABEL[type] ?? type;
-}
-
-function renewalContact(): string {
-  return env.renewalContact ?? "своему ментору";
 }
 
 /** Renders Russian title/body/url for a notification (spec 7.12). */
@@ -231,7 +226,7 @@ export function renderNotification<T extends NotificationType>(
       const p = payload as NotifyPayloads["access_14d"];
       return {
         title: `Доступ действует до ${p.untilText}`,
-        body: `Чтобы продлить — напиши ${renewalContact()}.`,
+        body: `Чтобы продлить — напиши ${p.contact}.`,
         url: "/profile",
       };
     }
@@ -239,7 +234,7 @@ export function renderNotification<T extends NotificationType>(
       const p = payload as NotifyPayloads["access_3d"];
       return {
         title: "Доступ заканчивается через 3 дня",
-        body: `Доступ действует до ${p.untilText}. Чтобы продлить — напиши ${renewalContact()}.`,
+        body: `Доступ действует до ${p.untilText}. Чтобы продлить — напиши ${p.contact}.`,
         url: "/profile",
       };
     }
@@ -247,7 +242,7 @@ export function renderNotification<T extends NotificationType>(
       const p = payload as NotifyPayloads["access_0d"];
       return {
         title: "Сегодня последний день доступа",
-        body: `Доступ действует до ${p.untilText}. Чтобы продлить — напиши ${renewalContact()}.`,
+        body: `Доступ действует до ${p.untilText}. Чтобы продлить — напиши ${p.contact}.`,
         url: "/profile",
       };
     }

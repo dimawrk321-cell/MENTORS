@@ -39,8 +39,8 @@ export function newDeviceEmail(deviceLabel: string): EmailContent {
   });
 }
 
-export function suspiciousBlockEmail(): EmailContent {
-  const contact = env.renewalContact ? ` Свяжись с нами: ${env.renewalContact}.` : "";
+export function suspiciousBlockEmail(renewalContact: string | null): EmailContent {
+  const contact = renewalContact ? ` Свяжись с нами: ${renewalContact}.` : "";
   return buildEmail(`${brand()} — аккаунт заблокирован`, {
     title: "Замечена подозрительная активность",
     paragraphs: [

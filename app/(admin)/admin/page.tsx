@@ -57,7 +57,7 @@ export default async function AdminDashboardPage() {
           empty="Все ученики на связи."
         >
           {flags.missing.map((s) => (
-            <FlagRowLink key={s.id} href={`/admin/students/${s.id}`} label={s.name}>
+            <FlagRowLink key={s.id} href={`/admin/students/${s.id}?tab=events`} label={s.name}>
               {s.lastSeenAt
                 ? `не заходил ${s.daysMissing} ${pluralRu(s.daysMissing, "день", "дня", "дней")}`
                 : "не заходил ни разу"}
@@ -72,7 +72,7 @@ export default async function AdminDashboardPage() {
           empty="Нет учеников с серией провалов."
         >
           {flags.failingThree.map((s) => (
-            <FlagRowLink key={s.id} href={`/admin/students/${s.id}`} label={s.name}>
+            <FlagRowLink key={s.id} href={`/admin/students/${s.id}?tab=tests`} label={s.name}>
               {s.email}
             </FlagRowLink>
           ))}
