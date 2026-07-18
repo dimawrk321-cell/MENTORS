@@ -18,7 +18,6 @@ import {
   IMPORT_RUN_ACTIVE_STATUSES,
   IMPORT_RUN_STATUS_LABEL,
 } from "@/lib/constants";
-import { startImportAction } from "@/lib/actions/notion-import";
 import type { ImportRunCounts } from "@/lib/services/notion-import/admin-import";
 
 // /admin/import client (spec 7.14 / 8.5): upload the export, run dry-run or a
@@ -119,12 +118,20 @@ export function ImportRunner() {
     start(async () => {
       setRun(null);
       setRunId(null);
-      const res = await startImportAction(fd);
-      if (!res.ok) {
-        toast({ title: res.error.message, variant: "danger" });
+      // Large upload goes to a Route Handler (not a Server Action) — see the route.
+      let data: { runId?: string; error?: string } = {};
+      try {
+        const res = await fetch("/api/admin/import", { method: "POST", body: fd });
+        data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.runId) {
+          toast({ title: data.error ?? "Не удалось запустить импорт", variant: "danger" });
+          return;
+        }
+      } catch {
+        toast({ title: "Не удалось запустить импорт", variant: "danger" });
         return;
       }
-      setRunId(res.data.runId);
+      setRunId(data.runId);
     });
   };
 

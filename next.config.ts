@@ -25,12 +25,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Native/node-oriented packages must not be bundled by the RSC compiler.
   serverExternalPackages: ["@node-rs/argon2", "maxmind", "pino", "nodemailer"],
-  experimental: {
-    // /admin/import (spec 7.14): the export upload is a Server Action carrying a
-    // .md (≤25 MB) + optional image .zip (≤100 MB). The default 1 MB body limit
-    // would reject it; raise it with headroom above md+zip+multipart overhead.
-    serverActions: { bodySizeLimit: "150mb" },
-  },
+  // NOTE (spec 7.14 / security): the large export upload does NOT go through a
+  // Server Action — raising serverActions.bodySizeLimit is global and would let
+  // every action accept 100+ MB bodies (a DoS amplifier). The upload is a Route
+  // Handler (POST /api/admin/import) that checks admin RBAC + Content-Length
+  // BEFORE buffering, so the default 1 MB action limit stays untouched.
   images: {
     // YouTube poster thumbnails for the lazy VideoEmbed (spec 5.3).
     remotePatterns: [{ protocol: "https", hostname: "i.ytimg.com" }],

@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { requireAdminZone } from "@/lib/auth/guards";
 import { formatDateTimeRu } from "@/lib/utils/dates";
-import { IMPORT_COUNT_ORDER, IMPORT_RUN_STATUS_LABEL } from "@/lib/constants";
+import {
+  IMPORT_COUNT_ORDER,
+  IMPORT_RUN_ACTIVE_STATUSES,
+  IMPORT_RUN_STATUS_LABEL,
+} from "@/lib/constants";
+import { IMPORT_STALE_MINUTES } from "@/lib/services/notion-import/admin-import";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -69,6 +74,13 @@ function totalSkipped(counts: ImportRunCounts | null): number {
 }
 
 function ImportRunRow({ run, timezone }: { run: ImportRunListItem; timezone: string }) {
+  // A run left in an active status past the stale window means the process died
+  // mid-run (its own catch never ran) — show it honestly. The row is persisted as
+  // error the next time an import starts (markStaleActiveRunsFailed).
+  const isStuck =
+    (IMPORT_RUN_ACTIVE_STATUSES as readonly string[]).includes(run.status) &&
+    Date.now() - run.startedAt.getTime() > IMPORT_STALE_MINUTES * 60_000;
+
   return (
     <li className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -94,6 +106,8 @@ function ImportRunRow({ run, timezone }: { run: ImportRunListItem; timezone: str
           <span className="text-danger">
             {IMPORT_RUN_STATUS_LABEL.error}: {run.error ?? "неизвестно"}
           </span>
+        ) : isStuck ? (
+          <span className="text-danger">Прервано — процесс остановился (запусти заново)</span>
         ) : (
           <span>{IMPORT_RUN_STATUS_LABEL[run.status] ?? run.status}…</span>
         )}

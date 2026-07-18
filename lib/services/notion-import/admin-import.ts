@@ -6,34 +6,48 @@ import type { Prisma, ImportRunStatus } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { writeAudit } from "@/lib/services/audit";
-import { withAdvisoryLock } from "@/worker/lib/advisory-lock";
+import {
+  advisoryUnlock,
+  jobLockKey,
+  tryAdvisoryLock,
+  withAdvisoryLock,
+} from "@/worker/lib/advisory-lock";
 import { IMPORT_MAX_MD_MB, IMPORT_MAX_ZIP_MB } from "@/lib/constants";
 import { runImport } from "./runner";
 import { extractImagesFromZip } from "./zip";
 import type { CommitResult } from "./commit";
 import type { ImportAnomalies } from "./types";
 
-// Admin /admin/import execution service (spec 7.14 / 8.5). The web action calls
-// createImportRun → writes the upload to a temp dir OUTSIDE the repo → launches
-// runImportJob (detached, in-process) → the page polls the run row. Concurrency
-// is denied by the Postgres advisory lock «notion-import» (the hard cross-process
-// guard) plus an active-row pre-check for immediate UX + dead-run recovery.
+// Admin /admin/import execution service (spec 7.14 / 8.5). The POST route writes
+// the upload to a temp dir OUTSIDE the repo → createImportRun → launches
+// runImportJob (detached, in-process) → the page polls the run row. Concurrency is
+// denied by the Postgres advisory lock «notion-import»: the job holds it (hard
+// serializer) and the route's pre-check PROBES it (isImportLockHeld) so a new start
+// is refused iff an import is genuinely live.
 //
 // DECISION (spec 7.14 «выполнение в отдельном процессе или с разумным таймаутом»):
 // the import runs IN-PROCESS, not as a spawned child — it reuses the exact CLI
-// service code (runImport), and the production image has no `tsx` to spawn the
-// TS script with, nor should a child re-open the DB pool. Robustness instead
-// comes from (1) the session-level advisory lock, which Postgres auto-releases
-// if the process dies, and (2) IMPORT_STALE_MINUTES: an unfinished run older
-// than this is treated as abandoned, so a crashed job never blocks new imports
-// forever. That staleness bound IS the «разумный таймаут». Suits self-hosted
-// `next start` (a long-lived Node server); the detached job is not for serverless.
+// service code (runImport); the production image has no `tsx` to spawn the TS
+// script with, nor should a child re-open the DB pool. Recovery is bound to the
+// real lock, NOT a wall clock: the session-level lock releases the instant the
+// process dies, so the next start's probe sees it free and proceeds. A row a crash
+// left non-terminal is reconciled by markStaleActiveRunsFailed (older than
+// IMPORT_STALE_MINUTES, and only while the lock is free). A genuinely hung-but-alive
+// job keeps the lock and honestly reports «уже выполняется» until a restart — no
+// contradiction. Suits self-hosted `next start`; the detached job is not for serverless.
 
 /** Advisory-lock name — one import at a time across every process (spec 7.14). */
 export const IMPORT_LOCK_NAME = "notion-import";
 
 const MAX_MD_BYTES = IMPORT_MAX_MD_MB * 1024 * 1024;
 const MAX_ZIP_BYTES = IMPORT_MAX_ZIP_MB * 1024 * 1024;
+
+/**
+ * Hard ceiling for the whole multipart upload, checked against Content-Length by
+ * the POST route BEFORE the body is buffered (spec 7.14 / DoS): md + zip + a small
+ * multipart margin. Keeps the large body confined to the one admin-only endpoint.
+ */
+export const MAX_UPLOAD_BYTES = MAX_MD_BYTES + MAX_ZIP_BYTES + 5 * 1024 * 1024;
 
 /** An unfinished run older than this is treated as abandoned (the timeout bound). */
 export const IMPORT_STALE_MINUTES = 15;
@@ -153,14 +167,49 @@ export function cleanupImportTempDir(runId: string): void {
 
 // --- Run rows (spec 8.5: import_runs history) ---
 
-/** True while an import is running (and hasn't gone stale) — blocks a new start. */
-export async function hasActiveImportRun(db: Db, now: Date = new Date()): Promise<boolean> {
+/**
+ * Authoritative «is an import running right now» — probes the «notion-import»
+ * advisory lock on a fresh session (never re-enters a held lock). Replaces a
+ * wall-clock/startedAt heuristic, which diverges from reality: a slow-but-ALIVE
+ * job past the stale window would wrongly be treated as gone (guard admits a new
+ * start, yet the lock is still held → the new run errors «already running» — a
+ * stuck contradiction), and a crashed job (lock already released) would wrongly
+ * keep blocking for the whole window. The lock is the single source of truth.
+ */
+export async function isImportLockHeld(lockDb?: PrismaClient): Promise<boolean> {
+  const ownsClient = !lockDb;
+  const client = lockDb ?? makeImportLockClient();
+  const key = jobLockKey(IMPORT_LOCK_NAME);
+  try {
+    const acquired = await tryAdvisoryLock(client, key);
+    if (acquired) {
+      await advisoryUnlock(client, key);
+      return false;
+    }
+    return true;
+  } finally {
+    if (ownsClient) await client.$disconnect().catch(() => {});
+  }
+}
+
+/**
+ * Marks abandoned runs — still in an active status but older than the stale
+ * window — as error. A process crash leaves a non-terminal row the job's own
+ * catch never reached; this reconciles it. Call ONLY when the import lock is free
+ * (no run is live); the age bound additionally shields a just-launched run from
+ * being touched before its detached job takes the lock. Returns rows reconciled.
+ */
+export async function markStaleActiveRunsFailed(db: Db, now: Date = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - IMPORT_STALE_MINUTES * 60_000);
-  const active = await db.importRun.findFirst({
-    where: { status: { in: ACTIVE_STATUSES }, startedAt: { gt: cutoff } },
-    select: { id: true },
+  const res = await db.importRun.updateMany({
+    where: { status: { in: ACTIVE_STATUSES }, startedAt: { lt: cutoff } },
+    data: {
+      status: "error",
+      error: "Импорт прерван — процесс остановился, запусти заново",
+      finishedAt: now,
+    },
   });
-  return active !== null;
+  return res.count;
 }
 
 export async function createImportRun(
