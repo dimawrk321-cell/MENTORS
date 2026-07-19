@@ -313,6 +313,7 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
                     <Input
                       value={option.text}
                       onChange={(event) => setOption(option.id, { text: event.target.value })}
+                      aria-label="Текст варианта"
                       placeholder="Текст варианта"
                       disabled={question.type === "tf"}
                     />

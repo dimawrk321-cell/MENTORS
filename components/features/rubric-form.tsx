@@ -116,7 +116,7 @@ export function RubricForm({ bookingId, form }: RubricFormProps) {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-[22px] font-semibold">Фидбек</h1>
-        <span className="text-text-3 text-[12px]">
+        <span aria-live="polite" className="text-text-3 text-[12px]">
           {saved ? "Черновик сохранён" : "Сохраняем…"}
         </span>
       </div>

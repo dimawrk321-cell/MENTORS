@@ -343,7 +343,7 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="guide-slug" className="text-text-2 text-[13px]">
-              Slug
+              Адрес страницы
             </label>
             <Input
               id="guide-slug"

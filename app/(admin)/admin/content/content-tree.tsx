@@ -296,6 +296,7 @@ function TitleDialog({
           <Input
             value={value}
             onChange={(event) => setValue(event.target.value)}
+            aria-label="Название"
             placeholder="Название"
             autoFocus
             required
@@ -488,7 +489,7 @@ function CourseCard({ course }: { course: TreeCourse }) {
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor={`course-slug-${course.id}`} className="text-text-2 text-[13px]">
-                Slug
+                Адрес страницы
               </label>
               <Input
                 id={`course-slug-${course.id}`}

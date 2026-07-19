@@ -85,6 +85,7 @@ export function QuizQuestion({
             value={text}
             onChange={(event) => setText(event.target.value)}
             disabled={answered}
+            aria-label="Ответ"
             placeholder="Короткий ответ"
             onKeyDown={(event) => {
               if (event.key === "Enter" && canSubmit && !answered) submit();

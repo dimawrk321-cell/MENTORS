@@ -104,6 +104,7 @@ export function TestRunner({ attemptId, questions, answeredIds }: TestRunnerProp
           <Input
             value={text}
             onChange={(event) => setText(event.target.value)}
+            aria-label="Ответ"
             placeholder="Короткий ответ"
             autoFocus
             onKeyDown={(event) => {

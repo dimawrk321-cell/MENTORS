@@ -300,6 +300,7 @@ export function CommandPalette({ zone }: { zone: "student" | "admin" }) {
               }}
               onKeyDown={onInputKeyDown}
               role="combobox"
+              aria-label="Поиск"
               aria-expanded
               aria-controls={listboxId}
               aria-activedescendant={activeKey ? optionId(activeKey) : undefined}

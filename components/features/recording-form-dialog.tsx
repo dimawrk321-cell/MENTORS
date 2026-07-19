@@ -276,7 +276,7 @@ export function RecordingFormDialog({ recording }: { recording?: RecordingFormVa
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="rec-embed" className="text-text-2 text-[13px]">
-              Embed-ссылка для плеера (необязательно)
+              Ссылка для встраивания плеера (необязательно)
             </label>
             <Input
               id="rec-embed"

@@ -135,7 +135,10 @@
     animation: goal-glow 500ms var(--ease);
   }
 
-  /* Section 5.4: reduced motion degrades animations; fine-grained pass in stage 12. */
+  /* Section 5.4 / stage 12.2: reduced motion degrades all animation and movement
+     to (near) instant — transitions and animations collapse, the flip becomes an
+     instant swap (motion-reduce:transition-none on the flip wrappers), haptics are
+     suppressed (lib/utils/haptic), and the celebratory rituals are switched off. */
   @media (prefers-reduced-motion: reduce) {
     *,
     ::before,
@@ -144,6 +147,10 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
+    }
+    /* Ритуалы отключены: no goal-ring glow at all. */
+    .goal-ring-glow {
+      animation: none !important;
     }
   }
 }

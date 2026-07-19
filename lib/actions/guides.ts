@@ -75,7 +75,7 @@ function revalidateGuides(slug?: string, guideId?: string): void {
 function failGuide(code: "not_found" | "slug_taken" | "not_draft"): never {
   const messages: Record<typeof code, string> = {
     not_found: "Гайд не найден",
-    slug_taken: "Такой slug уже занят",
+    slug_taken: "Такой адрес уже занят",
     not_draft: "Удалять можно только черновики — сначала сними с публикации",
   };
   throw new ActionError(code, messages[code]);

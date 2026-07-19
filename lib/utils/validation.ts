@@ -230,7 +230,7 @@ export const recordingUpsertSchema = z
       .max(600, "Слишком большая длительность"),
     url: z.url("Укажи корректную ссылку на запись").max(1000),
     embedUrl: z
-      .union([z.literal(""), z.url("Некорректная ссылка embed")])
+      .union([z.literal(""), z.url("Некорректная ссылка для встраивания")])
       .transform((value) => value || null),
     checklist: recordingChecklistSchema,
     status: z.enum(["draft", "published"]),
@@ -269,9 +269,9 @@ export const guideMetaSchema = z.object({
     .min(1, "Укажи название")
     .max(200, "Слишком длинное название"),
   slug: z
-    .string("Укажи slug")
+    .string("Укажи адрес страницы")
     .trim()
-    .regex(/^[a-z0-9-]{1,80}$/, "Slug — латиница, цифры и дефисы"),
+    .regex(/^[a-z0-9-]{1,80}$/, "Адрес — латиница, цифры и дефисы"),
   section: guideSectionSchema,
   order: z.number().int().min(0).max(10000),
 });

@@ -39,7 +39,7 @@ const idSchema = z.string().min(1);
 const slugSchema = z
   .string("Укажи slug")
   .trim()
-  .regex(/^[a-z0-9-]{1,60}$/, "Slug — латиница, цифры и дефисы");
+  .regex(/^[a-z0-9-]{1,60}$/, "Адрес — латиница, цифры и дефисы");
 const statusSchema = z.enum(["draft", "published"]);
 
 const courseUpdateSchema = z.object({
@@ -73,7 +73,7 @@ const reorderSchema = z.object({
 function failWith(res: { ok: false; code: string }): never {
   const messages: Record<string, string> = {
     not_found: "Элемент не найден",
-    slug_taken: "Такой slug уже занят",
+    slug_taken: "Такой адрес уже занят",
     not_draft: "Удалять можно только черновики — сначала сними с публикации",
   };
   throw new ActionError(res.code, messages[res.code] ?? "Не получилось выполнить действие");

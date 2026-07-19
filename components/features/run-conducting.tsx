@@ -128,7 +128,9 @@ function NotesPanel({ bookingId, initial }: { bookingId: string; initial: string
       <CardContent className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <p className="text-text-3 text-[12px]">Заметки</p>
-          <span className="text-text-3 text-[11px]">{saved ? "Сохранено" : "Сохраняем…"}</span>
+          <span aria-live="polite" className="text-text-3 text-[11px]">
+            {saved ? "Сохранено" : "Сохраняем…"}
+          </span>
         </div>
         <textarea
           value={text}

@@ -164,7 +164,13 @@ export function QuestionsBank({
             applyFilters({ q: new FormData(event.currentTarget).get("q") as string });
           }}
         >
-          <Input name="q" defaultValue={filters.q} placeholder="Поиск по тексту" className="w-56" />
+          <Input
+            name="q"
+            defaultValue={filters.q}
+            aria-label="Поиск по вопросам"
+            placeholder="Поиск по тексту"
+            className="w-56"
+          />
           <Button type="submit" variant="secondary" size="md">
             Найти
           </Button>
