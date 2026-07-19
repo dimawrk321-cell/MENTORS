@@ -39,7 +39,14 @@ function resolveImageSource(
 ): string | null {
   if (rootDir) {
     const direct = path.resolve(rootDir, ref.originalDecodedPath);
-    if (fs.existsSync(direct)) return direct;
+    // Containment guard (stage 12.2, adversarial finding): a markdown image ref
+    // with a traversing/absolute path — `![x](../../../etc/ssl/logo.png)` or
+    // `/home/other/photo.png` — must NOT escape rootDir and copy an arbitrary
+    // server file into the public web root. If it escapes, fall through to the
+    // basename lookup below, which only maps files under the provided image dir.
+    const rel = path.relative(rootDir, direct);
+    const contained = rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+    if (contained && fs.existsSync(direct)) return direct;
   }
   const byBase = basenameToPath.get(imageBasename(ref.originalDecodedPath));
   return byBase && fs.existsSync(byBase) ? byBase : null;
