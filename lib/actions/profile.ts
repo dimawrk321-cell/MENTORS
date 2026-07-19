@@ -15,9 +15,46 @@ import {
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
-import { changePasswordSchema, notificationSettingsSchema } from "@/lib/utils/validation";
+import {
+  changePasswordSchema,
+  notificationSettingsSchema,
+  readingFontSizeSchema,
+  themeSchema,
+} from "@/lib/utils/validation";
 
 export type ProfileFormState = ActionResult<undefined> | null;
+
+/**
+ * Quick theme toggle (spec 12.1/B1). The profile setting (users.theme) is the
+ * source of truth; the header/«Ещё» toggle writes it here. Available to every
+ * role (the toggle lives in the admin zone too) — no assertActiveAccess (theme is
+ * cosmetic, an expired student may still switch it). While impersonating we must
+ * not overwrite the viewed student's pref, so the write is blocked; the client
+ * applies the DOM/localStorage change locally regardless and ignores this error.
+ */
+export async function updateThemeAction(input: unknown): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionAuth();
+    assertNotImpersonating(auth);
+    const { theme } = parseInput(themeSchema, input);
+    await prisma.user.update({ where: { id: auth.user.id }, data: { theme } });
+    return undefined;
+  });
+}
+
+/** Reading font size for lesson/guide prose (spec 12.1/C9), saved to the profile. */
+export async function updateReadingFontSizeAction(
+  input: unknown,
+): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionStudent();
+    assertNotImpersonating(auth);
+    assertActiveAccess(auth);
+    const { size } = parseInput(readingFontSizeSchema, input);
+    await prisma.user.update({ where: { id: auth.user.id }, data: { readingFontSize: size } });
+    return undefined;
+  });
+}
 
 export async function changePasswordAction(
   _prev: ProfileFormState,

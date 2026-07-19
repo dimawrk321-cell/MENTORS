@@ -10,7 +10,7 @@ import {
   impersonateAction,
   resendInviteAction,
   resetStudentSessionsAction,
-  toggleLibraryAction,
+  setSectionAccessAction,
   unblockStudentAction,
 } from "@/lib/actions/students";
 
@@ -77,36 +77,45 @@ export function ResendInviteButton({ userId }: { userId: string }) {
   );
 }
 
-/** Per-student library toggle (spec 7.9 / 8.5) — optimistic Switch. */
-export function LibraryToggle({ userId, enabled }: { userId: string; enabled: boolean }) {
+/**
+ * Per-student section access toggle (spec 7.9/7.10, 12.1/C3) — optimistic Switch.
+ * Used for Библиотека / Резюме / Легенда.
+ */
+export function SectionAccessToggle({
+  userId,
+  section,
+  enabled,
+  label,
+  onLabel,
+  offLabel,
+}: {
+  userId: string;
+  section: "library" | "resume" | "legend";
+  enabled: boolean;
+  label: string;
+  onLabel: string;
+  offLabel: string;
+}) {
   const [on, setOn] = useState(enabled);
   const [pending, startTransition] = useTransition();
 
   function change(next: boolean): void {
     setOn(next); // optimistic (spec 15: safe optimistic updates)
     startTransition(async () => {
-      const res = await toggleLibraryAction(userId, next);
+      const res = await setSectionAccessAction({ userId, section, enabled: next });
       if (res && !res.ok) {
         setOn(!next);
         toast({ title: res.error.message, variant: "danger" });
       } else if (res?.ok) {
-        toast({
-          title: next ? "Библиотека открыта ученику" : "Библиотека скрыта у ученика",
-          variant: "success",
-        });
+        toast({ title: next ? onLabel : offLabel, variant: "success" });
       }
     });
   }
 
   return (
     <label className="flex items-center gap-2.5 text-[14px]">
-      <Switch
-        checked={on}
-        onCheckedChange={change}
-        disabled={pending}
-        aria-label="Доступ к библиотеке"
-      />
-      Доступ к библиотеке записей
+      <Switch checked={on} onCheckedChange={change} disabled={pending} aria-label={label} />
+      {label}
     </label>
   );
 }

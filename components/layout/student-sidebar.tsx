@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   BookMarked,
   BookOpen,
+  Feather,
+  FileText,
   Home,
   Layers,
   Library,
@@ -31,8 +33,10 @@ const mainItems: NavItem[] = [
   { href: "/guides", label: "Справочник", icon: BookMarked },
 ];
 
-// Библиотека is per-student toggled (spec 7.9) — inserted only when enabled.
+// Per-student toggled sections (spec 7.9/7.10, C3 flags) — inserted only when on.
 const libraryItem: NavItem = { href: "/library", label: "Библиотека", icon: Library };
+const resumeItem: NavItem = { href: "/resume", label: "Резюме", icon: FileText };
+const legendItem: NavItem = { href: "/legend", label: "Легенда", icon: Feather };
 
 const bottomItems: NavItem[] = [{ href: "/profile", label: "Профиль", icon: UserRound }];
 
@@ -65,15 +69,23 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
 export function StudentSidebar({
   brandName,
   libraryEnabled,
+  guidesResumeEnabled,
+  guidesLegendEnabled,
 }: {
   brandName: string;
   libraryEnabled: boolean;
+  guidesResumeEnabled: boolean;
+  guidesLegendEnabled: boolean;
 }) {
   const pathname = usePathname();
-  // Библиотека sits between «Справочник» and above; keep it right after Моки.
-  const items = libraryEnabled
-    ? [...mainItems.slice(0, 5), libraryItem, ...mainItems.slice(5)]
-    : mainItems;
+  // Библиотека sits right after Моки; Резюме/Легенда follow Справочник (spec 12.1).
+  const items: NavItem[] = [
+    ...mainItems.slice(0, 5),
+    ...(libraryEnabled ? [libraryItem] : []),
+    mainItems[5]!,
+    ...(guidesResumeEnabled ? [resumeItem] : []),
+    ...(guidesLegendEnabled ? [legendItem] : []),
+  ];
 
   return (
     <aside className="border-border sticky top-0 hidden h-dvh shrink-0 gap-1 border-r px-3 py-5 md:flex md:w-16 md:flex-col lg:w-60">

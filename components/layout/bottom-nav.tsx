@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   BookMarked,
   BookOpen,
+  Feather,
+  FileText,
   Home,
   Layers,
   Library,
@@ -15,6 +17,8 @@ import {
 } from "lucide-react";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils/cn";
+import { ThemeToggleMenuItem } from "@/components/features/theme-toggle";
+import type { Theme } from "@prisma/client";
 
 interface NavItem {
   href: string;
@@ -23,7 +27,7 @@ interface NavItem {
 }
 
 // Primary bottom-nav tabs (spec 13). «Ещё» opens a sheet with справочник,
-// библиотека (if enabled) and профиль — достижения join at V1.
+// библиотека / резюме / легенда (if enabled), профиль and the theme toggle.
 const mainItems: NavItem[] = [
   { href: "/", label: "Главная", icon: Home },
   { href: "/courses", label: "Обучение", icon: BookOpen },
@@ -31,24 +35,38 @@ const mainItems: NavItem[] = [
   { href: "/mocks", label: "Моки", icon: Video },
 ];
 
-/** Sections reachable through the «Ещё» sheet. */
-const moreBaseItems: NavItem[] = [
-  { href: "/guides", label: "Справочник", icon: BookMarked },
-  { href: "/profile", label: "Профиль", icon: UserRound },
-];
+// Per-student toggled sections (spec 7.9/7.10, gated by the C3 flags).
+const guidesItem: NavItem = { href: "/guides", label: "Справочник", icon: BookMarked };
+const resumeItem: NavItem = { href: "/resume", label: "Резюме", icon: FileText };
+const legendItem: NavItem = { href: "/legend", label: "Легенда", icon: Feather };
 const libraryItem: NavItem = { href: "/library", label: "Библиотека", icon: Library };
+const profileItem: NavItem = { href: "/profile", label: "Профиль", icon: UserRound };
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function BottomNav({ libraryEnabled }: { libraryEnabled: boolean }) {
+export function BottomNav({
+  libraryEnabled,
+  guidesResumeEnabled,
+  guidesLegendEnabled,
+  theme,
+}: {
+  libraryEnabled: boolean;
+  guidesResumeEnabled: boolean;
+  guidesLegendEnabled: boolean;
+  theme: Theme;
+}) {
   const pathname = usePathname();
 
-  const moreItems = libraryEnabled
-    ? [moreBaseItems[0]!, libraryItem, moreBaseItems[1]!]
-    : moreBaseItems;
+  const moreItems: NavItem[] = [
+    guidesItem,
+    ...(guidesResumeEnabled ? [resumeItem] : []),
+    ...(guidesLegendEnabled ? [legendItem] : []),
+    ...(libraryEnabled ? [libraryItem] : []),
+    profileItem,
+  ];
   const moreActive = moreItems.some((item) => isActive(pathname, item.href));
 
   return (
@@ -112,6 +130,9 @@ export function BottomNav({ libraryEnabled }: { libraryEnabled: boolean }) {
                   </SheetClose>
                 );
               })}
+              {/* Quick theme toggle (spec 12.1/B1) — mobile lives here; the profile
+                  setting stays the source of truth. Not a link → no SheetClose. */}
+              <ThemeToggleMenuItem initialTheme={theme} />
             </div>
           </SheetContent>
         </Sheet>

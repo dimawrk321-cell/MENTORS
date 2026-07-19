@@ -48,6 +48,19 @@ export interface SearchInput {
   q: string;
   /** Per-student library toggle (spec 7.9); false hides the recordings group. */
   libraryEnabled: boolean;
+  /**
+   * Per-student guides section access (spec 12.1/C3): false hides that section.
+   * Optional — omitted means full access (used by tests); real callers pass the
+   * user's flags so a disabled section never appears in search.
+   */
+  guidesResumeEnabled?: boolean;
+  guidesLegendEnabled?: boolean;
+}
+
+/** Sections the caller may see — filters resume/legend out of guide search (C3). */
+interface GuideSectionAccess {
+  resume: boolean;
+  legend: boolean;
 }
 
 // --- Snippet safety (spec 7.11: «отдавать готовый HTML только из ts_headline») ---
@@ -145,7 +158,7 @@ interface GuideRow {
   section: string;
 }
 
-async function searchGuides(db: Db, q: string): Promise<SearchItem[]> {
+async function searchGuides(db: Db, q: string, allow: GuideSectionAccess): Promise<SearchItem[]> {
   const rows = await db.$queryRaw<GuideRow[]>`
     SELECT g.id,
            g.slug,
@@ -155,6 +168,8 @@ async function searchGuides(db: Db, q: string): Promise<SearchItem[]> {
            ts_rank(g.search_vector, query) AS rank
     FROM guides g, websearch_to_tsquery('russian', ${q}) query
     WHERE g.status = 'published' AND g.search_vector @@ query
+      AND (${allow.resume} OR g.section <> 'resume')
+      AND (${allow.legend} OR g.section <> 'legend')
     ORDER BY rank DESC, g.id
     LIMIT ${SEARCH_GROUP_LIMIT}`;
   return rows.map((r) => ({
@@ -239,11 +254,13 @@ async function fuzzyLessons(db: Db, q: string): Promise<SearchItem[]> {
   }));
 }
 
-async function fuzzyGuides(db: Db, q: string): Promise<SearchItem[]> {
+async function fuzzyGuides(db: Db, q: string, allow: GuideSectionAccess): Promise<SearchItem[]> {
   const rows = await db.$queryRaw<TitleTrgmRow[]>`
     SELECT g.id, g.title, g.slug
     FROM guides g
     WHERE g.status = 'published' AND ${q} <% g.title AND word_similarity(${q}, g.title) > 0.3
+      AND (${allow.resume} OR g.section <> 'resume')
+      AND (${allow.legend} OR g.section <> 'legend')
     ORDER BY word_similarity(${q}, g.title) DESC, g.id
     LIMIT ${SEARCH_GROUP_LIMIT}`;
   return rows.map((r) => ({
@@ -306,11 +323,15 @@ function packGroups(parts: Record<SearchGroupType, SearchItem[]>): SearchGroup[]
  */
 export async function search(db: PrismaClient, input: SearchInput): Promise<SearchResult> {
   const q = input.q.trim();
+  const allow: GuideSectionAccess = {
+    resume: input.guidesResumeEnabled ?? true,
+    legend: input.guidesLegendEnabled ?? true,
+  };
 
   const [lessons, questions, guides, recordings] = await Promise.all([
     searchLessons(db, q),
     searchQuestions(db, q),
-    searchGuides(db, q),
+    searchGuides(db, q, allow),
     input.libraryEnabled ? searchRecordings(db, q) : Promise.resolve<SearchItem[]>([]),
   ]);
 
@@ -324,7 +345,7 @@ export async function search(db: PrismaClient, input: SearchInput): Promise<Sear
     await tx.$executeRawUnsafe("SET LOCAL pg_trgm.word_similarity_threshold = 0.3");
     const fl = await fuzzyLessons(tx, q);
     const fq = await fuzzyQuestions(tx, q);
-    const fg = await fuzzyGuides(tx, q);
+    const fg = await fuzzyGuides(tx, q, allow);
     const fr = input.libraryEnabled ? await fuzzyRecordings(tx, q) : [];
     return packGroups({ lessons: fl, questions: fq, guides: fg, recordings: fr });
   });

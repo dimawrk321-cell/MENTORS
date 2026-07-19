@@ -27,6 +27,18 @@ export async function listPublishedGuides(db: Db): Promise<GuideNavItem[]> {
   });
 }
 
+/** Published guides of one section (spec 12.1/C5: Резюме / Легенда section pages). */
+export async function listPublishedGuidesBySection(
+  db: Db,
+  section: GuideSection,
+): Promise<GuideNavItem[]> {
+  return db.guide.findMany({
+    where: { status: "published", section },
+    orderBy: [{ order: "asc" }, { title: "asc" }],
+    select: { id: true, slug: true, section: true, title: true },
+  });
+}
+
 export async function getGuideBySlug(db: Db, slug: string) {
   return db.guide.findFirst({
     where: { slug, status: "published" },

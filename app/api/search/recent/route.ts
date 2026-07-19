@@ -33,6 +33,8 @@ export async function GET() {
     getRecentItems(prisma, {
       userId: auth.user.id,
       libraryEnabled: auth.user.libraryEnabled,
+      guidesResumeEnabled: auth.user.guidesResumeEnabled,
+      guidesLegendEnabled: auth.user.guidesLegendEnabled,
     }),
   ]);
 

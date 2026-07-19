@@ -28,6 +28,10 @@ export default async function GuidePage({ params }: GuidePageProps) {
   const { slug } = await params;
   const guide = await getGuideBySlug(prisma, slug);
   if (!guide) notFound();
+  // Per-student section access (spec 12.1/C3): Резюме/Легенда are gated — a
+  // disabled section must not be reachable by direct slug URL either.
+  if (guide.section === "resume" && !user.guidesResumeEnabled) notFound();
+  if (guide.section === "legend" && !user.guidesLegendEnabled) notFound();
 
   const [bookmarked, { content }] = await Promise.all([
     isGuideBookmarked(prisma, user.id, guide.id),

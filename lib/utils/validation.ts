@@ -245,11 +245,6 @@ export const recordingUpsertSchema = z
     },
   );
 
-export const toggleLibrarySchema = z.object({
-  userId: z.string().min(1),
-  enabled: z.boolean(),
-});
-
 export const recordingIdSchema = z.object({ recordingId: z.string().min(1) });
 
 const guideSectionSchema = z.enum(
@@ -365,4 +360,29 @@ export const updateSettingsSchema = z.object({
     .min(1, "Добавь текст правил")
     .max(5000, "Слишком длинный текст"),
   defaultCourseGating: z.enum(["strict", "recommended", "free"]),
+});
+
+// --- Stage 12.1 ---
+
+/** Quick theme toggle (spec 12.1/B1). Persists users.theme (source of truth). */
+export const themeSchema = z.object({ theme: z.enum(["system", "dark", "light"], "Выбери тему") });
+
+/** Reading font size for lesson/guide prose (spec 12.1/C9). */
+export const readingFontSizeSchema = z.object({
+  size: z.enum(["s", "m", "l"], "Выбери размер"),
+});
+
+/** Per-student section access toggle (spec 12.1/C3): library / resume / legend. */
+export const sectionAccessSchema = z.object({
+  userId: z.string().min(1),
+  section: z.enum(["library", "resume", "legend"]),
+  enabled: z.boolean(),
+});
+
+/** Email verification code (spec 12.1/C8): exactly 6 digits. */
+export const verifyEmailSchema = z.object({
+  code: z
+    .string("Введи код")
+    .trim()
+    .regex(/^\d{6}$/, "Код — 6 цифр"),
 });

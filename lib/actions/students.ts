@@ -18,7 +18,7 @@ import {
   stopImpersonation,
   validateSessionToken,
 } from "@/lib/services/sessions";
-import { setLibraryEnabled } from "@/lib/services/library";
+import { setSectionAccess } from "@/lib/services/library";
 import {
   clearedCookieOptions,
   IMPERSONATION_RETURN_COOKIE,
@@ -39,7 +39,7 @@ import {
   extendAccessSchema,
   inviteMentorSchema,
   inviteStudentSchema,
-  toggleLibrarySchema,
+  sectionAccessSchema,
 } from "@/lib/utils/validation";
 import { formatDateRu } from "@/lib/utils/dates";
 
@@ -206,21 +206,23 @@ export async function resetStudentSessionsAction(userId: string): Promise<Action
   });
 }
 
-/** Per-student library toggle (spec 7.9 / 8.5) — admin controls in the card. */
-export async function toggleLibraryAction(
-  userId: string,
-  enabled: boolean,
-): Promise<ActionResult<undefined>> {
+/** Per-student section access toggle (spec 7.9/7.10, 12.1/C3) — admin card. */
+export async function setSectionAccessAction(input: {
+  userId: string;
+  section: "library" | "resume" | "legend";
+  enabled: boolean;
+}): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
     const auth = await requireActionRole("admin");
-    const parsed = parseInput(toggleLibrarySchema, { userId, enabled });
-    const res = await setLibraryEnabled(prisma, {
+    const parsed = parseInput(sectionAccessSchema, input);
+    const res = await setSectionAccess(prisma, {
       actorId: auth.user.id,
       userId: parsed.userId,
+      section: parsed.section,
       enabled: parsed.enabled,
     });
     if (!res.ok) throw new ActionError(res.code, "Ученик не найден");
-    revalidateStudent(userId);
+    revalidateStudent(parsed.userId);
     return undefined;
   });
 }

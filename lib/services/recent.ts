@@ -1,4 +1,4 @@
-import type { RecentItemType } from "@prisma/client";
+import type { GuideSection, RecentItemType } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { RECENT_KEEP, RECENT_SHOW, recordingCardTitle } from "@/lib/constants";
 import { stripMarkdown } from "@/lib/utils/text";
@@ -70,7 +70,13 @@ export async function touchRecentItem(
  */
 export async function getRecentItems(
   db: Db,
-  input: { userId: string; libraryEnabled: boolean },
+  input: {
+    userId: string;
+    libraryEnabled: boolean;
+    // Optional — omitted means full access (tests); real callers pass user flags.
+    guidesResumeEnabled?: boolean;
+    guidesLegendEnabled?: boolean;
+  },
 ): Promise<RecentEntry[]> {
   // Over-fetch: some rows may resolve to hidden/deleted entities and drop out.
   const rows = await db.recentItem.findMany({
@@ -84,6 +90,11 @@ export async function getRecentItems(
   const idsByType = (t: RecentItemType) =>
     rows.filter((r) => r.itemType === t).map((r) => r.entityId);
 
+  // Sections the user no longer has access to (spec 12.1/C3) are dropped from recent.
+  const blockedSections: GuideSection[] = [];
+  if (input.guidesResumeEnabled === false) blockedSections.push("resume");
+  if (input.guidesLegendEnabled === false) blockedSections.push("legend");
+
   const [lessons, questions, guides, recordings] = await Promise.all([
     db.lesson.findMany({
       where: { id: { in: idsByType("lesson") }, status: "published" },
@@ -94,7 +105,11 @@ export async function getRecentItems(
       select: { id: true, textMd: true },
     }),
     db.guide.findMany({
-      where: { id: { in: idsByType("guide") }, status: "published" },
+      where: {
+        id: { in: idsByType("guide") },
+        status: "published",
+        ...(blockedSections.length > 0 ? { section: { notIn: blockedSections } } : {}),
+      },
       select: { id: true, slug: true, title: true },
     }),
     input.libraryEnabled

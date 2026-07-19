@@ -206,13 +206,17 @@ export const GUIDE_SECTION_LABEL: Record<string, string> = {
 };
 
 export const GUIDE_SECTIONS = [
-  "tools",
   "resume",
   "legend",
   "stages",
   "ask_interviewer",
   "job_search",
 ] as const;
+
+// Sections shown inside the /guides hub nav (spec 12.1/C3/C5). `tools` became a
+// course («Инструменты индустрии»); `resume`/`legend` are promoted to their own
+// gated top-level nav items (/resume, /legend), so they leave the hub sidebar.
+export const GUIDE_HUB_SECTIONS = ["stages", "ask_interviewer", "job_search"] as const;
 
 // --- Stage 8: search & CommandPalette (spec 7.11) — client-safe ---
 

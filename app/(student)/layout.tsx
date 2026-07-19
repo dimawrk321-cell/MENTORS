@@ -5,6 +5,7 @@ import { ImpersonationBanner } from "@/components/features/impersonation-banner"
 import { CommandPalette } from "@/components/features/command-palette";
 import { SearchTriggerIcon } from "@/components/features/search-trigger";
 import { NotificationBell } from "@/components/features/notification-bell";
+import { ThemeToggleIcon } from "@/components/features/theme-toggle";
 import { AnnouncementBanners } from "@/components/features/announcement-banners";
 import { prisma } from "@/lib/db";
 import { getActiveBannersForUser } from "@/lib/services/announcements";
@@ -23,7 +24,12 @@ export default async function StudentLayout({ children }: { children: ReactNode 
     <>
       {impersonated && <ImpersonationBanner studentName={user.name} />}
       <div className="flex min-h-dvh">
-        <StudentSidebar brandName={brandName} libraryEnabled={user.libraryEnabled} />
+        <StudentSidebar
+          brandName={brandName}
+          libraryEnabled={user.libraryEnabled}
+          guidesResumeEnabled={user.guidesResumeEnabled}
+          guidesLegendEnabled={user.guidesLegendEnabled}
+        />
         {/* pb-20 keeps content clear of the fixed bottom nav on mobile. */}
         <main className="flex-1 pb-20 md:pb-0">
           {/* Header (spec 7.11/7.12): brand + bell + search on mobile; on desktop
@@ -31,6 +37,7 @@ export default async function StudentLayout({ children }: { children: ReactNode 
           <header className="border-border bg-bg/85 sticky top-0 z-30 flex items-center justify-between gap-2 border-b px-4 py-2 backdrop-blur md:justify-end md:px-8">
             <span className="text-[15px] font-semibold tracking-tight md:hidden">{brandName}</span>
             <div className="flex items-center gap-1">
+              <ThemeToggleIcon initialTheme={user.theme} className="hidden md:flex" />
               <NotificationBell />
               <SearchTriggerIcon className="-mr-2 md:hidden" />
             </div>
@@ -41,7 +48,12 @@ export default async function StudentLayout({ children }: { children: ReactNode 
           </div>
         </main>
       </div>
-      <BottomNav libraryEnabled={user.libraryEnabled} />
+      <BottomNav
+        libraryEnabled={user.libraryEnabled}
+        guidesResumeEnabled={user.guidesResumeEnabled}
+        guidesLegendEnabled={user.guidesLegendEnabled}
+        theme={user.theme}
+      />
       {/* Preloaded palette: opening is a state flip, data is lazy (spec 5.3). */}
       <CommandPalette zone="student" />
     </>

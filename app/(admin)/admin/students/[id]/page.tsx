@@ -26,9 +26,9 @@ import { ExtendAccessControls } from "./extend-access-controls";
 import {
   BlockButton,
   ImpersonateButton,
-  LibraryToggle,
   ResendInviteButton,
   ResetSessionsButton,
+  SectionAccessToggle,
   UnblockButton,
 } from "./student-controls";
 
@@ -106,6 +106,61 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
           <ImpersonateButton userId={user.id} />
         )}
       </div>
+
+      {/* Безопасность (spec 12.1/B2): активные сессии, устройства, сброс — заметной
+          секцией над вкладками (было ниже и терялось). */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Безопасность</CardTitle>
+          <CardDescription>
+            Одна одновременная сессия, до двух запомненных устройств.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div>
+            <h3 className="text-text-2 mb-2 text-[13px] font-medium">Активные сессии</h3>
+            {sessions.length === 0 ? (
+              <p className="text-text-3 text-[14px]">Сейчас нет активных сессий.</p>
+            ) : (
+              <ul className="flex flex-col gap-1.5">
+                {sessions.map((session) => (
+                  <li key={session.id} className="text-text-2 text-[14px]">
+                    {session.city ?? session.ip} · активна с{" "}
+                    {formatDateTimeRu(session.createdAt, viewer.timezone)} · последняя активность{" "}
+                    {formatDateTimeRu(session.lastActiveAt, viewer.timezone)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <h3 className="text-text-2 mb-2 text-[13px] font-medium">Устройства</h3>
+            {user.devices.length === 0 ? (
+              <p className="text-text-3 text-[14px]">Пока нет запомненных устройств.</p>
+            ) : (
+              <ul className="flex flex-col gap-1.5">
+                {user.devices.map((device) => (
+                  <li key={device.id} className="text-text-2 flex items-center gap-2 text-[14px]">
+                    <MonitorSmartphone
+                      size={15}
+                      strokeWidth={1.75}
+                      className="text-text-3 shrink-0"
+                      aria-hidden="true"
+                    />
+                    {device.label} · был активен{" "}
+                    {formatDateTimeRu(device.lastSeenAt, viewer.timezone)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {canManage && (
+            <div>
+              <ResetSessionsButton userId={user.id} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {invite && (
         <Card>
@@ -195,69 +250,39 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Сессии и устройства</CardTitle>
-          <CardDescription>
-            Одна одновременная сессия, до двух запомненных устройств.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div>
-            <h3 className="text-text-2 mb-2 text-[13px] font-medium">Активные сессии</h3>
-            {sessions.length === 0 ? (
-              <p className="text-text-3 text-[14px]">Сейчас нет активных сессий.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5">
-                {sessions.map((session) => (
-                  <li key={session.id} className="text-text-2 text-[14px]">
-                    {session.city ?? session.ip} · активна с{" "}
-                    {formatDateTimeRu(session.createdAt, viewer.timezone)} · последняя активность{" "}
-                    {formatDateTimeRu(session.lastActiveAt, viewer.timezone)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div>
-            <h3 className="text-text-2 mb-2 text-[13px] font-medium">Устройства</h3>
-            {user.devices.length === 0 ? (
-              <p className="text-text-3 text-[14px]">Пока нет запомненных устройств.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5">
-                {user.devices.map((device) => (
-                  <li key={device.id} className="text-text-2 flex items-center gap-2 text-[14px]">
-                    <MonitorSmartphone
-                      size={15}
-                      strokeWidth={1.75}
-                      className="text-text-3 shrink-0"
-                      aria-hidden="true"
-                    />
-                    {device.label} · был активен{" "}
-                    {formatDateTimeRu(device.lastSeenAt, viewer.timezone)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {canManage && (
-            <div>
-              <ResetSessionsButton userId={user.id} />
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {canManage && user.status !== "invited" && (
         <Card>
           <CardHeader>
-            <CardTitle>Библиотека записей</CardTitle>
+            <CardTitle>Доступы к разделам</CardTitle>
             <CardDescription>
-              Тумблер скрывает раздел «Библиотека» и его страницы у этого ученика (spec 7.9).
+              Тумблеры скрывают разделы и их страницы у этого ученика (spec 7.9/7.10/12.1).
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <LibraryToggle userId={user.id} enabled={user.libraryEnabled} />
+          <CardContent className="flex flex-col gap-3">
+            <SectionAccessToggle
+              userId={user.id}
+              section="library"
+              enabled={user.libraryEnabled}
+              label="Библиотека записей"
+              onLabel="Библиотека открыта ученику"
+              offLabel="Библиотека скрыта у ученика"
+            />
+            <SectionAccessToggle
+              userId={user.id}
+              section="resume"
+              enabled={user.guidesResumeEnabled}
+              label="Раздел «Резюме»"
+              onLabel="Раздел «Резюме» открыт ученику"
+              offLabel="Раздел «Резюме» скрыт у ученика"
+            />
+            <SectionAccessToggle
+              userId={user.id}
+              section="legend"
+              enabled={user.guidesLegendEnabled}
+              label="Раздел «Легенда»"
+              onLabel="Раздел «Легенда» открыт ученику"
+              offLabel="Раздел «Легенда» скрыт у ученика"
+            />
           </CardContent>
         </Card>
       )}

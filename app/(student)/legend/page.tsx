@@ -1,0 +1,13 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { requireStudentZone } from "@/lib/auth/guards";
+import { GuideSectionView } from "@/components/features/guide-section-view";
+
+export const metadata: Metadata = { title: "Легенда" };
+
+// Легенда section page (spec 12.1/C5), gated by the per-student flag (C3).
+export default async function LegendPage() {
+  const { user } = await requireStudentZone();
+  if (!user.guidesLegendEnabled) notFound();
+  return <GuideSectionView section="legend" />;
+}

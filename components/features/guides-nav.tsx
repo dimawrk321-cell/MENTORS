@@ -4,13 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bookmark, Search } from "lucide-react";
 import type { GuideNavItem } from "@/lib/services/guides";
-import { GUIDE_SECTIONS, GUIDE_SECTION_LABEL } from "@/lib/constants";
+import { GUIDE_HUB_SECTIONS, GUIDE_SECTION_LABEL } from "@/lib/constants";
 import { cn } from "@/lib/utils/cn";
 
-// Section sidebar (desktop) / accordion (mobile) for the guides zone (spec 7.10).
-
+// Section sidebar (desktop) / accordion (mobile) for the guides hub (spec 7.10).
+// Only the hub sections appear here — Резюме/Легенда are separate gated top-level
+// nav items (spec 12.1/C5), and tools became a course.
 function groupBySection(guides: GuideNavItem[]): Array<{ section: string; items: GuideNavItem[] }> {
-  return GUIDE_SECTIONS.map((section) => ({
+  return GUIDE_HUB_SECTIONS.map((section) => ({
     section,
     items: guides.filter((g) => g.section === section),
   })).filter((group) => group.items.length > 0);

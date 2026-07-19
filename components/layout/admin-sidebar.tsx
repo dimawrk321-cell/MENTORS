@@ -18,10 +18,11 @@ import {
   Video,
   type LucideIcon,
 } from "lucide-react";
-import type { Role } from "@prisma/client";
+import type { Role, Theme } from "@prisma/client";
 import { cn } from "@/lib/utils/cn";
 import { logoutAction } from "@/lib/actions/auth";
 import { SearchTriggerBar, SearchTriggerIcon } from "@/components/features/search-trigger";
+import { ThemeToggleIcon } from "@/components/features/theme-toggle";
 
 interface NavItem {
   href: string;
@@ -74,10 +75,11 @@ interface AdminNavProps {
   role: Role;
   isInterviewer: boolean;
   userName: string;
+  theme: Theme;
 }
 
 /** Renders both variants: desktop sidebar (md+) and mobile horizontal chip row. */
-export function AdminNav({ brandName, role, isInterviewer, userName }: AdminNavProps) {
+export function AdminNav({ brandName, role, isInterviewer, userName, theme }: AdminNavProps) {
   const pathname = usePathname();
   const visible = items.filter((item) => ROLE_RANK[role] >= ROLE_RANK[item.minRole]);
 
@@ -130,6 +132,8 @@ export function AdminNav({ brandName, role, isInterviewer, userName }: AdminNavP
             <div className="text-text-1 truncate text-[13px]">{userName}</div>
             <div className="text-text-3 text-[11px]">{ROLE_LABEL[role]}</div>
           </div>
+          {/* Quick theme toggle (spec 12.1/B1) — admin has no header bar. */}
+          <ThemeToggleIcon initialTheme={theme} className="size-8" />
           <form action={logoutAction}>
             <button
               type="submit"
@@ -174,6 +178,7 @@ export function AdminNav({ brandName, role, isInterviewer, userName }: AdminNavP
             {interviewerItem.label}
           </Link>
         )}
+        <ThemeToggleIcon initialTheme={theme} className="size-8 shrink-0" />
         <form action={logoutAction} className="shrink-0">
           <button
             type="submit"

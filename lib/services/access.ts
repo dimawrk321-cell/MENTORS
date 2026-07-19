@@ -95,6 +95,10 @@ export async function inviteStudent(
         role: "student",
         status: "invited",
         avatarColor: paletteIndex(input.email),
+        // New students start with every gated section off (spec 12.1/C3); an admin
+        // opens what this student needs from the card. guides_resume/legend already
+        // default false in schema; library_enabled defaults true, so set it here.
+        libraryEnabled: false,
       },
     });
     await tx.invite.create({

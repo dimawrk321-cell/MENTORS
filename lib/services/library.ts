@@ -298,30 +298,61 @@ export async function deleteRecording(
   return { ok: true };
 }
 
-// --- Per-student library toggle (spec 7.9 / 8.5) ---
+// --- Per-student section access toggles (spec 7.9/7.10/8.5, 12.1/C3) ---
 
 export type ToggleLibraryResult = { ok: true } | { ok: false; code: "not_found" };
 
-export async function setLibraryEnabled(
+/** The three per-student section toggles (spec 12.1/C3). */
+export type SectionFlag = "library" | "resume" | "legend";
+
+const SECTION_FIELD: Record<
+  SectionFlag,
+  "libraryEnabled" | "guidesResumeEnabled" | "guidesLegendEnabled"
+> = {
+  library: "libraryEnabled",
+  resume: "guidesResumeEnabled",
+  legend: "guidesLegendEnabled",
+};
+
+const SECTION_AUDIT: Record<SectionFlag, string> = {
+  library: "user.library_toggled",
+  resume: "user.guides_resume_toggled",
+  legend: "user.guides_legend_toggled",
+};
+
+/**
+ * Toggle one per-student section flag (Библиотека / Резюме / Легенда). Students
+ * only; writes the flag + an audit entry in one transaction (spec 8.5).
+ */
+export async function setSectionAccess(
   db: PrismaClient,
-  input: { actorId: string; userId: string; enabled: boolean },
+  input: { actorId: string; userId: string; section: SectionFlag; enabled: boolean },
 ): Promise<ToggleLibraryResult> {
   const user = await db.user.findUnique({ where: { id: input.userId } });
   if (!user || user.role !== "student") return { ok: false, code: "not_found" };
 
+  const field = SECTION_FIELD[input.section];
   await db.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: input.userId },
-      data: { libraryEnabled: input.enabled },
+      data: { [field]: input.enabled },
     });
     await writeAudit(tx, {
       actorId: input.actorId,
-      action: "user.library_toggled",
+      action: SECTION_AUDIT[input.section],
       entityType: "user",
       entityId: input.userId,
-      before: { libraryEnabled: user.libraryEnabled },
-      after: { libraryEnabled: input.enabled },
+      before: { [field]: user[field] },
+      after: { [field]: input.enabled },
     });
   });
   return { ok: true };
+}
+
+/** Backward-compatible library-only wrapper (spec 7.9). */
+export async function setLibraryEnabled(
+  db: PrismaClient,
+  input: { actorId: string; userId: string; enabled: boolean },
+): Promise<ToggleLibraryResult> {
+  return setSectionAccess(db, { ...input, section: "library" });
 }

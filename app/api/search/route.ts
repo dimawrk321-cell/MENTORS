@@ -35,7 +35,12 @@ export async function GET(request: NextRequest) {
   const q = parsed.data;
 
   const startedAt = performance.now();
-  const result = await search(prisma, { q, libraryEnabled: auth.user.libraryEnabled });
+  const result = await search(prisma, {
+    q,
+    libraryEnabled: auth.user.libraryEnabled,
+    guidesResumeEnabled: auth.user.guidesResumeEnabled,
+    guidesLegendEnabled: auth.user.guidesLegendEnabled,
+  });
   const tookMs = Math.round(performance.now() - startedAt);
 
   // Perf budget is 150ms (spec 12); surface slow queries in the logs.
