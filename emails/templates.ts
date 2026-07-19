@@ -28,6 +28,17 @@ export function passwordResetEmail(resetUrl: string): EmailContent {
   });
 }
 
+export function emailVerificationEmail(code: string): EmailContent {
+  return buildEmail(`${brand()} — подтверждение почты`, {
+    title: "Подтверждение почты",
+    paragraphs: [
+      `Твой код подтверждения: ${code}`,
+      "Введи его в профиле, чтобы подтвердить адрес. Это не обязательно, но помогает нам быть на связи.",
+    ],
+    note: "Код действует 15 минут. Если это был не ты — просто проигнорируй письмо.",
+  });
+}
+
 export function newDeviceEmail(deviceLabel: string): EmailContent {
   return buildEmail(`${brand()} — вход с нового устройства`, {
     title: "Вход с нового устройства",

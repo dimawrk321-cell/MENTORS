@@ -1,8 +1,13 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 
 /** Random 256-bit token, base64url — used for sessions, invites, resets (spec 7.2/11). */
 export function generateToken(): string {
   return randomBytes(32).toString("base64url");
+}
+
+/** Uniform N-digit numeric code, zero-padded (spec 12.1/C8: email verification). */
+export function generateNumericCode(digits = 6): string {
+  return String(randomInt(0, 10 ** digits)).padStart(digits, "0");
 }
 
 export function sha256Hex(value: string): string {

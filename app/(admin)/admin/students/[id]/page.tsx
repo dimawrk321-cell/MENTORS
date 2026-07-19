@@ -98,6 +98,10 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
             <h1 className="flex flex-wrap items-center gap-2.5 text-[24px] font-semibold">
               {user.name}
               <UserStatusBadge status={user.status} />
+              {/* Soft email verification (spec 12.1/C8). */}
+              {!user.emailVerifiedAt && (user.status === "active" || user.status === "expired") && (
+                <Badge variant="warning">почта не подтверждена</Badge>
+              )}
             </h1>
             <p className="text-text-3 text-[13px]">{user.email}</p>
           </div>

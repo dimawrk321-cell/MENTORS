@@ -17,6 +17,8 @@ import {
   type SessionWithUser,
 } from "@/lib/services/sessions";
 import { ACCESS_INITIAL_DAYS } from "@/lib/services/access";
+import { issueEmailCode } from "@/lib/services/email-verification";
+import { logger } from "@/lib/logger";
 import { env } from "@/lib/env";
 
 export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour (spec 6)
@@ -210,6 +212,18 @@ export async function acceptInvite(
   });
 
   const freshUser = await db.user.findUniqueOrThrow({ where: { id: user.id } });
+
+  // Soft email verification (spec 12.1/C8): issue a 6-digit code on activation.
+  // Non-blocking — a failure here must never break signup (verification is optional
+  // and student-only; a mentor has no place to enter the code).
+  if (freshUser.role === "student") {
+    try {
+      await issueEmailCode(db, freshUser.id, now);
+    } catch (err) {
+      logger.error({ err, userId: freshUser.id }, "issueEmailCode failed (non-fatal)");
+    }
+  }
+
   return { ok: true, token, deviceCookieId: device.deviceCookieId, user: freshUser };
 }
 

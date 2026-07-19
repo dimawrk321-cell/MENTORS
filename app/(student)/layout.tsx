@@ -7,6 +7,7 @@ import { SearchTriggerIcon } from "@/components/features/search-trigger";
 import { NotificationBell } from "@/components/features/notification-bell";
 import { ThemeToggleIcon } from "@/components/features/theme-toggle";
 import { AnnouncementBanners } from "@/components/features/announcement-banners";
+import { EmailVerifyBanner } from "@/components/features/email-verify-banner";
 import { prisma } from "@/lib/db";
 import { getActiveBannersForUser } from "@/lib/services/announcements";
 import { requireStudentZone } from "@/lib/auth/guards";
@@ -43,6 +44,7 @@ export default async function StudentLayout({ children }: { children: ReactNode 
             </div>
           </header>
           <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">
+            {!user.emailVerifiedAt && user.status === "active" && <EmailVerifyBanner />}
             <AnnouncementBanners banners={banners} />
             {children}
           </div>

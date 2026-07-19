@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { UserStatusBadge } from "@/components/features/user-status-badge";
 import { InviteStudentDialog } from "./invite-student-dialog";
 import { InviteMentorDialog } from "./invite-mentor-dialog";
@@ -100,7 +101,14 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
                       </Link>
                     </td>
                     <td className="px-5 py-3">
-                      <UserStatusBadge status={student.status} />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <UserStatusBadge status={student.status} />
+                        {/* Soft email verification (spec 12.1/C8) — activated but unverified. */}
+                        {!student.emailVerifiedAt &&
+                          (student.status === "active" || student.status === "expired") && (
+                            <Badge variant="warning">почта не подтверждена</Badge>
+                          )}
+                      </div>
                     </td>
                     <td className="text-text-2 px-5 py-3">
                       {student.accessUntil

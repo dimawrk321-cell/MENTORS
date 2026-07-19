@@ -5,6 +5,7 @@ import { getRenewalContact } from "@/lib/services/settings";
 import type { EmailContent } from "@/emails/layout";
 import {
   adminSecurityAlertEmail,
+  emailVerificationEmail,
   inviteEmail,
   newDeviceEmail,
   passwordResetEmail,
@@ -76,6 +77,10 @@ export async function sendInviteEmail(to: string, name: string, inviteUrl: strin
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
   await sendEmailSafe(to, passwordResetEmail(resetUrl));
+}
+
+export async function sendEmailVerificationEmail(to: string, code: string): Promise<void> {
+  await sendEmailSafe(to, emailVerificationEmail(code));
 }
 
 export async function sendNewDeviceEmail(to: string, deviceLabel: string): Promise<void> {

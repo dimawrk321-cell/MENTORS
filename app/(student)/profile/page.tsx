@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AchievementIcon } from "@/components/features/achievement-icon";
 import { ChangePasswordForm } from "./change-password-form";
+import { EmailVerifyForm } from "./email-verify-form";
 import { NotificationSettings } from "./notification-settings";
 import { RevokeOtherSessionsButton } from "./revoke-others-button";
 
@@ -44,8 +45,24 @@ export default async function ProfilePage() {
           </div>
           <div className="flex flex-wrap justify-between gap-x-6 gap-y-1">
             <span className="text-text-2">Email</span>
-            <span>{user.email}</span>
+            <span className="inline-flex items-center gap-2">
+              {user.email}
+              {user.emailVerifiedAt ? (
+                <Badge variant="success">подтверждён</Badge>
+              ) : (
+                <Badge variant="warning">не подтверждён</Badge>
+              )}
+            </span>
           </div>
+          {/* Soft email verification (spec 12.1/C8) — code form while unverified. */}
+          {!user.emailVerifiedAt && (
+            <div className="border-border mt-1 border-t pt-3">
+              <p className="text-text-3 mb-2 text-[13px]">
+                Введи код из письма, чтобы подтвердить почту. Это не обязательно.
+              </p>
+              <EmailVerifyForm />
+            </div>
+          )}
           {user.accessUntil && (
             // Spec 7.1.2: спокойная строка, без таймеров.
             <div className="flex flex-wrap justify-between gap-x-6 gap-y-1">
