@@ -15,7 +15,17 @@ vi.mock("@/lib/auth/guards", () => ({
 
 // Imported after the mock so action-helpers picks up the mocked getAuth.
 const { loadMoreAuditAction } = await import("@/lib/actions/audit");
-const { updateSettingsAction } = await import("@/lib/actions/settings");
+const { updateSettingsAction, updateXpMapAction, updateOperationalSettingsAction } =
+  await import("@/lib/actions/settings");
+const {
+  inviteMentorAction,
+  extendAccessAction,
+  blockStudentAction,
+  resetStudentSessionsAction,
+  impersonateAction,
+} = await import("@/lib/actions/students");
+const { createAnnouncementAction } = await import("@/lib/actions/announcements");
+const { upsertRubricAction } = await import("@/lib/actions/mock-admin");
 
 function asRole(role: Role) {
   getAuthMock.mockResolvedValue({
@@ -49,5 +59,44 @@ describe("/admin/settings — admin+", () => {
       expect(res.ok).toBe(false);
       if (!res.ok) expect(res.error.code).toBe("forbidden");
     }
+  });
+});
+
+// Stage 12.2/4.4: rejection tests for the rest of the privileged mutations so a
+// future refactor can't silently drop a guard (matrix, spec 2). The role check
+// runs before parseInput/DB, so minimal/empty inputs reach the guard first.
+function rejects(res: { ok: boolean; error?: { code: string } } | null): void {
+  expect(res && res.ok).toBe(false); // also catches an unexpected null
+  if (res && !res.ok) expect(res.error?.code).toBe("forbidden");
+}
+
+describe("роль-ассайнмент (invite mentor) — owner-only", () => {
+  it("отклоняет mentor и admin (нужен owner)", async () => {
+    for (const role of ["mentor", "admin"] as const) {
+      asRole(role);
+      rejects(await inviteMentorAction(null, new FormData()));
+    }
+  });
+});
+
+describe("доступ ученика (продление/блок/сессии/impersonation) — admin+", () => {
+  it("отклоняет student и mentor (нужен admin+)", async () => {
+    for (const role of ["student", "mentor"] as const) {
+      asRole(role);
+      rejects(await extendAccessAction({ userId: "u", days: 30 }));
+      rejects(await blockStudentAction("u"));
+      rejects(await resetStudentSessionsAction("u"));
+      rejects(await impersonateAction("u"));
+    }
+  });
+});
+
+describe("объявления / XP-карта / опер-правила / рубрики — admin+", () => {
+  it("отклоняет mentor (нужен admin+)", async () => {
+    asRole("mentor");
+    rejects(await createAnnouncementAction({ title: "t", bodyMd: "b", kind: "banner" }));
+    rejects(await updateXpMapAction({}));
+    rejects(await updateOperationalSettingsAction({}));
+    rejects(await upsertRubricAction({ type: "theory", criteria: [] }));
   });
 });
