@@ -8,6 +8,7 @@ import { renderLessonContent } from "@/components/blocks/lesson-renderer";
 import { Watermark } from "@/components/features/watermark";
 import { GuideBookmark } from "@/components/features/guide-bookmark";
 import { Badge } from "@/components/ui/badge";
+import { BackButton } from "@/components/ui/back-button";
 
 interface GuidePageProps {
   params: Promise<{ slug: string }>;
@@ -38,8 +39,17 @@ export default async function GuidePage({ params }: GuidePageProps) {
     renderLessonContent(guide.contentMd),
   ]);
 
+  // Hierarchical back target (spec 12.1/C7): promoted sections → their landing page.
+  const back =
+    guide.section === "resume"
+      ? { href: "/resume", label: "Резюме" }
+      : guide.section === "legend"
+        ? { href: "/legend", label: "Легенда" }
+        : { href: "/guides", label: "Справочник" };
+
   return (
     <article className="mx-auto w-full max-w-[680px]">
+      <BackButton href={back.href} label={back.label} className="mb-3" />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <Badge>{GUIDE_SECTION_LABEL[guide.section] ?? guide.section}</Badge>
         <GuideBookmark guideId={guide.id} initialBookmarked={bookmarked} />

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getQuestionPublic } from "@/lib/services/questions";
@@ -55,13 +54,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
       {/* Logs question.opened + palette recency once on mount (spec 7.11/7.13). */}
       <QuestionOpenLogger questionId={question.id} />
-      <Link
-        href="/questions"
-        className="text-text-3 ease-app hover:text-text-1 flex w-fit items-center gap-1.5 text-[13px] transition-colors duration-150"
-      >
-        <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
-        Вопросы
-      </Link>
+      <BackButton href="/questions" label="Вопросы" />
 
       <FlipCard
         front={

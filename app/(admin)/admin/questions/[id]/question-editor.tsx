@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import { BackButton } from "@/components/ui/back-button";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -169,13 +169,7 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href="/admin/questions"
-          className="text-text-3 ease-app hover:text-text-1 flex items-center gap-1.5 text-[13px] transition-colors duration-150"
-        >
-          <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
-          Вопросы
-        </Link>
+        <BackButton href="/admin/questions" label="Вопросы" className="w-auto" />
         <Badge>{QUESTION_TYPE_LABEL[question.type]}</Badge>
         <Badge>{question.source === "import" ? "импорт" : "создан вручную"}</Badge>
         {question.status === "published" ? (

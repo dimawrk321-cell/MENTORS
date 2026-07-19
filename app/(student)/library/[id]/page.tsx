@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getRecordingForView } from "@/lib/services/library";
@@ -39,13 +39,7 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-      <Link
-        href="/library"
-        className="text-text-3 ease-app hover:text-text-1 flex w-fit items-center gap-1.5 text-[13px] transition-colors duration-150"
-      >
-        <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
-        Библиотека
-      </Link>
+      <BackButton href="/library" label="Библиотека" />
 
       <div>
         <h1 className="text-[24px] font-semibold">{recordingCardTitle(recording)}</h1>

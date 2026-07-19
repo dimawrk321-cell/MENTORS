@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { BookOpen, Check, X } from "lucide-react";
+import { BookOpen, Check } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -154,13 +155,13 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
         <p className="text-text-2 text-[13px]" aria-live="polite">
           {index + 1} / {items.length}
         </p>
-        <Link
+        {/* Hierarchical exit with confirm (spec 12.1/C7): answered cards are already
+            saved (each grade is its own action), so only the in-progress rest is lost. */}
+        <BackButton
           href="/trainer"
-          className="text-text-3 ease-app hover:text-text-1 flex items-center gap-1.5 text-[13px] transition-colors duration-150"
-        >
-          <X size={14} strokeWidth={1.75} aria-hidden="true" />
-          Закончить
-        </Link>
+          label="Закончить"
+          confirmMessage="Прогресс отвеченных сохранён. Прервать сессию повторений?"
+        />
       </div>
 
       <div>

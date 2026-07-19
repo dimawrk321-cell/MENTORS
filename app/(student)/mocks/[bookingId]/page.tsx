@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { BookOpen, Clock } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
+import { BackButton } from "@/components/ui/back-button";
 import { getBookingDetail } from "@/lib/services/mock-queries";
 import { getPublishedFeedback } from "@/lib/services/feedback";
 import {
@@ -70,9 +71,7 @@ export default async function BookingDetailPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <Link href="/mocks/mine" className="text-text-3 hover:text-text-1 text-[13px]">
-          ← Мои моки
-        </Link>
+        <BackButton href="/mocks/mine" label="Мои моки" />
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-[24px] font-semibold">Мок: {MOCK_TYPE_LABEL[booking.type]}</h1>
           <Badge variant={STATUS_VARIANT[booking.status] ?? "default"}>
