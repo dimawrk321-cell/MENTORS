@@ -7,6 +7,7 @@ import { GUIDE_SECTION_LABEL } from "@/lib/constants";
 import { renderLessonContent } from "@/components/blocks/lesson-renderer";
 import { Watermark } from "@/components/features/watermark";
 import { GuideBookmark } from "@/components/features/guide-bookmark";
+import { ReadingSizeControl } from "@/components/features/reading-size-control";
 import { Badge } from "@/components/ui/badge";
 import { BackButton } from "@/components/ui/back-button";
 
@@ -52,13 +53,18 @@ export default async function GuidePage({ params }: GuidePageProps) {
       <BackButton href={back.href} label={back.label} className="mb-3" />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <Badge>{GUIDE_SECTION_LABEL[guide.section] ?? guide.section}</Badge>
-        <GuideBookmark guideId={guide.id} initialBookmarked={bookmarked} />
+        <div className="flex items-center gap-2">
+          <ReadingSizeControl initial={user.readingFontSize} />
+          <GuideBookmark guideId={guide.id} initialBookmarked={bookmarked} />
+        </div>
       </div>
       <h1 className="text-[32px] font-semibold">{guide.title}</h1>
       {/* Reading column with the always-present watermark layer (spec 5.7). */}
       <div className="relative mt-5">
         <Watermark email={session.user.email} />
-        <div className="lesson-prose">{content}</div>
+        <div className="lesson-prose" data-reading-size={user.readingFontSize}>
+          {content}
+        </div>
       </div>
     </article>
   );

@@ -156,25 +156,33 @@
     display: none;
   }
 
-  /* Reading column typography — tokens only, 680px handled by the page. */
+  /* Reading column typography — tokens only, 680px handled by the page.
+     Reading size (spec 12.1/C9): --reading-font scales the whole prose (headings
+     and code are em-based below); line-height stays unitless so leading scales too. */
   .lesson-prose {
-    font-size: 16px;
+    font-size: var(--reading-font, 16px);
     line-height: 1.65;
+  }
+  .lesson-prose[data-reading-size="s"] {
+    --reading-font: 15px;
+  }
+  .lesson-prose[data-reading-size="l"] {
+    --reading-font: 18px;
   }
   .lesson-prose > :first-child {
     margin-top: 0;
   }
   .lesson-prose h2 {
     margin: 2rem 0 0.75rem;
-    font-size: 24px;
+    font-size: 1.5em;
   }
   .lesson-prose h3 {
     margin: 1.5rem 0 0.5rem;
-    font-size: 18px;
+    font-size: 1.125em;
   }
   .lesson-prose h4 {
     margin: 1.25rem 0 0.5rem;
-    font-size: 16px;
+    font-size: 1em;
   }
   .lesson-prose p {
     margin: 0.75rem 0;
@@ -228,11 +236,11 @@
     border-radius: 5px;
     background: var(--surface-2);
     padding: 0.1em 0.35em;
-    font-size: 13.5px;
+    font-size: 0.84em;
   }
   .lesson-prose table {
     width: 100%;
-    font-size: 14px;
+    font-size: 0.875em;
     border-collapse: collapse;
   }
   .lesson-prose th,

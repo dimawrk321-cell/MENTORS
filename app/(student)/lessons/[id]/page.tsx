@@ -14,6 +14,7 @@ import { LessonReader } from "@/components/features/lesson-reader";
 import { LessonTocRail, LessonTocSheet } from "@/components/features/lesson-toc";
 import { CompleteLessonButton } from "@/components/features/complete-lesson-button";
 import { ReportDialog } from "@/components/features/report-dialog";
+import { ReadingSizeControl } from "@/components/features/reading-size-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -109,7 +110,8 @@ export default async function LessonPage({ params }: LessonPageProps) {
           <Badge>{DIFFICULTY_LABEL[view.lesson.difficulty]}</Badge>
           {view.lesson.isOptional && <Badge>необязательный</Badge>}
           {view.state.updatedSinceCompletion && <Badge variant="accent">обновлён</Badge>}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <ReadingSizeControl initial={user.readingFontSize} />
             <LessonTocSheet headings={headings} />
           </div>
         </div>
@@ -133,7 +135,9 @@ export default async function LessonPage({ params }: LessonPageProps) {
           {/* Reading column with the always-present watermark layer (spec 5.7). */}
           <div className="relative">
             <Watermark email={session.user.email} />
-            <article className="lesson-prose">{content}</article>
+            <article className="lesson-prose" data-reading-size={user.readingFontSize}>
+              {content}
+            </article>
           </div>
         </LessonReader>
 
