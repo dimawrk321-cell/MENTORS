@@ -111,10 +111,25 @@ const GATING_OPTIONS = [
 ] as const;
 
 function StatusBadge({ status }: { status: "draft" | "published" }) {
+  // Draft = warning (spec 12.1/C10): distinct from the neutral «необязательный» tag.
   return status === "published" ? (
     <Badge variant="success">опубликован</Badge>
   ) : (
-    <Badge>черновик</Badge>
+    <Badge variant="warning">черновик</Badge>
+  );
+}
+
+/** Leading status dot for lesson rows (spec 12.1/C10) — scannable at a glance. */
+function StatusDot({ status }: { status: "draft" | "published" }) {
+  return (
+    <span
+      aria-hidden="true"
+      title={status === "published" ? "Опубликован" : "Черновик"}
+      className={cn(
+        "size-1.5 shrink-0 rounded-full",
+        status === "published" ? "bg-success" : "bg-warning",
+      )}
+    />
   );
 }
 
@@ -815,8 +830,9 @@ function LessonRow({ lesson }: { lesson: TreeLesson }) {
         href={`/admin/content/lessons/${lesson.id}`}
         className="rounded-control ease-app hover:bg-surface-2 flex min-w-0 flex-1 items-center gap-2 px-1.5 py-1 text-[13px] transition-colors duration-150"
       >
+        <StatusDot status={lesson.status} />
         <span className="text-text-1 min-w-0 truncate">{lesson.title}</span>
-        {lesson.status === "draft" && <Badge>черновик</Badge>}
+        {lesson.status === "draft" && <Badge variant="warning">черновик</Badge>}
         {lesson.isOptional && <Badge>необязательный</Badge>}
         <span className="text-text-3 ml-auto shrink-0 text-[12px]">
           {lesson.readingMinutes} мин
