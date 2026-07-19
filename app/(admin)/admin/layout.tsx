@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AdminNav } from "@/components/layout/admin-sidebar";
 import { CommandPalette } from "@/components/features/command-palette";
+import { OfflineBanner } from "@/components/features/offline-banner";
 import { requireAdminZone } from "@/lib/auth/guards";
 
 // Spec 0.5: brand name only from env, never hardcoded.
@@ -13,6 +14,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     // Block layout on mobile (chip row above content), flex row with sidebar on md+.
     <div className="min-h-dvh md:flex">
+      <OfflineBanner />
       <AdminNav
         brandName={brandName}
         role={user.role}

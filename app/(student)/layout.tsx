@@ -8,6 +8,7 @@ import { NotificationBell } from "@/components/features/notification-bell";
 import { ThemeToggleIcon } from "@/components/features/theme-toggle";
 import { AnnouncementBanners } from "@/components/features/announcement-banners";
 import { EmailVerifyBanner } from "@/components/features/email-verify-banner";
+import { OfflineBanner } from "@/components/features/offline-banner";
 import { prisma } from "@/lib/db";
 import { getActiveBannersForUser } from "@/lib/services/announcements";
 import { requireStudentZone } from "@/lib/auth/guards";
@@ -23,6 +24,7 @@ export default async function StudentLayout({ children }: { children: ReactNode 
 
   return (
     <>
+      <OfflineBanner />
       {impersonated && <ImpersonationBanner studentName={user.name} />}
       <div className="flex min-h-dvh">
         <StudentSidebar
