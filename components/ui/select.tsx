@@ -19,7 +19,7 @@ function SelectTrigger({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        "rounded-control border-border text-text-1 inline-flex h-9 w-full items-center justify-between gap-2 border bg-transparent px-3 text-[14px]",
+        "rounded-control border-border text-text-1 inline-flex h-11 w-full items-center justify-between gap-2 border bg-transparent px-3 text-[14px] md:h-9",
         "ease-app hover:border-border-strong transition-colors duration-150",
         "disabled:pointer-events-none disabled:opacity-50",
         "data-[placeholder]:text-text-3",

@@ -20,7 +20,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         userName={user.name}
         theme={user.theme}
       />
-      <main className="flex-1">
+      {/* min-w-0: flex items default to min-width:auto — without it a wide
+          admin table (desktop, md+ flex row) bursts the page instead of
+          scrolling inside its own container (spec 13). */}
+      <main className="min-w-0 flex-1">
         <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">{children}</div>
       </main>
       {/* Palette opens in the admin zone too, searching the same four types (spec 7.11). */}

@@ -42,6 +42,9 @@ export function Button({
     "transition-[color,background-color,border-color,transform] duration-150 ease-app",
     "active:scale-[0.98]",
     "disabled:opacity-50 disabled:pointer-events-none",
+    // Touch target (spec 13/14: ≥44px on mobile). Mirrors the header icon-button
+    // pattern (size-11 md:size-9): compact on desktop, thumb-sized on phones.
+    "max-md:min-h-11",
     variantClasses[variant],
     sizeClasses[size],
     // DECISION: when loading, mirror the disabled affordance on the wrapper too

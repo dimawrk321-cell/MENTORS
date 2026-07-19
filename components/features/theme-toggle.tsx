@@ -113,3 +113,23 @@ export function ThemeToggleMenuItem({ initialTheme }: { initialTheme: ThemeChoic
     </button>
   );
 }
+
+/** Large tile for the mobile «Ещё» hub (spec 12.2/1.3): cycles theme in place. */
+export function ThemeToggleTile({ initialTheme }: { initialTheme: ThemeChoice }) {
+  const { choice, cycle } = useThemeToggle(initialTheme);
+  const Icon = ICON[choice];
+  return (
+    <button
+      type="button"
+      onClick={cycle}
+      aria-label={`Тема: ${LABEL[choice]}. Переключить`}
+      className="rounded-card border-border bg-surface-1 text-text-2 ease-app hover:border-border-strong hover:bg-surface-2 hover:text-text-1 flex min-h-[76px] flex-col justify-between gap-3 border p-3.5 text-left transition-colors duration-150"
+    >
+      <Icon size={22} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+      <span className="text-text-1 text-[14px] font-medium">
+        Тема
+        <span className="text-text-3 ml-1.5 font-normal">{LABEL[choice]}</span>
+      </span>
+    </button>
+  );
+}

@@ -14,7 +14,7 @@ import type { MatrixRow } from "@/lib/services/notifications";
 // sets — editing it here updates that single setting.
 
 const timeField =
-  "rounded-control border-border text-text-1 ease-app hover:border-border-strong h-9 border bg-transparent px-3 text-[14px] transition-colors duration-150";
+  "rounded-control border-border text-text-1 ease-app hover:border-border-strong h-11 border bg-transparent px-3 text-[14px] transition-colors duration-150 md:h-9";
 
 interface Props {
   matrix: MatrixRow[];

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
-import { Layers, Play, Sparkles } from "lucide-react";
+import { BookMarked, ChevronRight, Layers, Play, Sparkles } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getContinueTarget, getHeatmapData } from "@/lib/services/dashboard";
@@ -247,6 +247,36 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </section>
+
+      {/* Тихая карточка-вход в справочник (spec 12.2/1.3): резюме · легенда · этапы,
+          пункты по пер-ученическим флагам доступа. Ведёт в хаб /guides. */}
+      <Link href="/guides" className="group">
+        <Card interactive>
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="rounded-pill border-border bg-surface-2 flex size-10 shrink-0 items-center justify-center border">
+              <BookMarked size={20} strokeWidth={1.75} className="text-text-2" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="group-hover:text-accent text-[15px] font-medium">Справочник</p>
+              <p className="text-text-3 truncate text-[13px]">
+                {[
+                  user.guidesResumeEnabled ? "Резюме" : null,
+                  user.guidesLegendEnabled ? "Легенда" : null,
+                  "Этапы собеседований",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+            <ChevronRight
+              size={18}
+              strokeWidth={1.75}
+              className="text-text-3 group-hover:text-text-2 shrink-0"
+              aria-hidden="true"
+            />
+          </CardContent>
+        </Card>
+      </Link>
     </div>
   );
 }

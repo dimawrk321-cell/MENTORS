@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils/cn";
-import { ThemeToggleMenuItem } from "@/components/features/theme-toggle";
+import { ThemeToggleTile } from "@/components/features/theme-toggle";
 import type { Theme } from "@prisma/client";
 
 interface NavItem {
@@ -110,7 +110,8 @@ export function BottomNav({
           </SheetTrigger>
           <SheetContent className="md:hidden">
             <SheetTitle>Ещё</SheetTitle>
-            <div className="flex flex-col gap-1">
+            {/* Hub of large tiles (spec 12.2/1.3): sections by access flag + theme. */}
+            <div className="grid grid-cols-2 gap-2">
               {moreItems.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(pathname, item.href);
@@ -120,19 +121,26 @@ export function BottomNav({
                       href={item.href}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "rounded-control ease-app flex h-11 items-center gap-3 px-3 text-[15px] transition-colors duration-150",
-                        active ? "bg-surface-1 text-text-1" : "text-text-2",
+                        "rounded-card ease-app flex min-h-[76px] flex-col justify-between gap-3 border p-3.5 transition-colors duration-150",
+                        active
+                          ? "border-border-strong bg-surface-2 text-text-1"
+                          : "border-border bg-surface-1 text-text-2 hover:border-border-strong hover:bg-surface-2 hover:text-text-1",
                       )}
                     >
-                      <Icon size={18} strokeWidth={1.75} className="shrink-0" />
-                      {item.label}
+                      <Icon
+                        size={22}
+                        strokeWidth={1.75}
+                        className={cn("shrink-0", active && "text-accent")}
+                        aria-hidden="true"
+                      />
+                      <span className="text-text-1 text-[14px] font-medium">{item.label}</span>
                     </Link>
                   </SheetClose>
                 );
               })}
               {/* Quick theme toggle (spec 12.1/B1) — mobile lives here; the profile
                   setting stays the source of truth. Not a link → no SheetClose. */}
-              <ThemeToggleMenuItem initialTheme={theme} />
+              <ThemeToggleTile initialTheme={theme} />
             </div>
           </SheetContent>
         </Sheet>
