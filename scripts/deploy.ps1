@@ -17,4 +17,4 @@ if ($code -ne 0) {
   Write-Host "Deploy FAILED (ssh/deploy.sh exit $code)" -ForegroundColor Red
   exit $code
 }
-Write-Host "OK: Deploy finished. https://dev.62-113-108-135.sslip.io" -ForegroundColor Green
+Write-Host "OK: Deploy finished. https://dev.155-212-211-251.sslip.io" -ForegroundColor Green

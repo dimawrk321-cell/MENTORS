@@ -67,7 +67,9 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-dev.62-113-108-135.sslip.io}
+      SITE_ADDRESS: ${SITE_ADDRESS:-dev.155-212-211-251.sslip.io}
+      # Transitional: old sslip.io name redirects 301 to SITE_ADDRESS (IP migration).
+      SITE_ADDRESS_OLD: ${SITE_ADDRESS_OLD:-dev.62-113-108-135.sslip.io}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
