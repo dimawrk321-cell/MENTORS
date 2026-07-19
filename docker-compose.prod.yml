@@ -107,6 +107,15 @@ services:
       postgres:
         condition: service_healthy
     command: ["pnpm", "exec", "tsx", "worker/index.ts"]
+    # Heartbeat healthcheck (spec 12.2/4.1): the worker touches a file every 30s;
+    # this probe reads its freshness so a wedged loop turns the container
+    # unhealthy instead of a portless node-cron process always reading "Up".
+    healthcheck:
+      test: ["CMD", "node", "worker/healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 volumes:
   pgdata:
