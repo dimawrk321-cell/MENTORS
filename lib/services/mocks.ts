@@ -643,17 +643,19 @@ export async function closeDay(
         interviewerId: input.interviewerId,
         startsAt: { gte: dayStart, lt: end },
       },
-      include: { booking: true },
+      // A slot can carry cancelled bookings too — take only the active one.
+      include: { bookings: { where: { status: "booked" }, take: 1 } },
     });
 
     let closed = 0;
     let cancelled = 0;
     for (const slot of slots) {
-      if (slot.status === "booked" && slot.booking && slot.booking.status === "booked") {
+      const active = slot.bookings[0];
+      if (slot.status === "booked" && active && active.status === "booked") {
         await cancelByInterviewerTx(
           tx,
           {
-            ...slot.booking,
+            ...active,
             slot: { id: slot.id, startsAt: slot.startsAt, interviewerId: slot.interviewerId },
           },
           now,

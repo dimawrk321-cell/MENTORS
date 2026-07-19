@@ -88,62 +88,62 @@ enum AuthAttemptKind {
 }
 
 model User {
-  id              String     @id @default(cuid())
-  email           String     @unique
+  id                  String          @id @default(cuid())
+  email               String          @unique
   // DECISION: spec 6 lists password_hash as required, but an invited user has
   // no password until the invite is accepted — nullable expresses that state.
-  passwordHash    String?    @map("password_hash")
-  name            String
-  role            Role       @default(student)
-  isInterviewer   Boolean    @default(false) @map("is_interviewer")
-  timezone        String     @default("Europe/Moscow")
-  theme           Theme      @default(system)
-  track           Track?
-  dailyGoalXp     Int        @default(60) @map("daily_goal_xp")
-  studyDays       Int[]      @default([1, 2, 3, 4, 5, 6, 7]) @map("study_days")
-  digestTime      String     @default("09:00") @map("digest_time")
+  passwordHash        String?         @map("password_hash")
+  name                String
+  role                Role            @default(student)
+  isInterviewer       Boolean         @default(false) @map("is_interviewer")
+  timezone            String          @default("Europe/Moscow")
+  theme               Theme           @default(system)
+  track               Track?
+  dailyGoalXp         Int             @default(60) @map("daily_goal_xp")
+  studyDays           Int[]           @default([1, 2, 3, 4, 5, 6, 7]) @map("study_days")
+  digestTime          String          @default("09:00") @map("digest_time")
   // Stage 9 (spec 7.12): quiet hours — in-app notifications are created
   // immediately, email delivery is deferred until quiet hours end. Stored as
   // "HH:MM" in the user's timezone (like digest_time); default 22:00–08:00.
-  quietHoursStart String     @default("22:00") @map("quiet_hours_start")
-  quietHoursEnd   String     @default("08:00") @map("quiet_hours_end")
-  status          UserStatus @default(invited)
-  activatedAt     DateTime?  @map("activated_at")
-  accessUntil     DateTime?  @map("access_until")
+  quietHoursStart     String          @default("22:00") @map("quiet_hours_start")
+  quietHoursEnd       String          @default("08:00") @map("quiet_hours_end")
+  status              UserStatus      @default(invited)
+  activatedAt         DateTime?       @map("activated_at")
+  accessUntil         DateTime?       @map("access_until")
   // DECISION: avatar_color has no type in spec 6 — stored as an index (0..7)
   // into the muted category palette (spec 5.1), assigned from email hash.
-  avatarColor     Int        @map("avatar_color")
-  lastSeenAt      DateTime?  @map("last_seen_at")
-  mentorNote      String?    @map("mentor_note")
-  libraryEnabled  Boolean    @default(true) @map("library_enabled")
+  avatarColor         Int             @map("avatar_color")
+  lastSeenAt          DateTime?       @map("last_seen_at")
+  mentorNote          String?         @map("mentor_note")
+  libraryEnabled      Boolean         @default(true) @map("library_enabled")
   // Stage 12.1 (spec 7.9/7.10/8.3): per-student section access, mirroring
   // library_enabled. New students get all three off (set at invite creation);
   // existing active/invited students were backfilled to true in the migration.
-  guidesResumeEnabled Boolean @default(false) @map("guides_resume_enabled")
-  guidesLegendEnabled Boolean @default(false) @map("guides_legend_enabled")
+  guidesResumeEnabled Boolean         @default(false) @map("guides_resume_enabled")
+  guidesLegendEnabled Boolean         @default(false) @map("guides_legend_enabled")
   // Stage 12.1 (spec 7.1): soft email verification — non-blocking, set when the
   // student confirms the 6-digit code sent after invite activation.
-  emailVerifiedAt DateTime?       @map("email_verified_at")
+  emailVerifiedAt     DateTime?       @map("email_verified_at")
   // Stage 12.1 (spec 8.3/C9): reading font size for lesson/guide prose (S/M/L).
-  readingFontSize ReadingFontSize @default(m) @map("reading_font_size")
-  createdAt       DateTime   @default(now()) @map("created_at")
-  updatedAt       DateTime   @updatedAt @map("updated_at")
+  readingFontSize     ReadingFontSize @default(m) @map("reading_font_size")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
 
-  sessions             Session[]         @relation("UserSessions")
-  impersonatedSessions Session[]         @relation("SessionImpersonator")
+  sessions             Session[]           @relation("UserSessions")
+  impersonatedSessions Session[]           @relation("SessionImpersonator")
   devices              Device[]
-  invitesSent          Invite[]          @relation("InviteInvitedBy")
+  invitesSent          Invite[]            @relation("InviteInvitedBy")
   passwordResets       PasswordReset[]
   emailVerifications   EmailVerification[]
-  accessExtensions     AccessExtension[] @relation("ExtensionUser")
-  grantedExtensions    AccessExtension[] @relation("ExtensionGrantedBy")
-  securityFlags        SecurityFlag[]    @relation("FlagUser")
-  resolvedFlags        SecurityFlag[]    @relation("FlagResolvedBy")
-  auditEntries         AuditLog[]        @relation("AuditActor")
+  accessExtensions     AccessExtension[]   @relation("ExtensionUser")
+  grantedExtensions    AccessExtension[]   @relation("ExtensionGrantedBy")
+  securityFlags        SecurityFlag[]      @relation("FlagUser")
+  resolvedFlags        SecurityFlag[]      @relation("FlagResolvedBy")
+  auditEntries         AuditLog[]          @relation("AuditActor")
   analyticsEvents      AnalyticsEvent[]
   lessonProgress       LessonProgress[]
-  contentReports       ContentReport[]   @relation("ReportAuthor")
-  resolvedReports      ContentReport[]   @relation("ReportResolvedBy")
+  contentReports       ContentReport[]     @relation("ReportAuthor")
+  resolvedReports      ContentReport[]     @relation("ReportResolvedBy")
   testAttempts         TestAttempt[]
   quizAnswers          QuizAnswer[]
   srsCards             SrsCard[]
@@ -1006,7 +1006,12 @@ model Slot {
   status         SlotStatus @default(open)
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
-  booking        Booking?
+  // Stage 12.2: a slot has a HISTORY of bookings (one active + past cancelled/
+  // no-show) — a cancelled slot re-opens and can be re-booked (spec 7.8). The
+  // "one active booking per slot" invariant is held by bookMock's slot-row
+  // SELECT ... FOR UPDATE + status check, not by a unique constraint (which
+  // blocked re-booking; see the slot_id index note on Booking).
+  bookings       Booking[]
   waitlistOffers Waitlist[] @relation("WaitlistOfferedSlot")
 
   @@unique([interviewerId, startsAt])
@@ -1018,7 +1023,14 @@ model Slot {
 
 model Booking {
   id            String             @id @default(cuid())
-  slotId        String             @unique @map("slot_id")
+  // DECISION (stage 12.2): slot_id is a plain index, NOT unique. A cancelled
+  // booking row is retained (it carries strikes/feedback history) while its slot
+  // re-opens, so a slot accumulates multiple bookings over its lifetime. A unique
+  // slot_id threw P2002 on every re-book and permanently bricked the slot + burned
+  // every waitlist offer. The "≤1 active booking per slot" invariant is enforced
+  // in bookMock (slot row FOR UPDATE + status must be "open"), which serialises
+  // concurrent books on the same slot.
+  slotId        String             @map("slot_id")
   slot          Slot               @relation(fields: [slotId], references: [id], onDelete: Cascade)
   userId        String             @map("user_id")
   user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1039,6 +1051,7 @@ model Booking {
   feedback      Feedback?
   questionMarks MockQuestionMark[]
 
+  @@index([slotId])
   @@index([userId])
   @@index([status])
   @@map("bookings")
@@ -1452,7 +1465,9 @@ model ImportRun {
    * screen and offered as a download. Null until done.
    */
   report         String?
-  /** User-facing Russian error message when status=error. */
+  /**
+   * User-facing Russian error message when status=error.
+   */
   error          String?
   startedAt      DateTime        @default(now()) @map("started_at")
   finishedAt     DateTime?       @map("finished_at")
