@@ -22,6 +22,11 @@ import { notify } from "@/lib/services/notifications";
 import { addSrsCardForFailure } from "@/lib/services/srs";
 import { completeLesson } from "@/lib/services/content";
 import { writeAudit } from "@/lib/services/audit";
+import {
+  getNumericSetting,
+  OPS_CANCEL_FREE_HOURS_KEY,
+  OPS_STRIKE_LOCK_DAYS_KEY,
+} from "@/lib/services/settings";
 
 // Мок-интервью (spec 7.8): бронирование (транзакция + SELECT FOR UPDATE), отмены и
 // страйки, лок бронирования, waitlist с hold 2 часа, экран проведения, завершение
@@ -48,13 +53,14 @@ export interface BookingLock {
 export function computeBookingLock(
   strikes: Pick<BookingStrike, "reason" | "createdAt">[],
   now: Date,
+  lockDays: number = STRIKE_LOCK_DAYS,
 ): BookingLock | null {
   const ordered = [...strikes].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   let lockedUntil: Date | null = null;
   for (let i = 1; i < ordered.length; i += 1) {
     const gap = ordered[i]!.createdAt.getTime() - ordered[i - 1]!.createdAt.getTime();
     if (gap <= STRIKE_WINDOW_DAYS * DAY_MS) {
-      const end = addDays(ordered[i]!.createdAt, STRIKE_LOCK_DAYS);
+      const end = addDays(ordered[i]!.createdAt, lockDays);
       if (!lockedUntil || end > lockedUntil) lockedUntil = end;
     }
   }
@@ -75,7 +81,11 @@ export async function getBookingLock(
     orderBy: { createdAt: "desc" },
     select: { reason: true, createdAt: true },
   });
-  return computeBookingLock(strikes, now);
+  const lockDays = await getNumericSetting(db, OPS_STRIKE_LOCK_DAYS_KEY, STRIKE_LOCK_DAYS, {
+    min: 1,
+    max: 365,
+  });
+  return computeBookingLock(strikes, now, lockDays);
 }
 
 // --- Waitlist (spec 7.8): заявки и hold-предложения ---
@@ -475,7 +485,16 @@ export async function cancelBooking(
   if (!booking || booking.userId !== input.userId) return { ok: false, code: "not_found" };
   if (booking.status !== "booked") return { ok: false, code: "not_cancellable" };
 
-  const late = booking.slot.startsAt.getTime() - now.getTime() < CANCEL_FREE_HOURS * HOUR_MS;
+  const cancelFreeHours = await getNumericSetting(
+    db,
+    OPS_CANCEL_FREE_HOURS_KEY,
+    CANCEL_FREE_HOURS,
+    {
+      min: 0,
+      max: 168,
+    },
+  );
+  const late = booking.slot.startsAt.getTime() - now.getTime() < cancelFreeHours * HOUR_MS;
   const freesSlot = booking.slot.startsAt > now;
 
   await db.$transaction(async (tx) => {

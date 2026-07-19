@@ -386,3 +386,21 @@ export const verifyEmailSchema = z.object({
     .trim()
     .regex(/^\d{6}$/, "Код — 6 цифр"),
 });
+
+/** XP map editor (spec 12.1/C1): each value an integer 0–10000. */
+export const xpMapSchema = z.object({
+  map: z.record(
+    z.string(),
+    z
+      .number("Укажи целое число")
+      .int("Только целое число")
+      .min(0, "Не меньше 0")
+      .max(10000, "Не больше 10000"),
+  ),
+});
+
+/** Operational rules editor (spec 12.1/C2): numeric values + default digest time. */
+export const operationalSettingsSchema = z.object({
+  values: z.record(z.string(), z.number("Укажи число").int("Только целое число")),
+  digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Укажи время в формате ЧЧ:ММ"),
+});

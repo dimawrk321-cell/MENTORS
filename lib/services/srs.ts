@@ -2,6 +2,7 @@ import type { PrismaClient, Question, SrsAddedFrom, SrsCard, SrsGrade } from "@p
 import type { Db } from "@/lib/db";
 import { addDays, dateOnlyUtc, localDateStr, zonedDayUtcRange } from "@/lib/utils/dates";
 import { emitEvent, mergeEmitResults, type EarnedAchievement } from "@/lib/services/events";
+import { getNumericSetting, OPS_NEW_CARDS_PER_DAY_KEY } from "@/lib/services/settings";
 
 // SRS — интервальные повторения (spec 7.6), ядро продукта. Планировщик —
 // чистая функция applyGrade (юнит-тесты всех переходов); источники карточек
@@ -267,8 +268,12 @@ export async function getSrsQueue(
     orderBy: [{ nextReviewAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
   });
 
+  const newPerDay = await getNumericSetting(db, OPS_NEW_CARDS_PER_DAY_KEY, SRS_NEW_PER_DAY, {
+    min: 1,
+    max: 500,
+  });
   let newAllowance =
-    SRS_NEW_PER_DAY - (await countNewCardsReviewedToday(db, input.userId, todayStr, timezone));
+    newPerDay - (await countNewCardsReviewedToday(db, input.userId, todayStr, timezone));
   const cards = due.filter((card) => {
     if (card.reviewsCount > 0) return true;
     if (newAllowance <= 0) return false;
@@ -308,8 +313,12 @@ export async function getNextReviewDate(
 
   // Есть ли due-новые карточки сверх сегодняшнего лимита? Тогда завтра появится
   // хотя бы одна из них — ближайшая дата не позже завтра.
+  const newPerDay = await getNumericSetting(db, OPS_NEW_CARDS_PER_DAY_KEY, SRS_NEW_PER_DAY, {
+    min: 1,
+    max: 500,
+  });
   const allowanceLeft =
-    SRS_NEW_PER_DAY - (await countNewCardsReviewedToday(db, input.userId, todayStr, timezone));
+    newPerDay - (await countNewCardsReviewedToday(db, input.userId, todayStr, timezone));
   const dueNew = await db.srsCard.count({
     where: { ...baseWhere, reviewsCount: 0, nextReviewAt: { lte: today } },
   });

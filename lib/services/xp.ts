@@ -68,24 +68,63 @@ export interface XpAward {
   refId: string;
 }
 
-/** Вехи стрика, дающие XP (spec 7.7): 7/30/100 = 50/250/1000. 365 — без XP. */
-export const STREAK_MILESTONE_XP: Record<number, number> = { 7: 50, 30: 250, 100: 1000 };
+// --- XP-карта: редактируемая величина (spec 12.1/C1) ---
+//
+// Суммы XP-карты 7.7 живут код-константой `DEFAULT_XP_MAP`, но админ может
+// переопределить каждую в /admin/settings (app_settings-first: `getXpMap` в
+// settings.ts читает ключ `xp_map`, валидирует int 0–10000 по каждому полю и
+// фоллбэчит на дефолт). `xpAwardsForEvent`/`planXp` принимают карту параметром —
+// диспетчер событий грузит актуальную карту и передаёт её сюда; без параметра
+// (юнит-тесты) применяется дефолт.
 
-/**
- * Read-only XP-карта для /admin/settings (spec 8.5): зеркалит суммы `planXp`
- * ниже и таблицу 7.7. Это витрина — правило по-прежнему живёт код-константой
- * (spec changelog: XP-карта — код, редактирование не в MVP).
- */
-export const XP_RULES: readonly { event: string; amount: string; rule: string }[] = [
-  { event: "Урок завершён", amount: "+20", rule: "за урок" },
-  { event: "Первый верный ответ в квизе", amount: "+5", rule: "за вопрос" },
-  { event: "Модульный тест сдан", amount: "+100", rule: "за модуль" },
-  { event: "Тест сдан с первой попытки", amount: "+50", rule: "за модуль" },
-  { event: "Экстерн сдан", amount: "+100", rule: "за модуль" },
-  { event: "Очередь повторений закрыта", amount: "+30", rule: "в день" },
-  { event: "Мок проведён", amount: "+200", rule: "за бронь" },
-  { event: "Веха серии 7 / 30 / 100", amount: "+50 / +250 / +1000", rule: "за веху" },
-];
+/** Ключи XP-карты (события XP 7.7 + вехи стрика). Порядок = порядок в редакторе. */
+export const XP_MAP_KEYS = [
+  "lesson.completed",
+  "quiz.correct_first",
+  "test.passed",
+  "test.passed_first_try",
+  "testout.passed",
+  "queue.completed",
+  "mock.completed",
+  "streak.milestone.7",
+  "streak.milestone.30",
+  "streak.milestone.100",
+] as const;
+
+export type XpMapKey = (typeof XP_MAP_KEYS)[number];
+export type XpMap = Record<XpMapKey, number>;
+
+/** Дефолтная XP-карта (spec 7.7, дословно). Фоллбэк для отсутствующих настроек. */
+export const DEFAULT_XP_MAP: XpMap = {
+  "lesson.completed": 20,
+  "quiz.correct_first": 5,
+  "test.passed": 100,
+  "test.passed_first_try": 50,
+  "testout.passed": 100,
+  "queue.completed": 30,
+  "mock.completed": 200,
+  "streak.milestone.7": 50,
+  "streak.milestone.30": 250,
+  "streak.milestone.100": 1000,
+};
+
+/** Границы значения XP-события (spec 12.1/C1: целое 0–10000). */
+export const XP_VALUE_MIN = 0;
+export const XP_VALUE_MAX = 10000;
+
+/** Русские подписи для редактора XP-карты. */
+export const XP_MAP_LABEL: Record<XpMapKey, string> = {
+  "lesson.completed": "Урок завершён",
+  "quiz.correct_first": "Первый верный ответ в квизе",
+  "test.passed": "Модульный тест сдан",
+  "test.passed_first_try": "Тест сдан с первой попытки",
+  "testout.passed": "Экстерн сдан",
+  "queue.completed": "Очередь повторений закрыта",
+  "mock.completed": "Мок проведён",
+  "streak.milestone.7": "Веха серии: 7 дней",
+  "streak.milestone.30": "Веха серии: 30 дней",
+  "streak.milestone.100": "Веха серии: 100 дней",
+};
 
 /**
  * События, у которых первое начисление — «первичное»: его ref дедуплицирует
@@ -119,12 +158,23 @@ function pickNumber(payload: unknown, key: string): number | null {
 }
 
 /** Все XP-начисления события по карте 7.7, в порядке (первичное — первым). */
-export function xpAwardsForEvent(type: string, payload: unknown): XpAward[] {
+export function xpAwardsForEvent(
+  type: string,
+  payload: unknown,
+  xpMap: XpMap = DEFAULT_XP_MAP,
+): XpAward[] {
   switch (type) {
     case "lesson.completed": {
       const lessonId = pickString(payload, "lessonId");
       return lessonId
-        ? [{ xpType: "lesson.completed", amount: 20, refType: "lesson", refId: lessonId }]
+        ? [
+            {
+              xpType: "lesson.completed",
+              amount: xpMap["lesson.completed"],
+              refType: "lesson",
+              refId: lessonId,
+            },
+          ]
         : [];
     }
     case "quiz.answered": {
@@ -135,7 +185,14 @@ export function xpAwardsForEvent(type: string, payload: unknown): XpAward[] {
         (payload as Record<string, unknown>).first === true;
       const questionId = pickString(payload, "questionId");
       return first && questionId
-        ? [{ xpType: "quiz.correct_first", amount: 5, refType: "question", refId: questionId }]
+        ? [
+            {
+              xpType: "quiz.correct_first",
+              amount: xpMap["quiz.correct_first"],
+              refType: "question",
+              refId: questionId,
+            },
+          ]
         : [];
     }
     case "test.passed": {
@@ -144,12 +201,12 @@ export function xpAwardsForEvent(type: string, payload: unknown): XpAward[] {
       const moduleId = pickString(payload, "moduleId");
       if (!moduleId) return [];
       const awards: XpAward[] = [
-        { xpType: "test.passed", amount: 100, refType: "module", refId: moduleId },
+        { xpType: "test.passed", amount: xpMap["test.passed"], refType: "module", refId: moduleId },
       ];
       if (pickNumber(payload, "attemptNumber") === 1) {
         awards.push({
           xpType: "test.passed_first_try",
-          amount: 50,
+          amount: xpMap["test.passed_first_try"],
           refType: "module",
           refId: moduleId,
         });
@@ -159,22 +216,49 @@ export function xpAwardsForEvent(type: string, payload: unknown): XpAward[] {
     case "testout.passed": {
       const moduleId = pickString(payload, "moduleId");
       return moduleId
-        ? [{ xpType: "testout.passed", amount: 100, refType: "module", refId: moduleId }]
+        ? [
+            {
+              xpType: "testout.passed",
+              amount: xpMap["testout.passed"],
+              refType: "module",
+              refId: moduleId,
+            },
+          ]
         : [];
     }
     case "queue.completed": {
       const day = pickString(payload, "day");
-      return day ? [{ xpType: "queue.completed", amount: 30, refType: "day", refId: day }] : [];
+      return day
+        ? [
+            {
+              xpType: "queue.completed",
+              amount: xpMap["queue.completed"],
+              refType: "day",
+              refId: day,
+            },
+          ]
+        : [];
     }
     case "mock.completed": {
       const bookingId = pickString(payload, "bookingId");
       return bookingId
-        ? [{ xpType: "mock.completed", amount: 200, refType: "booking", refId: bookingId }]
+        ? [
+            {
+              xpType: "mock.completed",
+              amount: xpMap["mock.completed"],
+              refType: "booking",
+              refId: bookingId,
+            },
+          ]
         : [];
     }
     case "streak.milestone": {
       const milestone = pickNumber(payload, "milestone");
-      const amount = milestone !== null ? STREAK_MILESTONE_XP[milestone] : undefined;
+      const key = `streak.milestone.${milestone}`;
+      const amount =
+        milestone !== null && (XP_MAP_KEYS as readonly string[]).includes(key)
+          ? xpMap[key as XpMapKey]
+          : undefined;
       return milestone !== null && amount !== undefined
         ? [{ xpType: "streak.milestone", amount, refType: "milestone", refId: String(milestone) }]
         : [];
@@ -192,8 +276,8 @@ export interface XpPlan {
 }
 
 /** Раскладывает начисления события на первичное (барьер) и вторичные. */
-export function planXp(type: string, payload: unknown): XpPlan {
-  const awards = xpAwardsForEvent(type, payload);
+export function planXp(type: string, payload: unknown, xpMap: XpMap = DEFAULT_XP_MAP): XpPlan {
+  const awards = xpAwardsForEvent(type, payload, xpMap);
   if (awards.length === 0) return { primary: null, secondary: [] };
   if (PRIMARY_REF_EVENTS.has(type)) {
     return { primary: awards[0]!, secondary: awards.slice(1) };

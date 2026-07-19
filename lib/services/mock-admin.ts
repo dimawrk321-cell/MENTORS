@@ -1,7 +1,8 @@
 import type { Booking, MockType, PrismaClient, WaitlistStatus } from "@prisma/client";
 import type { Db } from "@/lib/db";
-import { isRoomUrlReady } from "@/lib/constants";
+import { isRoomUrlReady, STRIKE_LOCK_DAYS } from "@/lib/constants";
 import { writeAudit } from "@/lib/services/audit";
+import { getNumericSetting, OPS_STRIKE_LOCK_DAYS_KEY } from "@/lib/services/settings";
 import { computeBookingLock, type BookingLock } from "@/lib/services/mocks";
 
 // Админ-интервью (spec 8.5): все брони с фильтрами, страйки и локи (снятие
@@ -80,6 +81,10 @@ export async function listStrikesWithLocks(
     });
     byStudent.set(strike.userId, entry);
   }
+  const lockDays = await getNumericSetting(db, OPS_STRIKE_LOCK_DAYS_KEY, STRIKE_LOCK_DAYS, {
+    min: 1,
+    max: 365,
+  });
   for (const entry of byStudent.values()) {
     entry.lock = computeBookingLock(
       entry.strikes.map((s) => ({
@@ -87,6 +92,7 @@ export async function listStrikesWithLocks(
         createdAt: s.createdAt,
       })),
       now,
+      lockDays,
     );
   }
   return [...byStudent.values()].sort((a, b) => b.strikes.length - a.strikes.length);

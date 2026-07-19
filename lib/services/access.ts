@@ -23,7 +23,7 @@ import {
 } from "@/lib/services/mocks";
 import { sendInviteEmail } from "@/lib/services/mail";
 import { notify } from "@/lib/services/notifications";
-import { getRenewalContact } from "@/lib/services/settings";
+import { getDefaultDigestTime, getRenewalContact } from "@/lib/services/settings";
 
 // Student access lifecycle (spec 7.1): manual invite, 90 days from activation,
 // extensions that never eat dead days, soft-lock on expiry.
@@ -87,6 +87,8 @@ export async function inviteStudent(
   // changelog requires the link to stay visible in the admin UI after creation.
   // Single-use, 7-day TTL, revocable by resend keeps the risk contained.
   const token = generateToken();
+  // Platform default digest time (spec 12.1/C2) — editable in /admin/settings.
+  const digestTime = await getDefaultDigestTime(db);
   const { user } = await db.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
@@ -95,6 +97,7 @@ export async function inviteStudent(
         role: "student",
         status: "invited",
         avatarColor: paletteIndex(input.email),
+        digestTime,
         // New students start with every gated section off (spec 12.1/C3); an admin
         // opens what this student needs from the card. guides_resume/legend already
         // default false in schema; library_enabled defaults true, so set it here.

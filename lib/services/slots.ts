@@ -14,6 +14,7 @@ import {
   SLOT_GRID_MINUTES,
   SLOT_HORIZON_DAYS,
 } from "@/lib/constants";
+import { getNumericSetting, OPS_BOOKING_HORIZON_DAYS_KEY } from "@/lib/services/settings";
 
 // Слоты моков (spec 7.8). Интервьюер задаёт повторяющиеся окна (availability_rules)
 // и исключения (day_off / extra); worker материализует слоты на 14 дней вперёд по
@@ -168,11 +169,16 @@ export async function generateSlots(
   if (!interviewer || !interviewer.isInterviewer) return { created: 0, removed: 0 };
 
   const { rules, exceptions } = await loadAvailability(db, input.interviewerId);
+  const horizonDays = await getNumericSetting(db, OPS_BOOKING_HORIZON_DAYS_KEY, SLOT_HORIZON_DAYS, {
+    min: 1,
+    max: 90,
+  });
   const targets = computeTargetSlots({
     timezone: interviewer.timezone,
     now,
     rules,
     exceptions,
+    horizonDays,
   });
   const targetByTime = new Map(targets.map((t) => [t.startsAt.getTime(), t]));
 

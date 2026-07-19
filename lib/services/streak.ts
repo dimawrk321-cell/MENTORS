@@ -2,6 +2,7 @@ import type { PrismaClient, Streak } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { addDays, dateOnlyUtc, isoWeekday, localDateStr, localHour } from "@/lib/utils/dates";
 import { notify } from "@/lib/services/notifications";
+import { getNumericSetting, OPS_STREAK_FREEZE_CAP_KEY } from "@/lib/services/settings";
 
 // Стрик — серия учебных дней (spec 7.7). Модель: day засчитан, если за день (TZ)
 // случилось качественное событие И это учебный день (users.study_days).
@@ -156,8 +157,12 @@ export async function countStreakDay(
   const current = snap.current + 1;
   const best = Math.max(snap.best, current);
   let freezes = snap.freezes;
-  // +1 заморозка за каждые 7 подряд засчитанных дней, cap 2 (spec 7.7).
-  if (current % STREAK_FREEZE_EVERY === 0 && freezes < STREAK_FREEZE_CAP) {
+  // +1 заморозка за каждые 7 подряд засчитанных дней, cap редактируем (spec 12.1/C2).
+  const freezeCap = await getNumericSetting(db, OPS_STREAK_FREEZE_CAP_KEY, STREAK_FREEZE_CAP, {
+    min: 0,
+    max: 10,
+  });
+  if (current % STREAK_FREEZE_EVERY === 0 && freezes < freezeCap) {
     freezes += 1;
   }
 

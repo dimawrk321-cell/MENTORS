@@ -8,6 +8,7 @@ import {
   localDateStr,
 } from "@/lib/utils/dates";
 import { NO_SHOW_AFTER_MINUTES, RUN_ACCESS_LEAD_MINUTES, SLOT_HORIZON_DAYS } from "@/lib/constants";
+import { getNumericSetting, OPS_BOOKING_HORIZON_DAYS_KEY } from "@/lib/services/settings";
 import { getBookingLock, getMocksCompletedCount, type BookingLock } from "@/lib/services/mocks";
 import { getLaggingCategories, type LaggingCategory } from "@/lib/services/srs";
 import { listCoursesForStudent } from "@/lib/services/content";
@@ -53,7 +54,11 @@ export async function getAvailableSlots(
   });
   if (!student) return { days: [], timezone: "Europe/Moscow" };
 
-  const horizonEnd = addDays(now, SLOT_HORIZON_DAYS + 1);
+  const horizonDays = await getNumericSetting(db, OPS_BOOKING_HORIZON_DAYS_KEY, SLOT_HORIZON_DAYS, {
+    min: 1,
+    max: 90,
+  });
+  const horizonEnd = addDays(now, horizonDays + 1);
   const upper =
     student.accessUntil && student.accessUntil < horizonEnd ? student.accessUntil : horizonEnd;
 

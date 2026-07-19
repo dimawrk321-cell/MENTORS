@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { dateOnlyUtc, localDateStr } from "@/lib/utils/dates";
 import { getTotalXp, levelForXp, planXp, xpEventRow } from "@/lib/services/xp";
+import { getXpMap } from "@/lib/services/settings";
 import { countStreakDay, STREAK_QUALIFYING_EVENTS } from "@/lib/services/streak";
 import { evaluateAchievements, type EarnedAchievement } from "@/lib/services/achievements";
 
@@ -89,7 +90,9 @@ export async function emitEvent(
   const day = dateOnlyUtc(localDateStr(now, user.timezone));
 
   // (2a) XP: первичное начисление — барьер идемпотентности всего события.
-  const plan = planXp(type, payload);
+  // XP-карта редактируема (spec 12.1/C1): грузим актуальную (app_settings-first).
+  const xpMap = await getXpMap(db);
+  const plan = planXp(type, payload, xpMap);
   if (plan.primary) {
     const claimed = await db.xpEvent.createMany({
       data: [xpEventRow(userId, plan.primary, day)],

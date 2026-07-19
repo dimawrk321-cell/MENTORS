@@ -7,16 +7,61 @@ import {
   ACCESS_RULES_SETTING_KEY,
   DEFAULT_ACCESS_RULES_TEXT,
   DEFAULT_COURSE_GATING_SETTING_KEY,
+  OPS_BOOKING_HORIZON_DAYS_KEY,
+  OPS_BOUNDS,
+  OPS_CANCEL_FREE_HOURS_KEY,
+  OPS_NEW_CARDS_PER_DAY_KEY,
+  OPS_STREAK_FREEZE_CAP_KEY,
+  OPS_STRIKE_LOCK_DAYS_KEY,
   RENEWAL_CONTACT_SETTING_KEY,
+  getDefaultDigestTime,
+  getNumericSetting,
+  getXpMap,
 } from "@/lib/services/settings";
-import { XP_RULES } from "@/lib/services/xp";
+import { DEFAULT_XP_MAP, XP_MAP_KEYS, XP_MAP_LABEL } from "@/lib/services/xp";
 import { STREAK_FREEZE_CAP, STREAK_FREEZE_EVERY, STREAK_MILESTONES } from "@/lib/services/streak";
+import { SRS_NEW_PER_DAY } from "@/lib/services/srs";
+import { CANCEL_FREE_HOURS, SLOT_HORIZON_DAYS, STRIKE_LOCK_DAYS } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SettingsForm } from "./settings-form";
+import { OperationalSettingsForm, XpMapForm } from "./settings-editors";
 
 export const metadata: Metadata = { title: "Настройки" };
 
-/** /admin/settings (spec 8.5): editable контакт/правила/гейтинг + read-only XP/стрик. admin+. */
+const OPS_META: { key: string; label: string; unit: string; default: number }[] = [
+  {
+    key: OPS_CANCEL_FREE_HOURS_KEY,
+    label: "Окно бесплатной отмены брони",
+    unit: "часов",
+    default: CANCEL_FREE_HOURS,
+  },
+  {
+    key: OPS_STRIKE_LOCK_DAYS_KEY,
+    label: "Длительность лока за страйки",
+    unit: "дней",
+    default: STRIKE_LOCK_DAYS,
+  },
+  {
+    key: OPS_BOOKING_HORIZON_DAYS_KEY,
+    label: "Горизонт бронирования",
+    unit: "дней",
+    default: SLOT_HORIZON_DAYS,
+  },
+  {
+    key: OPS_NEW_CARDS_PER_DAY_KEY,
+    label: "Лимит новых SRS-карточек в день",
+    unit: "карточек",
+    default: SRS_NEW_PER_DAY,
+  },
+  {
+    key: OPS_STREAK_FREEZE_CAP_KEY,
+    label: "Cap заморозок стрика",
+    unit: "шт.",
+    default: STREAK_FREEZE_CAP,
+  },
+];
+
+/** /admin/settings (spec 8.5, 12.1/C1-C2): editable контакт/правила/гейтинг + XP-карта + операционные правила. admin+. */
 export default async function SettingsPage() {
   await requireAdminZone("admin");
 
@@ -35,6 +80,23 @@ export default async function SettingsPage() {
   const renewalContact = map.get(RENEWAL_CONTACT_SETTING_KEY) ?? "";
   const accessRulesText = map.get(ACCESS_RULES_SETTING_KEY) ?? DEFAULT_ACCESS_RULES_TEXT;
   const gating = (map.get(DEFAULT_COURSE_GATING_SETTING_KEY) as CourseGating) ?? "strict";
+
+  const xpMap = await getXpMap(prisma);
+  const xpItems = XP_MAP_KEYS.map((key) => ({
+    key,
+    label: XP_MAP_LABEL[key],
+    value: xpMap[key],
+    default: DEFAULT_XP_MAP[key],
+  }));
+
+  const opsItems = await Promise.all(
+    OPS_META.map(async (m) => {
+      const bounds = OPS_BOUNDS[m.key]!;
+      const value = await getNumericSetting(prisma, m.key, m.default, bounds);
+      return { ...m, value, min: bounds.min, max: bounds.max };
+    }),
+  );
+  const digestValue = await getDefaultDigestTime(prisma);
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,26 +125,32 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Read-only: XP-карта (spec 7.7) */}
+      {/* XP-карта (spec 12.1/C1) — редактируемая */}
       <Card>
         <CardHeader>
           <CardTitle>XP-карта</CardTitle>
-          <CardDescription>Только просмотр — правило живёт код-константой.</CardDescription>
+          <CardDescription>
+            Значения XP за события (целое 0–10000). Применяются сервисами на лету.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <ul className="divide-border flex flex-col divide-y">
-            {XP_RULES.map((rule) => (
-              <li
-                key={rule.event}
-                className="flex items-center justify-between gap-3 py-2 text-[14px]"
-              >
-                <span>{rule.event}</span>
-                <span className="text-text-2 shrink-0 tabular-nums">
-                  {rule.amount} <span className="text-text-3">· {rule.rule}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <XpMapForm items={xpItems} />
+        </CardContent>
+      </Card>
+
+      {/* Операционные правила (spec 12.1/C2) — редактируемые */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Операционные правила</CardTitle>
+          <CardDescription>
+            Брони, страйки, SRS, стрик и дайджест. Читаются сервисами на лету.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <OperationalSettingsForm
+            items={opsItems}
+            digest={{ value: digestValue, default: "09:00" }}
+          />
         </CardContent>
       </Card>
 
@@ -90,15 +158,12 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Правила серии</CardTitle>
-          <CardDescription>Только просмотр.</CardDescription>
+          <CardDescription>Только просмотр (cap заморозок — в правилах выше).</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="text-text-2 flex flex-col gap-1.5 text-[14px]">
             <li>День засчитан, если в учебный день было хотя бы одно качественное действие.</li>
-            <li>
-              Заморозка: +1 за каждые {STREAK_FREEZE_EVERY} подряд засчитанных дней, максимум{" "}
-              {STREAK_FREEZE_CAP}.
-            </li>
+            <li>Заморозка: +1 за каждые {STREAK_FREEZE_EVERY} подряд засчитанных дней.</li>
             <li>Вехи серии: {STREAK_MILESTONES.join(" / ")} дней.</li>
           </ul>
         </CardContent>
