@@ -197,6 +197,12 @@
   .lesson-prose a:hover {
     text-decoration-color: var(--accent);
   }
+  /* Dark theme: --accent as body-text fails 4.5 on the dark surfaces (3.6–4.2);
+     content links lighten it toward white to clear the floor (spec 12.2/14).
+     Underline stays as the non-colour cue. */
+  html[data-theme="dark"] .lesson-prose a {
+    color: color-mix(in srgb, var(--accent), white 28%);
+  }
   .lesson-prose ul,
   .lesson-prose ol {
     margin: 0.75rem 0;

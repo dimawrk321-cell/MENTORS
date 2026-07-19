@@ -13,7 +13,7 @@ import { FlipCard } from "@/components/features/flip-card";
 import { QuestionOpenLogger } from "@/components/features/question-open-logger";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { categoryColorVar } from "@/lib/utils/category-color";
+import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 
 export const metadata: Metadata = {
   title: "Вопрос",
@@ -38,7 +38,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
       <Badge
         style={{
-          color: categoryColorVar(colorIndex),
+          color: categoryTextColor(colorIndex),
           background: `color-mix(in srgb, ${categoryColorVar(colorIndex)} 12%, transparent)`,
         }}
       >

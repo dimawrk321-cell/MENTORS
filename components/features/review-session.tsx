@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/toast";
 import { pluralRu } from "@/lib/utils/dates";
 import { cn } from "@/lib/utils/cn";
-import { categoryColorVar } from "@/lib/utils/category-color";
+import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 import { reviewCardAction } from "@/lib/actions/srs";
 import { celebrateGamification } from "@/components/features/gamification-celebrate";
 
@@ -167,7 +167,7 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
       <div>
         <Badge
           style={{
-            color: categoryColorVar(item.category.colorIndex),
+            color: categoryTextColor(item.category.colorIndex),
             background: `color-mix(in srgb, ${categoryColorVar(item.category.colorIndex)} 12%, transparent)`,
           }}
         >

@@ -10,7 +10,7 @@ import {
 } from "@/lib/services/mock-queries";
 import { BOOKING_RULES_LINE, MOCK_TYPE_LABEL } from "@/lib/constants";
 import { formatDateRu, formatDateTimeRu } from "@/lib/utils/dates";
-import { categoryColorVar } from "@/lib/utils/category-color";
+import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -48,7 +48,7 @@ function Avatar({ name, color }: { name: string; color: number }) {
     <div
       className="rounded-pill flex size-10 shrink-0 items-center justify-center text-[15px] font-semibold"
       style={{
-        color: categoryColorVar(color),
+        color: categoryTextColor(color),
         background: `color-mix(in srgb, ${categoryColorVar(color)} 14%, transparent)`,
       }}
       aria-hidden="true"

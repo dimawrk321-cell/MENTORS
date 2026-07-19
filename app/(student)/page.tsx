@@ -11,7 +11,7 @@ import { listCoursesForStudent } from "@/lib/services/content";
 import { getStreakState, processStreakDay } from "@/lib/services/streak";
 import { getTodayXp, getXpSummary } from "@/lib/services/xp";
 import { formatDateOnlyRu, formatDateTimeRu, localDateStr, pluralRu } from "@/lib/utils/dates";
-import { categoryColorVar } from "@/lib/utils/category-color";
+import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -221,7 +221,7 @@ export default async function DashboardPage() {
                 <li key={entry.categoryId} className="flex items-center gap-3 px-5 py-3.5">
                   <Badge
                     style={{
-                      color: categoryColorVar(entry.colorIndex),
+                      color: categoryTextColor(entry.colorIndex),
                       background: `color-mix(in srgb, ${categoryColorVar(entry.colorIndex)} 12%, transparent)`,
                     }}
                   >

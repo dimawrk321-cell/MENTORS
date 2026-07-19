@@ -11,7 +11,7 @@ import {
   MOCK_TYPE_LABEL,
   MOCK_VERDICT_LABEL,
 } from "@/lib/constants";
-import { categoryColorVar } from "@/lib/utils/category-color";
+import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 import { cn } from "@/lib/utils/cn";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -74,7 +74,7 @@ function StudentCard({ student }: { student: RunScreenData["student"] }) {
                 <Badge
                   key={cat.categoryId}
                   style={{
-                    color: categoryColorVar(cat.colorIndex),
+                    color: categoryTextColor(cat.colorIndex),
                     background: `color-mix(in srgb, ${categoryColorVar(cat.colorIndex)} 12%, transparent)`,
                   }}
                 >
