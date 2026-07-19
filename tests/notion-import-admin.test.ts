@@ -179,39 +179,55 @@ describe("runImportJob — import_runs history + audit + lock (spec 7.14/8.5)", 
     expect(fs.existsSync(importTempDir(run.id))).toBe(false); // temp still cleaned
   });
 
-  it("concurrent race: two jobs launched at once → exactly one imports, one errors", async () => {
+  it("concurrent import: distinct sessions serialize — one run imports, the other errors", async () => {
     const admin = await createTestUser({ email: "imp-race@x.io", role: "admin" });
-    const runA = await stageRun(admin.id, false);
-    const runB = await stageRun(admin.id, false);
+    const runWinner = await stageRun(admin.id, false);
+    const runLoser = await stageRun(admin.id, false);
 
-    // Two distinct lock sessions (as production gives each run its own session).
-    const lockA = singleConnectionClient();
-    const lockB = singleConnectionClient();
-    let outcomes: { ran: boolean }[];
+    // Deterministic synchronization instead of Promise.all timing (stage 12.2/4.3):
+    // the old version launched two jobs at once and asserted exactly one "ran",
+    // but the winner's tiny critical section could finish before the other's
+    // pg_try_advisory_lock reached Postgres — then both acquired and it flaked.
+    // Here we HOLD the import lock on one session (the exact state of a run that is
+    // mid-import) and run the contending job WHILE it is held: in production every
+    // run owns its own lock session (makeImportLockClient), so the loser's
+    // try-lock MUST fail. Once the lock is released, the winner imports exactly once.
+    const holder = singleConnectionClient();
+    const loserLock = singleConnectionClient();
+    const winnerLock = singleConnectionClient();
     try {
-      outcomes = await Promise.all([
-        runImportJob(
-          { db: testDb, lockDb: lockA },
-          { runId: runA.id, dryRun: false, fileLabel: "a.md", actorId: admin.id },
-        ),
-        runImportJob(
-          { db: testDb, lockDb: lockB },
-          { runId: runB.id, dryRun: false, fileLabel: "b.md", actorId: admin.id },
-        ),
-      ]);
+      const held = await withAdvisoryLock(holder, IMPORT_LOCK_NAME, async () => {
+        const loser = await runImportJob(
+          { db: testDb, lockDb: loserLock },
+          { runId: runLoser.id, dryRun: false, fileLabel: "loser.md", actorId: admin.id },
+        );
+        expect(loser.ran).toBe(false); // serialized out while the lock is held
+      });
+      expect(held.ran).toBe(true);
+
+      // Lock free → the other run acquires on its own session and imports once.
+      const winner = await runImportJob(
+        { db: testDb, lockDb: winnerLock },
+        { runId: runWinner.id, dryRun: false, fileLabel: "winner.md", actorId: admin.id },
+      );
+      expect(winner.ran).toBe(true);
     } finally {
-      await Promise.allSettled([lockA.$disconnect(), lockB.$disconnect()]);
+      await Promise.allSettled([
+        holder.$disconnect(),
+        loserLock.$disconnect(),
+        winnerLock.$disconnect(),
+      ]);
     }
 
-    // Exactly one job acquired the lock and ran; the other was rejected.
-    expect(outcomes.filter((o) => o.ran).length).toBe(1);
-    expect(outcomes.filter((o) => !o.ran).length).toBe(1);
-
-    const rows = [await getImportRun(testDb, runA.id), await getImportRun(testDb, runB.id)];
+    const rows = [
+      await getImportRun(testDb, runWinner.id),
+      await getImportRun(testDb, runLoser.id),
+    ];
     expect(rows.filter((r) => r?.status === "done").length).toBe(1);
     expect(rows.filter((r) => r?.status === "error").length).toBe(1);
-    // Idempotent import means the loser adds nothing even if it had run.
+    // Exactly one net import; the loser wrote nothing (temp cleaned in its finally).
     expect(await testDb.lesson.count()).toBe(1);
+    expect(fs.existsSync(importTempDir(runLoser.id))).toBe(false);
   });
 
   it("isImportLockHeld reflects the actual advisory lock, not wall-clock", async () => {
