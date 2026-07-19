@@ -404,3 +404,26 @@ describe("статистика и агрегаторы", () => {
     expect(await getNextReviewDate(testDb, { userId: empty.id, now: NOW })).toBeNull();
   });
 });
+
+describe("reviewSrsCard — конкурентный двойной сабмит (stage 12.2)", () => {
+  it("две одновременные оценки одной карточки → один srs_review, +1 к reviews_count", async () => {
+    const user = await makeStudent();
+    const category = await makeCategory({ slug: "c", title: "C" });
+    const card = await makeCard(user.id, category.id, { step: 1, reviewsCount: 1 });
+
+    // Двойной клик / две вкладки на последней карточке: обе проходили stale-проверку
+    // `nextReviewAt > today` и дублировали srs_review + reviews_count. Условный
+    // updateMany («карточка всё ещё к показу») сериализует их — выигрывает ровно один.
+    const [r1, r2] = await Promise.all([
+      reviewSrsCard(testDb, { userId: user.id, cardId: card.id, grade: "good", now: NOW }),
+      reviewSrsCard(testDb, { userId: user.id, cardId: card.id, grade: "good", now: NOW }),
+    ]);
+
+    expect([r1, r2].filter((r) => r.ok).length).toBe(1);
+    expect([r1, r2].filter((r) => !r.ok && r.code === "not_due").length).toBe(1);
+
+    const updated = await testDb.srsCard.findUniqueOrThrow({ where: { id: card.id } });
+    expect(updated.reviewsCount).toBe(2); // 1 + ровно один инкремент
+    expect(await testDb.srsReview.count({ where: { cardId: card.id } })).toBe(1);
+  });
+});

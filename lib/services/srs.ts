@@ -365,9 +365,15 @@ export async function reviewSrsCard(
   const transition = applyGrade(card, input.grade, today);
 
   // Транзакция самого ответа (spec 7.6: отвеченное сохранено при любом выходе).
+  // Двойной сабмит: последовательный гасит `nextReviewAt > today` выше; а вот
+  // КОНКУРЕНТНЫЙ (двойной клик / две вкладки на последней карточке) прошёл бы обе
+  // проверки на устаревшем чтении. Поэтому пишем условным updateMany «карточка
+  // всё ещё сегодня к показу» — Postgres при гонке блокирует строку, перечитывает
+  // WHERE после чужого коммита и матчит 0 строк у проигравшего: ровно один
+  // srs_review и +1 к reviews_count (stage 12.2, adversarial-фикс).
   const gamification = await db.$transaction(async (tx) => {
-    await tx.srsCard.update({
-      where: { id: card.id },
+    const upd = await tx.srsCard.updateMany({
+      where: { id: card.id, suspended: false, nextReviewAt: { lte: today } },
       data: {
         step: transition.step,
         nextReviewAt: transition.nextReviewAt,
@@ -376,6 +382,7 @@ export async function reviewSrsCard(
         lastGrade: input.grade,
       },
     });
+    if (upd.count === 0) return null; // конкурентный дубль проиграл гонку
     await tx.srsReview.create({
       data: {
         cardId: card.id,
@@ -398,6 +405,7 @@ export async function reviewSrsCard(
       { userId: input.userId, now },
     );
   });
+  if (gamification === null) return { ok: false, code: "not_due" };
 
   // Закрытие очереди — ПОСЛЕ коммита ответа, отдельным идемпотентным эмитом.
   // Причина: при гонке двух вкладок, опустошающих последние карточки, чтение

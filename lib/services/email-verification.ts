@@ -105,11 +105,15 @@ export async function verifyEmailCode(
   if (row.attempts >= EMAIL_CODE_MAX_ATTEMPTS) return { ok: false, code: "too_many" };
 
   if (sha256Hex(code) !== row.codeHash) {
-    await db.emailVerification.update({
-      where: { id: row.id },
+    // Atomic attempt claim (stage 12.2, adversarial-фикс): a read-then-increment
+    // let N concurrent wrong guesses all pass the `attempts >= MAX` check on the
+    // same stale read. Increment only while attempts < MAX; count===0 means the
+    // cap was already reached (concurrently) → «too_many», so ≤ MAX guesses land.
+    const claim = await db.emailVerification.updateMany({
+      where: { id: row.id, attempts: { lt: EMAIL_CODE_MAX_ATTEMPTS } },
       data: { attempts: { increment: 1 } },
     });
-    return { ok: false, code: "invalid" };
+    return { ok: false, code: claim.count === 0 ? "too_many" : "invalid" };
   }
 
   await db.$transaction(async (tx) => {
