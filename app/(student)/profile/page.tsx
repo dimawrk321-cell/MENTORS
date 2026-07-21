@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AchievementIcon } from "@/components/features/achievement-icon";
 import { ChangePasswordForm } from "./change-password-form";
+import { NameForm } from "./name-form";
 import { EmailVerifyForm } from "./email-verify-form";
 import { NotificationSettings } from "./notification-settings";
 import { RevokeOtherSessionsButton } from "./revoke-others-button";
@@ -38,10 +39,10 @@ export default async function ProfilePage() {
         <CardHeader>
           <CardTitle>Аккаунт</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-[14px]">
-          <div className="flex flex-wrap justify-between gap-x-6 gap-y-1">
+        <CardContent className="flex flex-col gap-3 text-[14px]">
+          <div className="flex flex-col gap-1.5">
             <span className="text-text-2">Имя</span>
-            <span>{user.name}</span>
+            <NameForm initialName={user.name} />
           </div>
           <div className="flex flex-wrap justify-between gap-x-6 gap-y-1">
             <span className="text-text-2">Email</span>

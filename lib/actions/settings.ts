@@ -15,7 +15,7 @@ import { DEFAULT_XP_MAP, XP_MAP_KEYS, type XpMapKey } from "@/lib/services/xp";
 import {
   ActionError,
   parseInput,
-  requireActionRole,
+  requireActionPermission,
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
@@ -31,7 +31,7 @@ import {
 
 export async function updateSettingsAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("settings.manage");
     const parsed = parseInput(updateSettingsSchema, input);
 
     const rows = await prisma.appSetting.findMany({
@@ -70,7 +70,7 @@ export async function updateSettingsAction(input: unknown): Promise<ActionResult
  */
 export async function updateXpMapAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("settings.manage");
     const parsed = parseInput(xpMapSchema, input);
     // Only known keys are persisted; missing keys fall back to the code default.
     const clean: Record<string, number> = {};
@@ -98,7 +98,7 @@ export async function updateOperationalSettingsAction(
   input: unknown,
 ): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("settings.manage");
     const parsed = parseInput(operationalSettingsSchema, input);
 
     for (const [key, value] of Object.entries(parsed.values)) {

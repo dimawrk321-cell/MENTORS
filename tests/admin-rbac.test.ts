@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Role } from "@prisma/client";
 
-// RBAC вкладки админки (spec 2/8.5): /admin/audit — owner-only; /admin/settings —
-// admin+. Проверяем, что actions отклоняют недостаточную роль (rejection-путь
-// срабатывает до обращения к БД). getAuth мокается — тест не требует контекста запроса.
+// RBAC of the admin zone (spec 2/8.5, walk 12.4/B2). Actions now guard by
+// PERMISSION (requireActionPermission) and owner-only actions by requireActionOwner.
+// We assert the rejection path fires before any DB access. getAuth is mocked;
+// hasPermission runs for real (pure — reads user.role/permissions), so a mentor
+// carries the mentor preset (content.manage + students.view + analytics.view).
 
 const ROLE_RANK: Record<Role, number> = { student: 0, mentor: 1, admin: 2, owner: 3 };
 const getAuthMock = vi.fn();
@@ -18,13 +20,21 @@ const { loadMoreAuditAction } = await import("@/lib/actions/audit");
 const { updateSettingsAction, updateXpMapAction, updateOperationalSettingsAction } =
   await import("@/lib/actions/settings");
 const {
-  inviteMentorAction,
   extendAccessAction,
   blockStudentAction,
   resetStudentSessionsAction,
-  issuePasswordResetLinkAction,
+  resetStudentPasswordAction,
   impersonateAction,
 } = await import("@/lib/actions/students");
+const {
+  createTeamMemberAction,
+  setTeamRoleAction,
+  setTeamPermissionsAction,
+  setTeamInterviewerAction,
+  blockTeamMemberAction,
+  unblockTeamMemberAction,
+  resetTeamMemberPasswordAction,
+} = await import("@/lib/actions/team");
 const { createAnnouncementAction } = await import("@/lib/actions/announcements");
 const { upsertRubricAction } = await import("@/lib/actions/mock-admin");
 
@@ -32,73 +42,87 @@ function asRole(role: Role) {
   getAuthMock.mockResolvedValue({
     state: "valid",
     session: { id: "s1", impersonatorId: null },
-    user: { id: "u1", role },
+    user: { id: "u1", role, permissions: null },
     accessExpired: false,
   });
+}
+
+function rejects(res: { ok: boolean; error?: { code: string } } | null): void {
+  expect(res && res.ok).toBe(false); // also catches an unexpected null
+  if (res && !res.ok) expect(res.error?.code).toBe("forbidden");
+}
+
+/** Passed the permission gate: not `ok`, but the failure is NOT a forbidden. */
+function passesGate(res: { ok: boolean; error?: { code: string } } | null): void {
+  expect(res && res.ok).toBe(false);
+  if (res && !res.ok) expect(res.error?.code).not.toBe("forbidden");
 }
 
 describe("/admin/audit — owner-only", () => {
   it("отклоняет mentor и admin (нужен owner)", async () => {
     for (const role of ["mentor", "admin"] as const) {
       asRole(role);
-      const res = await loadMoreAuditAction({ cursor: "x" });
-      expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error.code).toBe("forbidden");
+      rejects(await loadMoreAuditAction({ cursor: "x" }));
     }
   });
 });
 
-describe("/admin/settings — admin+", () => {
-  it("отклоняет student и mentor (нужен admin+)", async () => {
+describe("настройки / XP-карта / опер-правила (settings.manage)", () => {
+  it("отклоняет student и mentor", async () => {
     for (const role of ["student", "mentor"] as const) {
       asRole(role);
-      const res = await updateSettingsAction({
-        renewalContact: "",
-        accessRulesText: "x",
-        defaultCourseGating: "strict",
-      });
-      expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error.code).toBe("forbidden");
+      rejects(
+        await updateSettingsAction({
+          renewalContact: "",
+          accessRulesText: "x",
+          defaultCourseGating: "strict",
+        }),
+      );
+      rejects(await updateXpMapAction({}));
+      rejects(await updateOperationalSettingsAction({}));
     }
   });
 });
 
-// Stage 12.2/4.4: rejection tests for the rest of the privileged mutations so a
-// future refactor can't silently drop a guard (matrix, spec 2). The role check
-// runs before parseInput/DB, so minimal/empty inputs reach the guard first.
-function rejects(res: { ok: boolean; error?: { code: string } } | null): void {
-  expect(res && res.ok).toBe(false); // also catches an unexpected null
-  if (res && !res.ok) expect(res.error?.code).toBe("forbidden");
-}
-
-describe("роль-ассайнмент (invite mentor) — owner-only", () => {
-  it("отклоняет mentor и admin (нужен owner)", async () => {
-    for (const role of ["mentor", "admin"] as const) {
-      asRole(role);
-      rejects(await inviteMentorAction(null, new FormData()));
-    }
+describe("объявления (announcements.manage) / рубрики (interviews.manage)", () => {
+  it("отклоняет mentor", async () => {
+    asRole("mentor");
+    rejects(await createAnnouncementAction({ title: "t", bodyMd: "b", kind: "banner" }));
+    rejects(await upsertRubricAction({ type: "theory", criteria: [] }));
   });
 });
 
-describe("доступ ученика (продление/блок/сессии/impersonation) — admin+", () => {
-  it("отклоняет student и mentor (нужен admin+)", async () => {
+describe("управление доступом ученика (students.manage)", () => {
+  it("отклоняет student и mentor (просмотр есть, управление — нет)", async () => {
     for (const role of ["student", "mentor"] as const) {
       asRole(role);
-      rejects(await extendAccessAction({ userId: "u", days: 30 }));
+      rejects(await extendAccessAction({ kind: "days", userId: "u", days: 30 }));
       rejects(await blockStudentAction("u"));
       rejects(await resetStudentSessionsAction("u"));
-      rejects(await issuePasswordResetLinkAction("u"));
+      rejects(await resetStudentPasswordAction("u"));
       rejects(await impersonateAction("u"));
     }
   });
 });
 
-describe("объявления / XP-карта / опер-правила / рубрики — admin+", () => {
-  it("отклоняет mentor (нужен admin+)", async () => {
-    asRole("mentor");
-    rejects(await createAnnouncementAction({ title: "t", bodyMd: "b", kind: "banner" }));
-    rejects(await updateXpMapAction({}));
-    rejects(await updateOperationalSettingsAction({}));
-    rejects(await upsertRubricAction({ type: "theory", criteria: [] }));
+describe("команда (owner-only) — spec 12.4/B3 owner-supremacy", () => {
+  it("отклоняет mentor и admin у всех мутаций команды", async () => {
+    for (const role of ["mentor", "admin"] as const) {
+      asRole(role);
+      rejects(await createTeamMemberAction(null, new FormData()));
+      rejects(await setTeamRoleAction({ userId: "u", role: "admin" }));
+      rejects(await setTeamPermissionsAction({ userId: "u", permissions: null }));
+      rejects(await setTeamInterviewerAction({ userId: "u", isInterviewer: true }));
+      rejects(await blockTeamMemberAction("u"));
+      rejects(await unblockTeamMemberAction("u"));
+      rejects(await resetTeamMemberPasswordAction("u"));
+    }
+  });
+
+  it("owner проходит гейт прав (падает уже на валидации, не на forbidden)", async () => {
+    asRole("owner");
+    // Empty userId fails zod AFTER the owner gate — proves owner is not forbidden.
+    passesGate(await setTeamRoleAction({ userId: "", role: "admin" }));
+    passesGate(await setTeamInterviewerAction({ userId: "", isInterviewer: true }));
   });
 });

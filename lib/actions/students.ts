@@ -7,19 +7,18 @@ import { prisma } from "@/lib/db";
 import {
   adminResetSessions,
   blockStudent,
+  buildCredentialMessage,
+  createStudentCredentials,
   extendAccess,
-  inviteMentor,
-  inviteStudent,
-  resendInvite,
   unblockStudent,
 } from "@/lib/services/access";
+import { adminResetPasswordToTemp } from "@/lib/services/auth";
 import {
   startImpersonation,
   stopImpersonation,
   validateSessionToken,
 } from "@/lib/services/sessions";
 import { setSectionAccess } from "@/lib/services/library";
-import { adminIssuePasswordReset } from "@/lib/services/auth";
 import { isApiRateLimited } from "@/lib/utils/rate-limit";
 import {
   clearedCookieOptions,
@@ -33,131 +32,95 @@ import {
   ActionError,
   getRequestContext,
   parseInput,
-  requireActionRole,
+  requireActionPermission,
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
 import {
   extendAccessSchema,
-  inviteMentorSchema,
-  inviteStudentSchema,
+  issueCredentialsSchema,
   sectionAccessSchema,
 } from "@/lib/utils/validation";
 import { formatDateRu } from "@/lib/utils/dates";
 
-// Admin student management (spec 2: доступ выдаёт admin+). Every mutation is
-// audited inside the services.
+// Admin student management (spec 2/8.5, walk 12.4): gated by the `students.manage`
+// permission (owner passes). Every mutation is audited inside the services.
 
 function revalidateStudent(userId?: string): void {
   revalidatePath("/admin/students");
   if (userId) revalidatePath(`/admin/students/${userId}`);
 }
 
-export interface InviteCreated {
+/** One-time credential reveal (walk 12.4/A1): shown once, never re-fetchable. */
+export interface CredentialsIssued {
   userId: string;
-  inviteUrl: string;
   email: string;
-  name: string;
+  tempPassword: string;
+  message: string;
 }
 
-export type InviteFormState = ActionResult<InviteCreated> | null;
+export type CredentialsFormState = ActionResult<CredentialsIssued> | null;
 
-export async function inviteStudentAction(
-  _prev: InviteFormState,
+/**
+ * «Выдать доступ» (walk 12.4/A1): creates a student account with a temporary
+ * password and returns it once (login + password + a ready-to-send message).
+ */
+export async function issueStudentCredentialsAction(
+  _prev: CredentialsFormState,
   formData: FormData,
-): Promise<InviteFormState> {
-  return runAction<InviteCreated>(async () => {
-    const auth = await requireActionRole("admin");
-    const input = parseInput(inviteStudentSchema, {
+): Promise<CredentialsFormState> {
+  return runAction<CredentialsIssued>(async () => {
+    const auth = await requireActionPermission("students.manage");
+    const input = parseInput(issueCredentialsSchema, {
       email: formData.get("email"),
       name: formData.get("name"),
     });
-    const res = await inviteStudent(prisma, {
+    const res = await createStudentCredentials(prisma, {
       actorId: auth.user.id,
       email: input.email,
       name: input.name,
     });
     if (!res.ok) {
-      throw new ActionError(
-        res.code,
-        res.code === "already_invited"
-          ? "Этот email уже приглашён — открой карточку и отправь инвайт повторно"
-          : "Пользователь с таким email уже существует",
-      );
+      throw new ActionError(res.code, "Пользователь с таким email уже существует");
     }
     revalidateStudent(res.userId);
-    return { userId: res.userId, inviteUrl: res.inviteUrl, email: input.email, name: input.name };
+    return {
+      userId: res.userId,
+      email: input.email,
+      tempPassword: res.tempPassword,
+      message: buildCredentialMessage(input.email, res.tempPassword),
+    };
   });
 }
 
 /**
- * Invite a mentor (spec 2: назначать роли — owner-only). Same invite flow, role
- * mentor + is_interviewer checkbox — closes the manual-SQL path. Audited.
+ * «Сбросить пароль» (walk 12.4/A2): resets to a fresh temporary password and
+ * reveals it once (same pattern as issuing). The link-based reset is retired
+ * from the admin UI (kept only for self-serve «Забыл пароль»).
  */
-export async function inviteMentorAction(
-  _prev: InviteFormState,
-  formData: FormData,
-): Promise<InviteFormState> {
-  return runAction<InviteCreated>(async () => {
-    const auth = await requireActionRole("owner");
-    const input = parseInput(inviteMentorSchema, {
-      email: formData.get("email"),
-      name: formData.get("name"),
-      isInterviewer: formData.get("isInterviewer") === "on",
-    });
-    const res = await inviteMentor(prisma, {
-      actorId: auth.user.id,
-      email: input.email,
-      name: input.name,
-      isInterviewer: input.isInterviewer,
-    });
-    if (!res.ok) {
-      throw new ActionError(
-        res.code,
-        res.code === "already_invited"
-          ? "Этот email уже приглашён"
-          : "Пользователь с таким email уже существует",
-      );
-    }
-    revalidateStudent(res.userId);
-    return { userId: res.userId, inviteUrl: res.inviteUrl, email: input.email, name: input.name };
-  });
-}
-
-export async function resendInviteAction(
+export async function resetStudentPasswordAction(
   userId: string,
-): Promise<ActionResult<{ inviteUrl: string }>> {
+): Promise<ActionResult<{ tempPassword: string; message: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("admin");
-    const res = await resendInvite(prisma, { actorId: auth.user.id, userId });
-    if (!res.ok) {
-      throw new ActionError(res.code, "Инвайт уже принят или ученик не найден");
+    const auth = await requireActionPermission("students.manage");
+    // No more than one reset per student per minute.
+    if (isApiRateLimited(`reset-pwd:${userId}`, 1, 60_000)) {
+      throw new ActionError("rate_limited", "Сбрасывать пароль можно не чаще раза в минуту");
     }
-    revalidateStudent(userId);
-    return { inviteUrl: res.inviteUrl };
-  });
-}
-
-export async function issuePasswordResetLinkAction(
-  userId: string,
-): Promise<ActionResult<{ resetUrl: string }>> {
-  return runAction(async () => {
-    const auth = await requireActionRole("admin");
-    // No more than one link per student per minute (spec P1).
-    if (isApiRateLimited(`reset-issue:${userId}`, 1, 60_000)) {
-      throw new ActionError("rate_limited", "Ссылку можно выдавать не чаще раза в минуту");
-    }
-    const res = await adminIssuePasswordReset(prisma, { actorId: auth.user.id, userId });
+    const res = await adminResetPasswordToTemp(prisma, { actorId: auth.user.id, userId });
     if (!res.ok) {
       throw new ActionError(
         res.code,
         res.code === "not_eligible"
-          ? "Сброс доступен только активированным ученикам"
+          ? "Сброс доступен ученику с паролем и не заблокированному"
           : "Ученик не найден",
       );
     }
     revalidateStudent(userId);
-    return { resetUrl: res.resetUrl };
+    return {
+      tempPassword: res.tempPassword,
+      message: buildCredentialMessage(res.email, res.tempPassword),
+    };
   });
 }
 
@@ -165,7 +128,7 @@ export async function extendAccessAction(
   input: unknown,
 ): Promise<ActionResult<{ newAccessUntilText: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("students.manage");
     const parsed = parseInput(extendAccessSchema, input);
     const res = await extendAccess(prisma, {
       actorId: auth.user.id,
@@ -191,7 +154,7 @@ export async function extendAccessAction(
 
 export async function blockStudentAction(userId: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("students.manage");
     const res = await blockStudent(prisma, { actorId: auth.user.id, userId });
     if (!res.ok) {
       throw new ActionError(
@@ -206,7 +169,7 @@ export async function blockStudentAction(userId: string): Promise<ActionResult<u
 
 export async function unblockStudentAction(userId: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("students.manage");
     const res = await unblockStudent(prisma, { actorId: auth.user.id, userId });
     if (!res.ok) {
       throw new ActionError(
@@ -221,7 +184,7 @@ export async function unblockStudentAction(userId: string): Promise<ActionResult
 
 export async function resetStudentSessionsAction(userId: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("students.manage");
     const res = await adminResetSessions(prisma, { actorId: auth.user.id, userId });
     if (!res.ok) {
       throw new ActionError(res.code, "Ученик не найден");
@@ -238,7 +201,7 @@ export async function setSectionAccessAction(input: {
   enabled: boolean;
 }): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("students.manage");
     const parsed = parseInput(sectionAccessSchema, input);
     const res = await setSectionAccess(prisma, {
       actorId: auth.user.id,
@@ -258,7 +221,7 @@ export async function impersonateAction(userId: string): Promise<ActionResult<un
   let started = false;
 
   const result = await runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("students.manage");
     if (auth.impersonated) {
       throw new ActionError("impersonation_readonly", "Ты уже в режиме просмотра");
     }

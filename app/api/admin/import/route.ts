@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { getAuth, hasRole } from "@/lib/auth/guards";
+import { getAuth } from "@/lib/auth/guards";
+import { hasPermission } from "@/lib/auth/permissions";
 import {
   MAX_UPLOAD_BYTES,
   cleanupImportTempDir,
@@ -42,8 +43,9 @@ function isUploadedFile(value: unknown): value is UploadedFile {
 
 export async function POST(req: Request) {
   const auth = await getAuth();
-  // RBAC first — a non-admin never causes the body to be buffered.
-  if (auth.state !== "valid" || !hasRole(auth.user, "admin")) {
+  // RBAC first — an unauthorized caller never causes the body to be buffered.
+  // Import is part of content management (spec 12.4/B1: content.manage).
+  if (auth.state !== "valid" || !hasPermission(auth.user, "content.manage")) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
   if (auth.session.impersonatorId) {

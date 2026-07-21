@@ -106,6 +106,8 @@ export async function saveOnboardingAction(input: unknown): Promise<ActionResult
     const parsed = parseInput(onboardingSchema, input);
     await saveOnboarding(prisma, {
       userId: auth.user.id,
+      // Walk 12.4: the student picks their own name on the first onboarding screen.
+      name: parsed.name,
       track: parsed.track,
       dailyGoalXp: parsed.dailyGoalXp,
       digestTime: parsed.digestTime,

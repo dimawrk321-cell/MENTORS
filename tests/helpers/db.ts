@@ -80,6 +80,9 @@ interface TestUserInput {
   digestTime?: string;
   quietHoursStart?: string;
   quietHoursEnd?: string;
+  // Walk 12.4: credential-based access + granular permissions.
+  mustChangePassword?: boolean;
+  permissions?: string[];
 }
 
 export async function createTestUser(input: TestUserInput) {
@@ -99,6 +102,8 @@ export async function createTestUser(input: TestUserInput) {
       ...(input.digestTime ? { digestTime: input.digestTime } : {}),
       ...(input.quietHoursStart ? { quietHoursStart: input.quietHoursStart } : {}),
       ...(input.quietHoursEnd ? { quietHoursEnd: input.quietHoursEnd } : {}),
+      ...(input.mustChangePassword ? { mustChangePassword: true } : {}),
+      ...(input.permissions ? { permissions: input.permissions } : {}),
       avatarColor: paletteIndex(input.email),
     },
   });

@@ -17,7 +17,7 @@ import {
   assertActiveAccess,
   assertNotImpersonating,
   parseInput,
-  requireActionRole,
+  requireActionPermission,
   requireActionStudent,
   runAction,
   type ActionResult,
@@ -83,7 +83,7 @@ function failGuide(code: "not_found" | "slug_taken" | "not_draft"): never {
 
 export async function createGuideAction(input: unknown): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(createGuideSchema, input);
     const created = await createGuide(prisma, {
       actorId: auth.user.id,
@@ -100,7 +100,7 @@ export async function saveGuideContentAction(
   contentMd: string,
 ): Promise<ActionResult<{ readingMinutes: number }>> {
   return runAction(async () => {
-    await requireActionRole("mentor");
+    await requireActionPermission("content.manage");
     const parsed = parseInput(saveGuideContentSchema, { guideId, contentMd });
     const res = await saveGuideContent(prisma, parsed);
     if (!res.ok) failGuide(res.code);
@@ -110,7 +110,7 @@ export async function saveGuideContentAction(
 
 export async function updateGuideMetaAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(guideMetaSchema, input);
     const res = await updateGuideMeta(prisma, { actorId: auth.user.id, ...parsed });
     if (!res.ok) failGuide(res.code);
@@ -124,7 +124,7 @@ export async function setGuideStatusAction(
   status: "draft" | "published",
 ): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(
       z.object({ guideId: z.string().min(1), status: z.enum(["draft", "published"]) }),
       { guideId, status },
@@ -142,7 +142,7 @@ export async function setGuideStatusAction(
 
 export async function deleteGuideAction(guideId: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(z.object({ guideId: z.string().min(1) }), { guideId });
     const res = await deleteGuide(prisma, { actorId: auth.user.id, guideId: parsed.guideId });
     if (!res.ok) failGuide(res.code);

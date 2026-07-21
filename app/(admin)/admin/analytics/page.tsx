@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { getSegmentCourses } from "@/lib/services/announcements";
 import {
   getActivityBars,
@@ -191,7 +191,7 @@ interface PageProps {
 // A1 (spec 12.1): every widget renders in its own Suspense + error boundary so one
 // failing/slow aggregate never blanks the page or gets the period tabs stuck.
 export default async function AnalyticsPage({ searchParams }: PageProps) {
-  const { user } = await requireAdminZone();
+  const { user } = await requirePermission("analytics.view");
   const sp = await searchParams;
 
   const courses = await getSegmentCourses(prisma);

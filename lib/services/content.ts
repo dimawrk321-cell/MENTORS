@@ -543,6 +543,8 @@ export async function saveOnboarding(
   db: Db,
   input: {
     userId: string;
+    // Walk 12.4: the student sets their own name on onboarding (2–50 chars).
+    name: string;
     track: Track | null;
     dailyGoalXp: 30 | 60 | 120;
     digestTime: string;
@@ -551,6 +553,7 @@ export async function saveOnboarding(
   await db.user.update({
     where: { id: input.userId },
     data: {
+      name: input.name,
       ...(input.track ? { track: input.track } : {}),
       dailyGoalXp: input.dailyGoalXp,
       digestTime: input.digestTime,

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { getGuideForEditor } from "@/lib/services/guides";
 import { GUIDE_SECTION_LABEL } from "@/lib/constants";
 import { renderLessonContent } from "@/components/blocks/lesson-renderer";
@@ -19,7 +19,7 @@ interface GuidePreviewPageProps {
 // Live preview for the guide editor (spec 8.5), outside the admin chrome — the
 // same LessonRenderer the student sees, so the preview is identical by construction.
 export default async function GuidePreviewPage({ params }: GuidePreviewPageProps) {
-  const { user } = await requireAdminZone();
+  const { user } = await requirePermission("content.manage");
   const { id } = await params;
   const guide = await getGuideForEditor(prisma, id);
   if (!guide) notFound();

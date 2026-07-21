@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
-import { hasRole, requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import {
   listAllBookings,
   listInterviewerProfiles,
@@ -16,7 +16,9 @@ export const metadata: Metadata = {
 
 /** /admin/interviews (spec 8.5): брони, страйки/локи, рубрики, waitlist, профили. */
 export default async function AdminInterviewsPage() {
-  const { user } = await requireAdminZone();
+  // Walk 12.4/B: a single `interviews.manage` permission gates the whole center;
+  // anyone who can see it can mutate (the old mentor-view/admin-mutate split is gone).
+  const { user } = await requirePermission("interviews.manage");
   const now = new Date();
 
   const [bookings, strikes, waitlist, profiles, theory, legend] = await Promise.all([
@@ -38,7 +40,7 @@ export default async function AdminInterviewsPage() {
         profiles={profiles}
         rubrics={{ theory, legend }}
         timezone={user.timezone}
-        canMutate={hasRole(user, "admin")}
+        canMutate={true}
       />
     </div>
   );

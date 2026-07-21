@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ContentStatus, QuestionType } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import {
   listCategoriesTree,
   listLessonsForLinking,
@@ -29,7 +29,7 @@ interface AdminQuestionsPageProps {
 
 /** Админ-банк вопросов (spec 8.5): фильтры, массовые операции, редактор по клику. */
 export default async function AdminQuestionsPage({ searchParams }: AdminQuestionsPageProps) {
-  await requireAdminZone();
+  await requirePermission("content.manage");
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
 

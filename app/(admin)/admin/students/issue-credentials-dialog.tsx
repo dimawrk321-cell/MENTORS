@@ -5,7 +5,6 @@ import { useState, useActionState } from "react";
 import { UserRoundPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CopyButton } from "@/components/ui/copy-button";
 import {
   Dialog,
   DialogContent,
@@ -14,16 +13,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { inviteStudentAction, type InviteFormState } from "@/lib/actions/students";
+import { CredentialReveal } from "@/components/features/credential-reveal";
+import { issueStudentCredentialsAction, type CredentialsFormState } from "@/lib/actions/students";
 
 /**
- * Invite flow (spec 7.1.1 + changelog): after creation the admin sees the
- * invite link with a copy button; email is the secondary channel.
+ * «Выдать доступ» (walk 12.4/A1): creates a student account and reveals a
+ * one-time login + temporary password. Email = login; name is optional (the
+ * student sets it on onboarding). No invite link, no email.
  */
-export function InviteStudentDialog() {
+export function IssueCredentialsDialog() {
   const [open, setOpen] = useState(false);
-  const [state, formAction, pending] = useActionState<InviteFormState, FormData>(
-    inviteStudentAction,
+  const [state, formAction, pending] = useActionState<CredentialsFormState, FormData>(
+    issueStudentCredentialsAction,
     null,
   );
   const error = state && !state.ok ? state.error.message : null;
@@ -34,23 +35,21 @@ export function InviteStudentDialog() {
       <DialogTrigger asChild>
         <Button>
           <UserRoundPlus size={16} strokeWidth={1.75} aria-hidden="true" />
-          Пригласить ученика
+          Выдать доступ
         </Button>
       </DialogTrigger>
       <DialogContent>
         {created ? (
           <>
             <DialogHeader>
-              <DialogTitle>Инвайт создан</DialogTitle>
-              <DialogDescription>
-                {created.name} ({created.email}) — ссылка действует 7 дней. Письмо с ней отправлено
-                на email.
-              </DialogDescription>
+              <DialogTitle>Доступ выдан</DialogTitle>
+              <DialogDescription>Передай логин и временный пароль ученику лично.</DialogDescription>
             </DialogHeader>
-            <div className="flex items-center gap-2">
-              <Input readOnly value={created.inviteUrl} onFocus={(e) => e.target.select()} />
-              <CopyButton value={created.inviteUrl} />
-            </div>
+            <CredentialReveal
+              login={created.email}
+              tempPassword={created.tempPassword}
+              message={created.message}
+            />
             <div className="mt-6 flex justify-end gap-3">
               <Button asChild variant="secondary">
                 <Link href={`/admin/students/${created.userId}`}>Открыть карточку</Link>
@@ -61,23 +60,23 @@ export function InviteStudentDialog() {
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>Пригласить ученика</DialogTitle>
+              <DialogTitle>Выдать доступ</DialogTitle>
               <DialogDescription>
-                Отсчёт 90 дней доступа начнётся с момента установки пароля, не с инвайта.
+                Платформа создаст временный пароль. Отсчёт 90 дней начнётся с первого входа ученика.
               </DialogDescription>
             </DialogHeader>
             <form action={formAction} className="flex flex-col gap-4" noValidate>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="invite-name" className="text-text-2 text-[13px]">
-                  Имя
+                <label htmlFor="cred-email" className="text-text-2 text-[13px]">
+                  Email (он же логин)
                 </label>
-                <Input id="invite-name" name="name" required autoFocus />
+                <Input id="cred-email" name="email" type="email" required autoFocus />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="invite-email" className="text-text-2 text-[13px]">
-                  Email
+                <label htmlFor="cred-name" className="text-text-2 text-[13px]">
+                  Имя (необязательно)
                 </label>
-                <Input id="invite-email" name="email" type="email" required />
+                <Input id="cred-name" name="name" placeholder="Ученик задаст сам на онбординге" />
               </div>
               {error && (
                 <p role="alert" aria-live="polite" className="text-danger text-[13px]">
@@ -86,7 +85,7 @@ export function InviteStudentDialog() {
               )}
               <div className="flex justify-end">
                 <Button type="submit" loading={pending}>
-                  Создать инвайт
+                  Создать доступ
                 </Button>
               </div>
             </form>

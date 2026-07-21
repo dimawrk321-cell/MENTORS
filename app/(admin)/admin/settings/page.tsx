@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { CourseGating } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import {
   ACCESS_RULES_SETTING_KEY,
   DEFAULT_ACCESS_RULES_TEXT,
@@ -63,7 +63,7 @@ const OPS_META: { key: string; label: string; unit: string; default: number }[] 
 
 /** /admin/settings (spec 8.5, 12.1/C1-C2): editable контакт/правила/гейтинг + XP-карта + операционные правила. admin+. */
 export default async function SettingsPage() {
-  await requireAdminZone("admin");
+  await requirePermission("settings.manage");
 
   const rows = await prisma.appSetting.findMany({
     where: {

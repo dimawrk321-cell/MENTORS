@@ -9,7 +9,7 @@ import type {
   RecordingStage,
 } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { listRecordingsAdmin } from "@/lib/services/library";
 import { formatDateRu } from "@/lib/utils/dates";
 import {
@@ -110,7 +110,7 @@ function FilterRow({
 
 /** /admin/library (spec 8.5): таблица записей + форма с чеклист-гейтом. */
 export default async function AdminLibraryPage({ searchParams }: AdminLibraryPageProps) {
-  await requireAdminZone("mentor");
+  await requirePermission("content.manage");
   const raw = await searchParams;
   const filters = {
     stage: pick(raw.stage, RECORDING_STAGES),

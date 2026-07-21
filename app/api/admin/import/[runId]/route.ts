@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuth, hasRole } from "@/lib/auth/guards";
+import { getAuth } from "@/lib/auth/guards";
+import { hasPermission } from "@/lib/auth/permissions";
 import { isApiRateLimited } from "@/lib/utils/rate-limit";
 import { getImportRun } from "@/lib/services/notion-import/admin-import";
 
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ runId: string }> }) {
   const auth = await getAuth();
-  if (auth.state !== "valid" || !hasRole(auth.user, "admin")) {
+  if (auth.state !== "valid" || !hasPermission(auth.user, "content.manage")) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
   if (isApiRateLimited(`import-status:${auth.user.id}`)) {

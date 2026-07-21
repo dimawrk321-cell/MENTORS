@@ -8,7 +8,7 @@ import { writeAudit } from "@/lib/services/audit";
 import {
   ActionError,
   parseInput,
-  requireActionRole,
+  requireActionPermission,
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
@@ -27,7 +27,7 @@ function revalidateInterviews(): void {
 
 export async function removeStrikeAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("interviews.manage");
     const parsed = parseInput(removeStrikeSchema, input);
     const res = await removeStrike(prisma, { actorId: auth.user.id, strikeId: parsed.strikeId });
     if (!res.ok) throw new ActionError(res.code, "Страйк не найден");
@@ -38,7 +38,7 @@ export async function removeStrikeAction(input: unknown): Promise<ActionResult<u
 
 export async function upsertRubricAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("interviews.manage");
     const parsed = parseInput(rubricTemplateSchema, input);
     await upsertRubricTemplate(prisma, { type: parsed.type, criteria: parsed.criteria });
     await writeAudit(prisma, {
@@ -57,7 +57,7 @@ export async function updateInterviewerProfileAction(
   input: unknown,
 ): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("interviews.manage");
     const parsed = parseInput(interviewerProfileSchema, input);
     const res = await upsertInterviewerProfile(prisma, {
       actorId: auth.user.id,

@@ -20,9 +20,26 @@ import {
   notificationSettingsSchema,
   readingFontSizeSchema,
   themeSchema,
+  updateNameSchema,
 } from "@/lib/utils/validation";
 
 export type ProfileFormState = ActionResult<undefined> | null;
+
+/** Edit the student's own name (walk 12.4: «имя редактируется в профиле»). */
+export async function updateNameAction(
+  _prev: ProfileFormState,
+  formData: FormData,
+): Promise<ProfileFormState> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionStudent();
+    assertNotImpersonating(auth);
+    assertActiveAccess(auth);
+    const { name } = parseInput(updateNameSchema, { name: formData.get("name") });
+    await prisma.user.update({ where: { id: auth.user.id }, data: { name } });
+    revalidatePath("/profile");
+    return undefined;
+  });
+}
 
 /**
  * Quick theme toggle (spec 12.1/B1). The profile setting (users.theme) is the

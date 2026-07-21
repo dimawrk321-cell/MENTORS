@@ -14,7 +14,7 @@ import {
   ActionError,
   assertActiveAccess,
   parseInput,
-  requireActionRole,
+  requireActionPermission,
   requireActionStudent,
   runAction,
   type ActionResult,
@@ -68,7 +68,7 @@ function revalidateLibrary(recordingId?: string): void {
 
 export async function upsertRecordingAction(input: unknown): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(recordingUpsertSchema, input);
     const data: RecordingData = {
       title: parsed.title,
@@ -106,7 +106,7 @@ export async function setRecordingStatusAction(
   status: "draft" | "published",
 ): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const res = await setRecordingStatus(prisma, { actorId: auth.user.id, id, status });
     if (!res.ok) {
       throw new ActionError(
@@ -124,7 +124,7 @@ export async function setRecordingStatusAction(
 /** Delete a draft recording with zero views (spec 8.5 changelog). mentor+. */
 export async function deleteRecordingAction(id: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const res = await deleteRecording(prisma, { actorId: auth.user.id, id });
     if (!res.ok) {
       const message =

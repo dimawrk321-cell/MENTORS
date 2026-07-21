@@ -11,7 +11,8 @@ import {
   zonedDateEndUtc,
   zonedDayUtcRange,
 } from "@/lib/utils/dates";
-import { generateToken, paletteIndex } from "@/lib/utils/crypto";
+import { generateToken, generateTempPassword, paletteIndex } from "@/lib/utils/crypto";
+import { hashPassword } from "@/lib/utils/password";
 import { emitEvent } from "@/lib/services/events";
 import { writeAudit } from "@/lib/services/audit";
 import { revokeSessions } from "@/lib/services/sessions";
@@ -71,6 +72,67 @@ export type InviteStudentResult =
 
 export function inviteUrlFor(token: string): string {
   return `${env.platformUrl}/invite/${token}`;
+}
+
+/**
+ * Ready-to-send credential message (walk 12.4/A1) — «Копировать сообщение».
+ * Built server-side so it can read BRAND_NAME/PLATFORM_URL from env; the client
+ * only copies the finished string.
+ */
+export function buildCredentialMessage(email: string, tempPassword: string): string {
+  return `Твой доступ к ${env.brandName}: ${env.platformUrl} · Логин: ${email} · Пароль: ${tempPassword} · При первом входе платформа попросит придумать свой пароль`;
+}
+
+// --- Credential-based access (walk 12.4/A1): the primary way to grant access ---
+
+export type IssueCredentialsResult =
+  { ok: true; userId: string; tempPassword: string } | { ok: false; code: "exists" };
+
+/**
+ * Creates a student account with admin-issued credentials (walk 12.4/A1): email
+ * login + a temporary password (returned once for a one-time display, only its
+ * argon2 hash persisted — never the plaintext, incl. audit/logs). must_change_password
+ * forces «Придумай свой пароль» on first login; status stays `invited` until that
+ * first successful login activates the 90-day clock (A3). Name is optional — the
+ * student sets it on onboarding. No invite row, no welcome email (creds are handed
+ * over personally — A6). New students start with every gated section off (12.1/C3).
+ */
+export async function createStudentCredentials(
+  db: PrismaClient,
+  input: { actorId: string; email: string; name: string },
+): Promise<IssueCredentialsResult> {
+  const existing = await db.user.findUnique({ where: { email: input.email } });
+  if (existing) return { ok: false, code: "exists" };
+
+  const tempPassword = generateTempPassword();
+  const passwordHash = await hashPassword(tempPassword);
+  const digestTime = await getDefaultDigestTime(db);
+  const { user } = await db.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: input.email,
+        name: input.name,
+        role: "student",
+        status: "invited",
+        passwordHash,
+        mustChangePassword: true,
+        avatarColor: paletteIndex(input.email),
+        digestTime,
+        libraryEnabled: false,
+      },
+    });
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "student.created",
+      entityType: "user",
+      entityId: user.id,
+      // Never the password — plaintext is not written anywhere (A1).
+      after: { email: input.email, name: input.name },
+    });
+    return { user };
+  });
+
+  return { ok: true, userId: user.id, tempPassword };
 }
 
 export async function inviteStudent(

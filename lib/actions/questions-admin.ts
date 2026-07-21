@@ -26,7 +26,7 @@ import {
 import {
   ActionError,
   parseInput,
-  requireActionRole,
+  requireActionPermission,
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
@@ -69,7 +69,7 @@ function revalidateBank(): void {
 
 export async function createCategoryAction(input: unknown): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(
       z.object({ title: titleSchema, parentId: idSchema.nullable().optional() }),
       input,
@@ -87,7 +87,7 @@ export async function createCategoryAction(input: unknown): Promise<ActionResult
 
 export async function createQuestionAction(input: unknown): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(z.object({ type: questionTypeSchema, categoryId: idSchema }), input);
     const result = await createQuestion(prisma, {
       actorId: auth.user.id,
@@ -102,7 +102,7 @@ export async function createQuestionAction(input: unknown): Promise<ActionResult
 
 export async function updateQuestionAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(questionDataSchema, input);
     const result = await updateQuestion(prisma, {
       actorId: auth.user.id,
@@ -134,7 +134,7 @@ export async function setQuestionStatusAction(
   status: "draft" | "published",
 ): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const result = await setQuestionStatus(prisma, {
       actorId: auth.user.id,
       questionId: parseInput(idSchema, questionId),
@@ -153,7 +153,7 @@ export async function setQuestionStatusAction(
 
 export async function deleteQuestionAction(questionId: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const result = await deleteQuestion(prisma, {
       actorId: auth.user.id,
       questionId: parseInput(idSchema, questionId),
@@ -194,7 +194,7 @@ export async function bulkQuestionsAction(
   input: unknown,
 ): Promise<ActionResult<{ message: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(bulkSchema, input);
 
     let message: string;
@@ -236,7 +236,7 @@ export async function bulkQuestionsAction(
 
 export async function upsertQuestionLinkAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(questionLinkSchema, input);
     const result = await upsertQuestionLessonLink(prisma, { actorId: auth.user.id, ...parsed });
     if (!result.ok) throw new ActionError(result.code, "Вопрос или урок не найден");
@@ -249,7 +249,7 @@ export async function upsertQuestionLinkAction(input: unknown): Promise<ActionRe
 
 export async function removeQuestionLinkAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(z.object({ questionId: idSchema, lessonId: idSchema }), input);
     await removeQuestionLessonLink(prisma, { actorId: auth.user.id, ...parsed });
     revalidateBank();
@@ -264,7 +264,7 @@ export async function searchQuestionsAction(
   q: string,
 ): Promise<ActionResult<Array<{ id: string; textMd: string; category: string; status: string }>>> {
   return runAction(async () => {
-    await requireActionRole("mentor");
+    await requireActionPermission("content.manage");
     const query = parseInput(z.string().max(200), q);
     const items = await searchQuestionsForLink(prisma, query.trim());
     return items.map((item) => ({
@@ -281,7 +281,7 @@ export async function renderQuestionPreviewAction(
   md: string,
 ): Promise<ActionResult<{ html: string }>> {
   return runAction(async () => {
-    await requireActionRole("mentor");
+    await requireActionPermission("content.manage");
     const markdown = parseInput(z.string().max(100_000), md);
     return { html: await renderMarkdownHtml(markdown) };
   });
@@ -305,7 +305,7 @@ const moduleTestSchema = z.object({
 
 export async function upsertModuleTestAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(moduleTestSchema, input);
     const result = await upsertModuleTestConfig(prisma, { actorId: auth.user.id, ...parsed });
     if (!result.ok) throw new ActionError(result.code, "Модуль не найден");

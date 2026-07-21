@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { getLessonForEditor } from "@/lib/services/content-admin";
 import { renderLessonContent } from "@/components/blocks/lesson-renderer";
 import { VideoEmbed } from "@/components/blocks/video-embed";
@@ -22,7 +22,7 @@ interface PreviewPageProps {
 // in an iframe and «Открыть как ученика» opens it full-page, both without the
 // admin chrome. Same LessonRenderer as the student page = identical rendering.
 export default async function ContentPreviewPage({ params }: PreviewPageProps) {
-  const { user } = await requireAdminZone();
+  const { user } = await requirePermission("content.manage");
   const { id } = await params;
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();

@@ -1,20 +1,17 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { testDb, resetDb, createTestUser } from "./helpers/db";
-import { hashPassword } from "@/lib/utils/password";
-import {
-  adminIssuePasswordReset,
-  isResetTokenValid,
-  resetPassword,
-  RESET_TOKEN_TTL_MS,
-} from "@/lib/services/auth";
+import { hashPassword, verifyPassword } from "@/lib/utils/password";
+import { adminResetPasswordToTemp } from "@/lib/services/auth";
+import { generateToken, sha256Hex } from "@/lib/utils/crypto";
 
-// Walk 12.3 P1: admin-issued reset link. Required coverage — invalidation of the
-// previous token, the 1h TTL, and RBAC (the last lives in admin-rbac.test.ts).
+// Walk 12.4/A2: admin password reset to a temporary password (replaces the
+// link-based reset in the admin UI). Required coverage — the new temp password
+// works and forces a change, the old one dies, no plaintext is audited, pending
+// self-serve reset links are invalidated, sessions are untouched, and eligibility.
 
 const NOW = new Date("2026-07-21T12:00:00.000Z");
-const tokenOf = (url: string) => url.split("/reset/")[1]!;
 
-describe("adminIssuePasswordReset (P1)", () => {
+describe("adminResetPasswordToTemp (12.4/A2)", () => {
   let hash: string;
   beforeAll(async () => {
     hash = await hashPassword("password-123");
@@ -35,93 +32,48 @@ describe("adminIssuePasswordReset (P1)", () => {
       ...overrides,
     });
 
-  it("issues a valid 1h one-time link and writes an audit record (no token in it)", async () => {
+  it("sets a working temp password + must_change_password, and kills the old one", async () => {
     const a = await admin();
     const s = await student();
-    const res = await adminIssuePasswordReset(testDb, { actorId: a.id, userId: s.id, now: NOW });
+    const res = await adminResetPasswordToTemp(testDb, { actorId: a.id, userId: s.id, now: NOW });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
-    const token = tokenOf(res.resetUrl);
-    expect(await isResetTokenValid(testDb, token, NOW)).toBe(true);
+    expect(res.tempPassword).toHaveLength(12);
+    const fresh = await testDb.user.findUniqueOrThrow({ where: { id: s.id } });
+    expect(fresh.mustChangePassword).toBe(true);
+    // The revealed temp password verifies against the new hash; the old one does not.
+    expect(await verifyPassword(fresh.passwordHash!, res.tempPassword)).toBe(true);
+    expect(await verifyPassword(fresh.passwordHash!, "password-123")).toBe(false);
+  });
 
+  it("audits password.reset_to_temp without the plaintext", async () => {
+    const a = await admin();
+    const s = await student();
+    const res = await adminResetPasswordToTemp(testDb, { actorId: a.id, userId: s.id, now: NOW });
+    if (!res.ok) return;
     const audit = await testDb.auditLog.findFirst({
-      where: { action: "password_reset.issued", entityId: s.id },
+      where: { action: "password.reset_to_temp", entityId: s.id },
     });
     expect(audit?.actorId).toBe(a.id);
-    expect(JSON.stringify(audit)).not.toContain(token); // never persist the raw token
+    expect(JSON.stringify(audit)).not.toContain(res.tempPassword);
   });
 
-  it("invalidates the previous unused reset token", async () => {
+  it("invalidates the student's pending self-serve reset links", async () => {
     const a = await admin();
     const s = await student();
-    const first = await adminIssuePasswordReset(testDb, { actorId: a.id, userId: s.id, now: NOW });
-    const second = await adminIssuePasswordReset(testDb, {
-      actorId: a.id,
-      userId: s.id,
-      now: new Date(NOW.getTime() + 1000),
+    const rawToken = generateToken();
+    await testDb.passwordReset.create({
+      data: {
+        userId: s.id,
+        token: sha256Hex(rawToken),
+        expiresAt: new Date(NOW.getTime() + 3600_000),
+        createdAt: NOW,
+      },
     });
-    expect(first.ok && second.ok).toBe(true);
-    if (!first.ok || !second.ok) return;
-
-    // Only one live token per user; the old link no longer works.
-    expect(await isResetTokenValid(testDb, tokenOf(first.resetUrl), NOW)).toBe(false);
-    expect(await isResetTokenValid(testDb, tokenOf(second.resetUrl), NOW)).toBe(true);
-    const oldReset = await resetPassword(
-      testDb,
-      { token: tokenOf(first.resetUrl), password: "brand-new-pass" },
-      NOW,
-    );
-    expect(oldReset.ok).toBe(false);
-    // Exactly one unused reset row remains.
-    expect(await testDb.passwordReset.count({ where: { userId: s.id, usedAt: null } })).toBe(1);
-  });
-
-  it("expires after the 1-hour TTL", async () => {
-    const a = await admin();
-    const s = await student();
-    const res = await adminIssuePasswordReset(testDb, { actorId: a.id, userId: s.id, now: NOW });
-    if (!res.ok) return;
-    const token = tokenOf(res.resetUrl);
-    const after = new Date(NOW.getTime() + RESET_TOKEN_TTL_MS + 1000);
-
-    expect(await isResetTokenValid(testDb, token, after)).toBe(false);
-    const late = await resetPassword(testDb, { token, password: "brand-new-pass" }, after);
-    expect(late.ok).toBe(false);
-  });
-
-  it("only applies to activated students (active|expired), not invited/blocked/non-students", async () => {
-    const a = await admin();
-    const invited = await createTestUser({
-      email: "inv@example.com",
-      role: "student",
-      status: "invited",
-    });
-    const blocked = await student({ email: "blk@example.com", status: "blocked" });
-    const expired = await student({ email: "exp@example.com", status: "expired" });
-    const mentor = await createTestUser({
-      email: "men@example.com",
-      role: "mentor",
-      passwordHash: hash,
-    });
-
-    expect(
-      (await adminIssuePasswordReset(testDb, { actorId: a.id, userId: invited.id, now: NOW })).ok,
-    ).toBe(false);
-    expect(
-      (await adminIssuePasswordReset(testDb, { actorId: a.id, userId: blocked.id, now: NOW })).ok,
-    ).toBe(false);
-    expect(
-      (await adminIssuePasswordReset(testDb, { actorId: a.id, userId: expired.id, now: NOW })).ok,
-    ).toBe(true);
-
-    const asMentor = await adminIssuePasswordReset(testDb, {
-      actorId: a.id,
-      userId: mentor.id,
-      now: NOW,
-    });
-    expect(asMentor.ok).toBe(false);
-    if (!asMentor.ok) expect(asMentor.code).toBe("not_found");
+    await adminResetPasswordToTemp(testDb, { actorId: a.id, userId: s.id, now: NOW });
+    // The outstanding link is marked used — no live reset token remains.
+    expect(await testDb.passwordReset.count({ where: { userId: s.id, usedAt: null } })).toBe(0);
   });
 
   it("does not revoke the student's sessions", async () => {
@@ -140,9 +92,49 @@ describe("adminIssuePasswordReset (P1)", () => {
         lastActiveAt: NOW,
       },
     });
-    const res = await adminIssuePasswordReset(testDb, { actorId: a.id, userId: s.id, now: NOW });
-    expect(res.ok).toBe(true);
-    // Sessions are revoked by setting revoked_at; a live count of 1 proves untouched.
+    await adminResetPasswordToTemp(testDb, { actorId: a.id, userId: s.id, now: NOW });
     expect(await testDb.session.count({ where: { userId: s.id, revokedAt: null } })).toBe(1);
+  });
+
+  it("eligibility: student with a password & not blocked; not invited-no-password/blocked/non-student", async () => {
+    const a = await admin();
+    const active = await student();
+    const expired = await student({ email: "exp@example.com", status: "expired" });
+    const invitedWithCreds = await student({
+      email: "inv@example.com",
+      status: "invited",
+      mustChangePassword: true,
+    });
+    const invitedNoPassword = await createTestUser({
+      email: "leg@example.com",
+      role: "student",
+      status: "invited",
+      passwordHash: null,
+    });
+    const blocked = await student({ email: "blk@example.com", status: "blocked" });
+    const mentor = await createTestUser({
+      email: "men@example.com",
+      role: "mentor",
+      passwordHash: hash,
+    });
+
+    const ok = async (id: string) =>
+      (await adminResetPasswordToTemp(testDb, { actorId: a.id, userId: id, now: NOW })).ok;
+
+    expect(await ok(active.id)).toBe(true);
+    expect(await ok(expired.id)).toBe(true);
+    // A credential-created (still-invited) student can be re-issued a temp password.
+    expect(await ok(invitedWithCreds.id)).toBe(true);
+    // A legacy invited student without a password is not eligible (handled manually).
+    expect(await ok(invitedNoPassword.id)).toBe(false);
+    expect(await ok(blocked.id)).toBe(false);
+
+    const asMentor = await adminResetPasswordToTemp(testDb, {
+      actorId: a.id,
+      userId: mentor.id,
+      now: NOW,
+    });
+    expect(asMentor.ok).toBe(false);
+    if (!asMentor.ok) expect(asMentor.code).toBe("not_found");
   });
 });

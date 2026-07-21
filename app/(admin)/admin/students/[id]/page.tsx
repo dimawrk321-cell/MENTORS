@@ -4,7 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MonitorSmartphone } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { hasRole, requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getStudentDetail } from "@/lib/services/access";
 import { getRecentSentNotifications } from "@/lib/services/notifications";
 import {
@@ -18,15 +19,12 @@ import { daysUntil, formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils
 import { StudentTabs } from "./student-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { CopyButton } from "@/components/ui/copy-button";
 import { UserStatusBadge } from "@/components/features/user-status-badge";
 import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 import { ExtendAccessControls } from "./extend-access-controls";
 import {
   BlockButton,
   ImpersonateButton,
-  ResendInviteButton,
   ResetSessionsButton,
   SectionAccessToggle,
   UnblockButton,
@@ -53,14 +51,15 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
 
 /** Minimal stage-1 student card (spec 8.5): профиль и доступ; вкладки — этап 10. */
 export default async function StudentPage({ params, searchParams }: StudentPageProps) {
-  const { user: viewer } = await requireAdminZone();
+  const { user: viewer } = await requirePermission("students.view");
   const { id } = await params;
   const { tab } = await searchParams;
   const detail = await getStudentDetail(prisma, id);
   if (!detail) notFound();
 
-  const { user, sessions, invite } = detail;
-  const canManage = hasRole(viewer, "admin");
+  const { user, sessions } = detail;
+  // Walk 12.4/B2: managing access needs `students.manage`.
+  const canManage = hasPermission(viewer, "students.manage");
   const now = new Date();
   // Diagnostic tabs (spec 8.5): progress, tests, reviews, mocks, notifications, events.
   const [notifications, progress, testAttempts, review, mocks, events] = await Promise.all([
@@ -162,39 +161,16 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
           {canManage && (
             <div className="flex flex-wrap gap-2">
               <ResetSessionsButton userId={user.id} />
-              {(user.status === "active" || user.status === "expired") && (
-                <ResetPasswordDialog userId={user.id} />
+              {/* Walk 12.4/A2: reset to a temporary password (student with a
+                  password, not blocked). Legacy invited students without a
+                  password are handled manually. */}
+              {user.passwordHash && user.status !== "blocked" && (
+                <ResetPasswordDialog userId={user.id} email={user.email} />
               )}
             </div>
           )}
         </CardContent>
       </Card>
-
-      {invite && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Инвайт</CardTitle>
-            <CardDescription>
-              {invite.expired
-                ? "Ссылка истекла — отправь инвайт повторно, чтобы создать новую."
-                : `Ссылка действует до ${formatDateRu(invite.expiresAt, viewer.timezone)}. Отправь её ученику любым удобным способом.`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {!invite.expired && (
-              <div className="flex items-center gap-2">
-                <Input readOnly defaultValue={invite.url} />
-                <CopyButton value={invite.url} />
-              </div>
-            )}
-            {canManage && (
-              <div>
-                <ResendInviteButton userId={user.id} />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>

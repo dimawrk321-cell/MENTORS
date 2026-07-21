@@ -3,8 +3,6 @@
 import { useState, useTransition } from "react";
 import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { CopyButton } from "@/components/ui/copy-button";
 import { toast } from "@/components/ui/toast";
 import {
   Dialog,
@@ -13,23 +11,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { issuePasswordResetLinkAction } from "@/lib/actions/students";
+import { CredentialReveal } from "@/components/features/credential-reveal";
+import { resetStudentPasswordAction } from "@/lib/actions/students";
 
 /**
- * Admin-issued password-reset link (walk 12.3, P1). Mirrors the invite copy flow:
- * one click creates a fresh 1h one-time token and reveals the copyable link (email
- * is the secondary channel). Sessions are NOT touched — that is a separate button.
+ * «Сбросить пароль» (walk 12.4/A2): resets to a fresh temporary password and
+ * reveals it once (same pattern as issuing access). Sessions are NOT touched —
+ * that is a separate button. The link-based reset is retired.
  */
-export function ResetPasswordDialog({ userId }: { userId: string }) {
+export function ResetPasswordDialog({ userId, email }: { userId: string; email: string }) {
   const [open, setOpen] = useState(false);
-  const [resetUrl, setResetUrl] = useState<string | null>(null);
+  const [result, setResult] = useState<{ tempPassword: string; message: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   function issue(): void {
     startTransition(async () => {
-      const res = await issuePasswordResetLinkAction(userId);
+      const res = await resetStudentPasswordAction(userId);
       if (res.ok) {
-        setResetUrl(res.data.resetUrl);
+        setResult(res.data);
         setOpen(true);
       } else {
         toast({ title: res.error.message, variant: "danger" });
@@ -46,17 +45,18 @@ export function ResetPasswordDialog({ userId }: { userId: string }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ссылка для сброса пароля</DialogTitle>
+            <DialogTitle>Новый временный пароль</DialogTitle>
             <DialogDescription>
-              Отправь ссылку ученику любым удобным способом. Действует 1 час, одноразовая; прежние
-              ссылки сброса больше не работают. Письмо с ней также ушло на email.
+              Прежний пароль больше не работает. Передай новый ученику — при первом входе он
+              придумает свой. Активные сессии не сброшены.
             </DialogDescription>
           </DialogHeader>
-          {resetUrl && (
-            <div className="flex items-center gap-2">
-              <Input readOnly value={resetUrl} onFocus={(e) => e.target.select()} />
-              <CopyButton value={resetUrl} />
-            </div>
+          {result && (
+            <CredentialReveal
+              login={email}
+              tempPassword={result.tempPassword}
+              message={result.message}
+            />
           )}
           <div className="mt-6 flex justify-end">
             <Button onClick={() => setOpen(false)}>Готово</Button>

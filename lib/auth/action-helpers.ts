@@ -3,6 +3,8 @@ import { unstable_rethrow } from "next/navigation";
 import type { Role } from "@prisma/client";
 import type { ZodType } from "zod";
 import { logger } from "@/lib/logger";
+import type { Permission } from "@/lib/constants";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getAuth, hasRole, type ZoneAuth } from "@/lib/auth/guards";
 
 // Shared plumbing for Server Actions: uniform result shape (spec 9), RBAC on
@@ -64,6 +66,24 @@ export async function requireActionAuth(): Promise<ZoneAuth> {
 export async function requireActionRole(min: Role): Promise<ZoneAuth> {
   const auth = await requireActionAuth();
   if (!hasRole(auth.user, min)) {
+    throw new ActionError("forbidden", "Недостаточно прав");
+  }
+  return auth;
+}
+
+/** Action guard by permission (spec 12.4/B2). owner passes; else needs the permission. */
+export async function requireActionPermission(perm: Permission): Promise<ZoneAuth> {
+  const auth = await requireActionAuth();
+  if (!hasPermission(auth.user, perm)) {
+    throw new ActionError("forbidden", "Недостаточно прав");
+  }
+  return auth;
+}
+
+/** Owner-only actions (spec 12.4/B3): team management, audit reader. */
+export async function requireActionOwner(): Promise<ZoneAuth> {
+  const auth = await requireActionAuth();
+  if (auth.user.role !== "owner") {
     throw new ActionError("forbidden", "Недостаточно прав");
   }
   return auth;

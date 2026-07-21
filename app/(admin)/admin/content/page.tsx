@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { getContentTree } from "@/lib/services/content-admin";
 import { ContentStudioTabs } from "@/components/features/content-studio-tabs";
 import { ContentTree, type TreeCourse } from "./content-tree";
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 /** Content studio tree (spec 8.5): drag order, statuses, CRUD dialogs. */
 export default async function ContentPage() {
-  await requireAdminZone();
+  await requirePermission("content.manage");
   const courses = await getContentTree(prisma);
 
   const tree: TreeCourse[] = courses.map((course) => ({

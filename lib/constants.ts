@@ -4,6 +4,79 @@
 // day-granular by schema (spec 6), calendar months would not fit the field.
 export const EXTENSION_MONTH_DAYS = 30;
 
+// --- Walk 12.4: team & granular permissions (spec 2/8.5) ---
+
+/**
+ * Permission catalog (spec 12.4/B1). Ordered for the team-editor UI; Russian
+ * labels are shown to the owner. Keys are stored in `users.permissions` (a JSON
+ * string[] override) and checked by `hasPermission` (lib/auth/permissions.ts).
+ */
+export const PERMISSIONS = [
+  { key: "content.manage", label: "Материалы: курсы, вопросы, гайды, библиотека, импорт" },
+  { key: "students.view", label: "Ученики: просмотр" },
+  { key: "students.manage", label: "Ученики: доступы, блокировки, сбросы" },
+  { key: "interviews.manage", label: "Интервью-центр: рубрики, страйки, расписания" },
+  { key: "analytics.view", label: "Пульт и аналитика" },
+  { key: "announcements.manage", label: "Объявления" },
+  { key: "settings.manage", label: "Настройки платформы" },
+] as const;
+
+export type Permission = (typeof PERMISSIONS)[number]["key"];
+
+export const ALL_PERMISSIONS: Permission[] = PERMISSIONS.map((p) => p.key);
+
+export const PERMISSION_LABEL: Record<Permission, string> = Object.fromEntries(
+  PERMISSIONS.map((p) => [p.key, p.label]),
+) as Record<Permission, string>;
+
+/**
+ * Role presets (spec 12.4/B1). `admin` = every permission; `mentor` = a
+ * content + read-only subset. Effective permissions = preset ∪ per-user override
+ * (the override, when set, replaces the preset entirely). owner ignores presets.
+ */
+export const ROLE_PRESETS: Record<"mentor" | "admin", Permission[]> = {
+  admin: ALL_PERMISSIONS,
+  mentor: ["content.manage", "students.view", "analytics.view"],
+};
+
+/** Team-editor role choices (spec 12.4/B4): staff roles only, never owner. */
+export const TEAM_ROLES = ["mentor", "admin"] as const;
+export type TeamRole = (typeof TEAM_ROLES)[number];
+
+/**
+ * Admin-zone nav map (spec 8.5), permission-gated (walk 12.4). Icons live in the
+ * sidebar component keyed by href; this ordered list drives both the sidebar
+ * filtering and `firstAllowedAdminPath`. A section is visible when the viewer has
+ * its `permission` — or is owner, for an `ownerOnly` section (Команда, Аудит).
+ */
+export interface AdminSection {
+  href: string;
+  label: string;
+  permission?: Permission;
+  ownerOnly?: boolean;
+}
+
+export const ADMIN_SECTIONS: AdminSection[] = [
+  { href: "/admin", label: "Пульт", permission: "analytics.view" },
+  { href: "/admin/content", label: "Контент", permission: "content.manage" },
+  { href: "/admin/questions", label: "Вопросы", permission: "content.manage" },
+  { href: "/admin/students", label: "Ученики", permission: "students.view" },
+  { href: "/admin/interviews", label: "Интервью", permission: "interviews.manage" },
+  { href: "/admin/library", label: "Библиотека", permission: "content.manage" },
+  { href: "/admin/analytics", label: "Аналитика", permission: "analytics.view" },
+  { href: "/admin/announcements", label: "Объявления", permission: "announcements.manage" },
+  { href: "/admin/settings", label: "Настройки", permission: "settings.manage" },
+  { href: "/admin/team", label: "Команда", ownerOnly: true },
+  { href: "/admin/audit", label: "Аудит", ownerOnly: true },
+  { href: "/admin/import", label: "Импорт", permission: "content.manage" },
+];
+
+/** Fallback landing for a staff member with no accessible admin section. */
+export const ADMIN_NO_ACCESS_PATH = "/admin/no-access";
+
+/** Forced initial-password screen (walk 12.4/A2): «Придумай свой пароль». */
+export const SET_PASSWORD_PATH = "/set-password";
+
 export const QUESTION_TYPE_LABEL: Record<string, string> = {
   open: "Открытый",
   single: "Один вариант",

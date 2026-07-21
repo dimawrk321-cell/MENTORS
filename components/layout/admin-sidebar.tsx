@@ -15,24 +15,16 @@ import {
   Settings,
   Upload,
   Users,
+  UsersRound,
   Video,
   type LucideIcon,
 } from "lucide-react";
 import type { Role, Theme } from "@prisma/client";
 import { cn } from "@/lib/utils/cn";
+import { ADMIN_SECTIONS, type Permission } from "@/lib/constants";
 import { logoutAction } from "@/lib/actions/auth";
 import { SearchTriggerBar, SearchTriggerIcon } from "@/components/features/search-trigger";
 import { ThemeToggleIcon } from "@/components/features/theme-toggle";
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  /** Minimal role that sees the section (spec 8.5: mentor gets a filtered sidebar). */
-  minRole: Role;
-}
-
-const ROLE_RANK: Record<Role, number> = { student: 0, mentor: 1, admin: 2, owner: 3 };
 
 const ROLE_LABEL: Record<Role, string> = {
   student: "Ученик",
@@ -41,24 +33,24 @@ const ROLE_LABEL: Record<Role, string> = {
   owner: "Владелец",
 };
 
-// Spec 8.5 sections; roles per spec 2. Most routes do not exist yet at stage 1 —
-// the global not-found page covers them until later stages.
-// DECISION: import is admin+ — bulk content creation, not listed for mentors in spec 2.
-const items: NavItem[] = [
-  { href: "/admin", label: "Пульт", icon: Gauge, minRole: "mentor" },
-  { href: "/admin/content", label: "Контент", icon: FolderKanban, minRole: "mentor" },
-  { href: "/admin/questions", label: "Вопросы", icon: MessageCircleQuestion, minRole: "mentor" },
-  { href: "/admin/students", label: "Ученики", icon: Users, minRole: "mentor" },
-  { href: "/admin/interviews", label: "Интервью", icon: Video, minRole: "mentor" },
-  { href: "/admin/library", label: "Библиотека", icon: Library, minRole: "mentor" },
-  { href: "/admin/analytics", label: "Аналитика", icon: ChartLine, minRole: "mentor" },
-  { href: "/admin/announcements", label: "Объявления", icon: Megaphone, minRole: "admin" },
-  { href: "/admin/settings", label: "Настройки", icon: Settings, minRole: "admin" },
-  { href: "/admin/audit", label: "Аудит", icon: ScrollText, minRole: "owner" },
-  { href: "/admin/import", label: "Импорт", icon: Upload, minRole: "admin" },
-];
+// Icons keyed by href — the ordered section list + permission gating live in
+// ADMIN_SECTIONS (lib/constants, walk 12.4/B2), shared with firstAllowedAdminPath.
+const SECTION_ICON: Record<string, LucideIcon> = {
+  "/admin": Gauge,
+  "/admin/content": FolderKanban,
+  "/admin/questions": MessageCircleQuestion,
+  "/admin/students": Users,
+  "/admin/interviews": Video,
+  "/admin/library": Library,
+  "/admin/analytics": ChartLine,
+  "/admin/announcements": Megaphone,
+  "/admin/settings": Settings,
+  "/admin/team": UsersRound,
+  "/admin/audit": ScrollText,
+  "/admin/import": Upload,
+};
 
-const interviewerItem: Omit<NavItem, "minRole"> = {
+const interviewerItem = {
   href: "/interviewer/schedule",
   label: "Кабинет интервьюера",
   icon: MonitorPlay,
@@ -72,16 +64,30 @@ function isActive(pathname: string, href: string): boolean {
 
 interface AdminNavProps {
   brandName: string;
-  role: Role;
+  /** Viewer's effective permissions (walk 12.4/B2) — gates each section. */
+  permissions: Permission[];
+  isOwner: boolean;
   isInterviewer: boolean;
   userName: string;
+  role: Role;
   theme: Theme;
 }
 
 /** Renders both variants: desktop sidebar (md+) and mobile horizontal chip row. */
-export function AdminNav({ brandName, role, isInterviewer, userName, theme }: AdminNavProps) {
+export function AdminNav({
+  brandName,
+  permissions,
+  isOwner,
+  isInterviewer,
+  userName,
+  role,
+  theme,
+}: AdminNavProps) {
   const pathname = usePathname();
-  const visible = items.filter((item) => ROLE_RANK[role] >= ROLE_RANK[item.minRole]);
+  const perms = new Set(permissions);
+  const visible = ADMIN_SECTIONS.filter((section) =>
+    section.ownerOnly ? isOwner : perms.has(section.permission!),
+  );
 
   return (
     <>
@@ -94,7 +100,7 @@ export function AdminNav({ brandName, role, isInterviewer, userName, theme }: Ad
         <SearchTriggerBar className="mb-2" />
         <nav aria-label="Разделы админки" className="flex flex-1 flex-col gap-1 overflow-y-auto">
           {visible.map((item) => {
-            const Icon = item.icon;
+            const Icon = SECTION_ICON[item.href]!;
             const active = isActive(pathname, item.href);
             return (
               <Link

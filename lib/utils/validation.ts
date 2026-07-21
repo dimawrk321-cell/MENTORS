@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PASSWORD_MIN_LENGTH } from "@/lib/utils/password";
+import { ALL_PERMISSIONS, type Permission } from "@/lib/constants";
 
 // Zod schemas for stage-1 actions. Messages are user-facing Russian (spec 9:
 // action errors carry ready-to-toast Russian text).
@@ -52,6 +53,57 @@ export const inviteMentorSchema = z.object({
   isInterviewer: z.boolean().default(false),
 });
 
+// --- Walk 12.4: credential-based access & team (spec 7.1, 2/8.5) ---
+
+/**
+ * Optional name at account creation (walk 12.4): «при создании имя опционально».
+ * Empty is allowed — the student sets their name on onboarding. Prefills it when
+ * the admin knows it. Only max-length is enforced here.
+ */
+const createNameSchema = z.string().trim().max(50, "Имя слишком длинное").optional().default("");
+
+/** «Выдать доступ» (walk 12.4/A1): email = login, name optional. */
+export const issueCredentialsSchema = z.object({
+  email: emailSchema,
+  name: createNameSchema,
+});
+
+/** «Добавить участника» (walk 12.4/B4): staff role + optional interviewer flag. */
+export const createTeamMemberSchema = z.object({
+  email: emailSchema,
+  name: createNameSchema,
+  role: z.enum(["mentor", "admin"], "Выбери роль"),
+  isInterviewer: z.boolean().default(false),
+});
+
+/** Forced initial password (walk 12.4/A2): new password only — session-authed. */
+export const setInitialPasswordSchema = z.object({ password: passwordSchema });
+
+const permissionKeySchema = z
+  .string()
+  .refine((v): v is Permission => (ALL_PERMISSIONS as string[]).includes(v), "Неизвестное право");
+
+/** Team member role change (walk 12.4/B3, owner-only). */
+export const teamRoleSchema = z.object({
+  userId: z.string().min(1),
+  role: z.enum(["mentor", "admin"], "Выбери роль"),
+});
+
+/**
+ * Team member permission override (walk 12.4/B1, owner-only). `null` clears the
+ * override (back to the role preset); an array is the explicit effective set.
+ */
+export const teamPermissionsSchema = z.object({
+  userId: z.string().min(1),
+  permissions: z.array(permissionKeySchema).max(ALL_PERMISSIONS.length).nullable(),
+});
+
+/** Team member interviewer flag (walk 12.4/B3, owner-only). */
+export const teamInterviewerSchema = z.object({
+  userId: z.string().min(1),
+  isInterviewer: z.boolean(),
+});
+
 // Changelog этапа 3: is_key и in_quiz взаимоисключающие — ключевой вопрос
 // раскрывает эталон в блоке урока и не может одновременно быть вопросом квиза.
 export const QUESTION_LINK_ROLE_ERROR =
@@ -87,11 +139,23 @@ export const savePositionSchema = z.object({
     .optional(),
 });
 
+/** Student name (walk 12.4): 2–50 chars, any characters. Онбординг + профиль. */
+export const nameSchema = z
+  .string("Как тебя зовут?")
+  .trim()
+  .min(2, "Имя — от 2 до 50 символов")
+  .max(50, "Имя — от 2 до 50 символов");
+
 export const onboardingSchema = z.object({
+  // Walk 12.4: the student picks their own name on the (new) first screen.
+  name: nameSchema,
   track: z.enum(["ds", "nlp", "ai"]).nullable(),
   dailyGoalXp: z.union([z.literal(30), z.literal(60), z.literal(120)]),
   digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Укажи время в формате ЧЧ:ММ"),
 });
+
+/** Profile name edit (walk 12.4): «имя редактируется в профиле». */
+export const updateNameSchema = z.object({ name: nameSchema });
 
 export const reviewCardSchema = z.object({
   cardId: z.string().min(1),

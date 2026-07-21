@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Search, Users } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { hasRole, requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
+import { hasPermission } from "@/lib/auth/permissions";
 import { listStudents } from "@/lib/services/access";
 import { formatDateRu, formatDateTimeRu } from "@/lib/utils/dates";
 import { Card } from "@/components/ui/card";
@@ -11,8 +12,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { UserStatusBadge } from "@/components/features/user-status-badge";
-import { InviteStudentDialog } from "./invite-student-dialog";
-import { InviteMentorDialog } from "./invite-mentor-dialog";
+import { IssueCredentialsDialog } from "./issue-credentials-dialog";
 
 export const metadata: Metadata = {
   title: "Ученики",
@@ -24,22 +24,20 @@ interface StudentsPageProps {
 
 /** Minimal stage-1 register (spec 8.5): search, status, access, last visit + invite flow. */
 export default async function StudentsPage({ searchParams }: StudentsPageProps) {
-  const { user: viewer } = await requireAdminZone();
+  const { user: viewer } = await requirePermission("students.view");
   const { q } = await searchParams;
   const query = q?.trim() || undefined;
   const students = await listStudents(prisma, query);
-  // Spec 2: доступ выдаёт admin+; mentor видит список в режиме чтения.
-  const canManage = hasRole(viewer, "admin");
-  // Spec 2: назначать роли (пригласить ментора) — только owner.
-  const canInviteMentor = hasRole(viewer, "owner");
+  // Walk 12.4/B2: issuing/managing access needs `students.manage`; students.view
+  // alone is read-only.
+  const canManage = hasPermission(viewer, "students.manage");
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[24px] font-semibold">Ученики</h1>
         <div className="flex flex-wrap items-center gap-2">
-          {canInviteMentor && <InviteMentorDialog />}
-          {canManage && <InviteStudentDialog />}
+          {canManage && <IssueCredentialsDialog />}
         </div>
       </div>
 
@@ -66,8 +64,8 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
               query
                 ? "Попробуй изменить запрос"
                 : canManage
-                  ? "Пригласи первого ученика — кнопка выше"
-                  : "Учеников пригласит админ"
+                  ? "Выдай доступ первому ученику — кнопка выше"
+                  : "Доступ выдаёт админ"
             }
           />
         </Card>

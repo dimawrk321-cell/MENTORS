@@ -6,16 +6,18 @@ export const metadata: Metadata = {
   title: "Первые шаги",
 };
 
-// Onboarding (spec 8.2): three cards — goal (track), daily time (goal XP),
-// reminders (digest time). Reached via the accepted-invite redirect.
-// DECISION: no dedicated "onboarded" flag — the flow guarantees a single pass
-// (invite → onboarding), revisiting the URL later is harmless settings access.
+// Onboarding (spec 8.2, walk 12.4/A4): four cards — name (mandatory), goal
+// (track), daily time (goal XP), reminders (digest time). Reached after the
+// forced set-password screen, or by the student-zone name gate when a fresh
+// student has no name yet. `onboarding: true` exempts this page from that gate
+// (it is where the name is set) so it never redirects onto itself.
 export default async function OnboardingPage() {
-  const { user } = await requireStudentZone();
+  const { user } = await requireStudentZone({ onboarding: true });
 
   return (
     <div className="mx-auto flex min-h-[70dvh] w-full max-w-md flex-col justify-center py-6">
       <OnboardingFlow
+        initialName={user.name}
         initialTrack={user.track}
         initialGoal={user.dailyGoalXp as 30 | 60 | 120}
         initialDigestTime={user.digestTime}

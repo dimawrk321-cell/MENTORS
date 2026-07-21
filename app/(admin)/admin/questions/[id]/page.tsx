@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { listCategoriesTree, listLessonsForLinking } from "@/lib/services/questions";
 import { parseAcceptedAnswers, parseOptions } from "@/lib/utils/answers";
 import { QuestionEditor } from "./question-editor";
@@ -16,7 +16,7 @@ interface QuestionEditorPageProps {
 
 /** Редактор вопроса (spec 8.5): тип-специфичные поля + KaTeX-превью + привязки. */
 export default async function QuestionEditorPage({ params }: QuestionEditorPageProps) {
-  await requireAdminZone();
+  await requirePermission("content.manage");
   const { id } = await params;
   const question = await prisma.question.findUnique({
     where: { id },

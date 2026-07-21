@@ -1,7 +1,7 @@
 import type { Invite, PrismaClient, User } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { addDays } from "@/lib/utils/dates";
-import { sha256Hex, generateToken } from "@/lib/utils/crypto";
+import { sha256Hex, generateToken, generateTempPassword } from "@/lib/utils/crypto";
 import { getDummyHash, hashPassword, verifyPassword } from "@/lib/utils/password";
 import { clearAuthAttempts, isAuthRateLimited, recordAuthAttempt } from "@/lib/utils/rate-limit";
 import { emitEvent } from "@/lib/services/events";
@@ -88,6 +88,25 @@ export async function login(
       await pauseStreak(tx, user.id); // spec 7.1.5/7.7: серия на паузе, не сгорает
       await emitEvent(tx, "access.expired", { via: "login" }, { userId: user.id });
       user.status = "expired";
+    }
+
+    // Walk 12.4/A3: first successful login on admin-issued credentials activates
+    // the account (status invited→active). DECISION: activation happens at this
+    // first login — BEFORE the forced password change — so the 90-day clock
+    // starts from the real first login (spec 7.1 «отсчёт с первого входа»); the
+    // must_change_password flag stays set until the user picks their own password.
+    // This flip is also REQUIRED: validateSessionToken rejects `invited` sessions,
+    // so without it the freshly-created session would be dead on the next request.
+    if (user.status === "invited") {
+      const accessUntil = user.role === "student" ? addDays(now, ACCESS_INITIAL_DAYS) : null;
+      await tx.user.update({
+        where: { id: user.id },
+        data: { status: "active", activatedAt: now, accessUntil },
+      });
+      await emitEvent(tx, "access.activated", { via: "login" }, { userId: user.id });
+      user.status = "active";
+      user.activatedAt = now;
+      user.accessUntil = accessUntil;
     }
 
     const device = await registerDevice(tx, {
@@ -262,56 +281,54 @@ export async function requestPasswordReset(
   return { ok: true };
 }
 
-export type AdminIssueResetResult =
-  { ok: true; resetUrl: string } | { ok: false; code: "not_found" | "not_eligible" };
+export type AdminResetPasswordResult =
+  | { ok: true; tempPassword: string; email: string }
+  | { ok: false; code: "not_found" | "not_eligible" };
 
 /**
- * Admin-issued password-reset link (walk 12.3, P1). Unlike self-serve /forgot it
- * INVALIDATES the student's other live reset tokens (only the newest link works),
- * writes one audit record (never the token), and returns the copyable link;
- * sessions are deliberately NOT revoked (that is a separate button). Applies only
- * to activated students (active|expired with a password) — invited students use
- * the repeat-invite flow, blocked users must be unblocked first.
+ * Admin password reset to a temporary password (walk 12.4/A2). Replaces the
+ * link-based admin reset in the UI (the link mechanism now serves only self-serve
+ * «Забыл пароль» — requestPasswordReset). Sets a fresh temp password + forces the
+ * «Придумай свой пароль» screen (must_change_password); the plaintext is returned
+ * for a one-time display and NEVER persisted or audited (only the argon2 hash).
+ * Any pending self-serve reset links are invalidated. Sessions are NOT revoked —
+ * that is a separate button. Eligible for a student with a password who is not
+ * blocked (active | expired | invited-with-credentials); a legacy invited student
+ * without a password is not eligible.
  */
-export async function adminIssuePasswordReset(
+export async function adminResetPasswordToTemp(
   db: PrismaClient,
   input: { actorId: string; userId: string; now?: Date },
-): Promise<AdminIssueResetResult> {
+): Promise<AdminResetPasswordResult> {
   const now = input.now ?? new Date();
   const user = await db.user.findUnique({ where: { id: input.userId } });
   if (!user || user.role !== "student") return { ok: false, code: "not_found" };
-  if (!user.passwordHash || !(user.status === "active" || user.status === "expired")) {
+  if (!user.passwordHash || user.status === "blocked") {
     return { ok: false, code: "not_eligible" };
   }
 
-  const token = generateToken();
+  const tempPassword = generateTempPassword();
+  const passwordHash = await hashPassword(tempPassword);
   await db.$transaction(async (tx) => {
-    // Invalidate the user's other unused reset tokens — the new link supersedes them.
+    await tx.user.update({
+      where: { id: user.id },
+      data: { passwordHash, mustChangePassword: true },
+    });
+    // Any outstanding self-serve reset links are moot now.
     await tx.passwordReset.updateMany({
       where: { userId: user.id, usedAt: null },
       data: { usedAt: now },
     });
-    await tx.passwordReset.create({
-      data: {
-        userId: user.id,
-        // Stored hashed (spec 11); the raw value lives only in the returned link.
-        token: sha256Hex(token),
-        expiresAt: new Date(now.getTime() + RESET_TOKEN_TTL_MS),
-        createdAt: now,
-      },
-    });
+    // Audit carries NO secret (like password_reset.issued before it).
     await writeAudit(tx, {
       actorId: input.actorId,
-      action: "password_reset.issued",
+      action: "password.reset_to_temp",
       entityType: "user",
       entityId: user.id,
     });
   });
 
-  const resetUrl = `${env.platformUrl}/reset/${token}`;
-  // Email is a secondary channel (dev → log); the copyable link is the main path.
-  await sendPasswordResetEmail(user.email, resetUrl);
-  return { ok: true, resetUrl };
+  return { ok: true, tempPassword, email: user.email };
 }
 
 export async function isResetTokenValid(
@@ -378,4 +395,30 @@ export async function changePassword(
     });
   });
   return { ok: true };
+}
+
+/**
+ * Forced initial password (walk 12.4/A2): the «Придумай свой пароль» screen. No
+ * old-password check — the user is already session-authed and pinned to this
+ * screen by must_change_password. Sets the new hash, clears the flag, and drops
+ * every other login (like changePassword) keeping the current session.
+ */
+export async function setInitialPassword(
+  db: PrismaClient,
+  input: { user: User; currentSessionId: string; newPassword: string },
+  now: Date = new Date(),
+): Promise<void> {
+  const passwordHash = await hashPassword(input.newPassword);
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: input.user.id },
+      data: { passwordHash, mustChangePassword: false },
+    });
+    await revokeSessions(tx, {
+      userId: input.user.id,
+      reason: "password_change",
+      exceptSessionId: input.currentSessionId,
+      now,
+    });
+  });
 }

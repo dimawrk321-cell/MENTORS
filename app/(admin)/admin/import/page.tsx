@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { formatDateTimeRu } from "@/lib/utils/dates";
 import {
   IMPORT_COUNT_ORDER,
@@ -23,7 +23,7 @@ export const metadata: Metadata = { title: "Импорт" };
 
 /** /admin/import (spec 7.14 / 8.5): upload → dry-run/import → report + history. admin+. */
 export default async function ImportPage() {
-  const { user } = await requireAdminZone("admin");
+  const { user } = await requirePermission("content.manage");
   const runs = await listImportRuns(prisma, 20);
 
   return (

@@ -7,7 +7,7 @@ import { zonedDateTimeToUtc } from "@/lib/utils/dates";
 import {
   assertNotImpersonating,
   parseInput,
-  requireActionRole,
+  requireActionPermission,
   requireActionStudent,
   runAction,
   type ActionResult,
@@ -42,7 +42,7 @@ export async function createAnnouncementAction(
   input: unknown,
 ): Promise<ActionResult<{ id: string; delivered: number }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("admin");
+    const auth = await requireActionPermission("announcements.manage");
     const parsed = parseInput(createAnnouncementSchema, input);
     const now = new Date();
     const tz = auth.user.timezone;

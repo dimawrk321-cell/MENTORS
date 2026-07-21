@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requireOwnerZone } from "@/lib/auth/guards";
 import { auditDateBounds, getAuditFilterOptions, listAuditLog } from "@/lib/services/audit";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,7 +17,7 @@ interface PageProps {
 
 /** /admin/audit (spec 8.5, owner): audit log with filters + cursor pagination. */
 export default async function AuditPage({ searchParams }: PageProps) {
-  const { user } = await requireAdminZone("owner");
+  const { user } = await requireOwnerZone();
   const sp = await searchParams;
 
   const filters = {

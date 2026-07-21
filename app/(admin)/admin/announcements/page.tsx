@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Megaphone } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { getSegmentCourses, listAnnouncements } from "@/lib/services/announcements";
 import { formatDateTimeRu } from "@/lib/utils/dates";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Объявления" };
 // /admin/announcements (spec 8.5): create banner|notification for a segment with
 // a validity period; list with read reach. admin+ (spec 2).
 export default async function AnnouncementsPage() {
-  const { user } = await requireAdminZone("admin");
+  const { user } = await requirePermission("announcements.manage");
   const [items, courses] = await Promise.all([
     listAnnouncements(prisma),
     getSegmentCourses(prisma),

@@ -8,7 +8,6 @@ import { toast } from "@/components/ui/toast";
 import {
   blockStudentAction,
   impersonateAction,
-  resendInviteAction,
   resetStudentSessionsAction,
   setSectionAccessAction,
   unblockStudentAction,
@@ -62,17 +61,6 @@ export function ResetSessionsButton({ userId }: { userId: string }) {
       }}
     >
       Сбросить сессии и устройства
-    </ActionButton>
-  );
-}
-
-export function ResendInviteButton({ userId }: { userId: string }) {
-  return (
-    <ActionButton
-      action={() => resendInviteAction(userId)}
-      successMessage="Новая ссылка создана и отправлена"
-    >
-      Отправить инвайт повторно
     </ActionButton>
   );
 }

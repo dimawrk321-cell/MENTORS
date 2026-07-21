@@ -23,7 +23,7 @@ import {
 import {
   ActionError,
   parseInput,
-  requireActionRole,
+  requireActionPermission,
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
@@ -89,7 +89,7 @@ function revalidateContent(courseSlug?: string, lessonId?: string): void {
 
 export async function createCourseAction(title: string): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(titleSchema, title);
     const created = await createCourse(prisma, { actorId: auth.user.id, title: parsed });
     revalidateContent();
@@ -99,7 +99,7 @@ export async function createCourseAction(title: string): Promise<ActionResult<{ 
 
 export async function updateCourseAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(courseUpdateSchema, input);
     const res = await updateCourse(prisma, {
       actorId: auth.user.id,
@@ -122,7 +122,7 @@ export async function setCourseStatusAction(
   status: "draft" | "published",
 ): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const res = await setCourseStatus(prisma, {
       actorId: auth.user.id,
       courseId: parseInput(idSchema, courseId),
@@ -136,7 +136,7 @@ export async function setCourseStatusAction(
 
 export async function deleteCourseAction(courseId: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const res = await deleteCourse(prisma, {
       actorId: auth.user.id,
       courseId: parseInput(idSchema, courseId),
@@ -152,7 +152,7 @@ export async function createModuleAction(
   title: string,
 ): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const created = await createModule(prisma, {
       actorId: auth.user.id,
       courseId: parseInput(idSchema, courseId),
@@ -169,7 +169,7 @@ export async function renameModuleAction(
   title: string,
 ): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const res = await renameModule(prisma, {
       actorId: auth.user.id,
       moduleId: parseInput(idSchema, moduleId),
@@ -186,7 +186,7 @@ export async function setModuleStatusAction(
   status: "draft" | "published",
 ): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const res = await setModuleStatus(prisma, {
       actorId: auth.user.id,
       moduleId: parseInput(idSchema, moduleId),
@@ -200,7 +200,7 @@ export async function setModuleStatusAction(
 
 export async function deleteModuleAction(moduleId: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const res = await deleteModule(prisma, {
       actorId: auth.user.id,
       moduleId: parseInput(idSchema, moduleId),
@@ -216,7 +216,7 @@ export async function createLessonAction(
   title: string,
 ): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const created = await createLesson(prisma, {
       actorId: auth.user.id,
       moduleId: parseInput(idSchema, moduleId),
@@ -234,7 +234,7 @@ export async function saveLessonContentAction(
   contentMd: string,
 ): Promise<ActionResult<{ readingMinutes: number }>> {
   return runAction(async () => {
-    await requireActionRole("mentor");
+    await requireActionPermission("content.manage");
     const res = await saveLessonContent(prisma, {
       lessonId: parseInput(idSchema, lessonId),
       contentMd: parseInput(z.string().max(300_000, "Слишком большой документ"), contentMd),
@@ -246,7 +246,7 @@ export async function saveLessonContentAction(
 
 export async function updateLessonMetaAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(lessonMetaSchema, input);
     const res = await updateLessonMeta(prisma, {
       actorId: auth.user.id,
@@ -271,7 +271,7 @@ export async function setLessonStatusAction(
   status: "draft" | "published",
 ): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const res = await setLessonStatus(prisma, {
       actorId: auth.user.id,
       lessonId: parseInput(idSchema, lessonId),
@@ -294,7 +294,7 @@ export async function publishLessonsAction(
   input: unknown,
 ): Promise<ActionResult<{ published: number; skipped: number }>> {
   return runAction(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(publishLessonsScopeSchema, input);
     const res = await publishLessonsInScope(prisma, { actorId: auth.user.id, scope: parsed });
     if (!res.ok) failWith(res);
@@ -305,7 +305,7 @@ export async function publishLessonsAction(
 
 export async function deleteLessonAction(lessonId: string): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const res = await deleteLesson(prisma, {
       actorId: auth.user.id,
       lessonId: parseInput(idSchema, lessonId),
@@ -318,7 +318,7 @@ export async function deleteLessonAction(lessonId: string): Promise<ActionResult
 
 export async function reorderContentAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
-    const auth = await requireActionRole("mentor");
+    const auth = await requireActionPermission("content.manage");
     const parsed = parseInput(reorderSchema, input);
     await reorderSiblings(prisma, {
       actorId: auth.user.id,

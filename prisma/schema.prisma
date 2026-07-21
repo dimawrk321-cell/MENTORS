@@ -108,6 +108,16 @@ model User {
   quietHoursStart     String          @default("22:00") @map("quiet_hours_start")
   quietHoursEnd       String          @default("08:00") @map("quiet_hours_end")
   status              UserStatus      @default(invited)
+  // Walk 12.4 (spec 7.1): admin-issued credentials. Set true when the account is
+  // created with a temporary password (student «Выдать доступ» / team «Добавить
+  // участника») or reset to one; a layout guard forces «Придумай свой пароль»
+  // before any other content, cleared once the user picks their own password.
+  mustChangePassword  Boolean         @default(false) @map("must_change_password")
+  // Walk 12.4 (spec 2/8.5): granular team permissions. null = pure role preset
+  // (ROLE_PRESETS); a JSON string[] of permission keys is a per-user override
+  // (full set, not a delta). owner ignores this — passes every check. Students
+  // never carry permissions.
+  permissions         Json?
   activatedAt         DateTime?       @map("activated_at")
   accessUntil         DateTime?       @map("access_until")
   // DECISION: avatar_color has no type in spec 6 — stored as an index (0..7)

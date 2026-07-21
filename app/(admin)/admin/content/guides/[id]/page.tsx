@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { getGuideForEditor } from "@/lib/services/guides";
 import { GuideEditor } from "./guide-editor";
 
@@ -14,7 +14,7 @@ interface GuideEditorPageProps {
 }
 
 export default async function GuideEditorPage({ params }: GuideEditorPageProps) {
-  await requireAdminZone();
+  await requirePermission("content.manage");
   const { id } = await params;
   const guide = await getGuideForEditor(prisma, id);
   if (!guide) notFound();

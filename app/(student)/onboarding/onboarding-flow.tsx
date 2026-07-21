@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { Track } from "@prisma/client";
 import { Brain, MessageSquareText, Workflow } from "lucide-react";
@@ -40,28 +39,39 @@ const GOALS = [
 ];
 
 interface OnboardingFlowProps {
+  initialName: string;
   initialTrack: Track | null;
   initialGoal: 30 | 60 | 120;
   initialDigestTime: string;
 }
 
 export function OnboardingFlow({
+  initialName,
   initialTrack,
   initialGoal,
   initialDigestTime,
 }: OnboardingFlowProps) {
   const [step, setStep] = useState(0);
+  const [name, setName] = useState(initialName);
   const [track, setTrack] = useState<Track | null>(initialTrack);
   const [goal, setGoal] = useState<30 | 60 | 120>(initialGoal);
   const [digestTime, setDigestTime] = useState(initialDigestTime);
   const [digestEnabled, setDigestEnabled] = useState(true);
   const [pending, startTransition] = useTransition();
 
+  const nameTrimmed = name.trim();
+  const nameValid = nameTrimmed.length >= 2 && nameTrimmed.length <= 50;
+
   function finish(): void {
     startTransition(async () => {
       // DECISION: the digest toggle is UI-only until stage 9 wires
       // notification_prefs — no digests are sent before that anyway.
-      const result = await saveOnboardingAction({ track, dailyGoalXp: goal, digestTime });
+      const result = await saveOnboardingAction({
+        name: nameTrimmed,
+        track,
+        dailyGoalXp: goal,
+        digestTime,
+      });
       if (result && !result.ok) {
         toast({ title: result.error.message, variant: "danger" });
       }
@@ -69,6 +79,28 @@ export function OnboardingFlow({
   }
 
   const steps = [
+    {
+      // Walk 12.4/A4: mandatory first screen — the student picks their own name.
+      title: "Как тебя зовут?",
+      description: "Так тебя будут видеть на платформе. Можно поменять в профиле.",
+      body: (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="onboarding-name" className="text-text-2 text-[13px]">
+            Имя
+          </label>
+          <Input
+            id="onboarding-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={50}
+            autoFocus
+            placeholder="Например, Алекс"
+            aria-label="Имя"
+          />
+        </div>
+      ),
+      canNext: nameValid,
+    },
     {
       title: "Какая цель?",
       description: "Определит порядок курсов и первый урок.",
@@ -196,22 +228,26 @@ export function OnboardingFlow({
               Назад
             </Button>
           ) : (
-            <Link
-              href="/"
-              className="text-text-3 ease-app hover:text-text-1 px-2 text-[13px] transition-colors duration-150"
-            >
-              Пропустить
-            </Link>
+            <span />
           )}
-          {last ? (
-            <Button loading={pending} onClick={finish}>
-              Начать обучение
-            </Button>
-          ) : (
-            <Button disabled={!current.canNext} onClick={() => setStep(step + 1)}>
-              Далее
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* «Пропустить» keeps the defaults for the rest but persists the name
+                (mandatory) — so it is offered only after the name step, never on it. */}
+            {step > 0 && !last && (
+              <Button variant="ghost" onClick={finish} disabled={pending}>
+                Пропустить
+              </Button>
+            )}
+            {last ? (
+              <Button loading={pending} onClick={finish}>
+                Начать обучение
+              </Button>
+            ) : (
+              <Button disabled={!current.canNext} onClick={() => setStep(step + 1)}>
+                Далее
+              </Button>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

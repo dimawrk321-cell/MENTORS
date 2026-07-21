@@ -10,6 +10,7 @@ import {
   logout,
   requestPasswordReset,
   resetPassword,
+  setInitialPassword,
 } from "@/lib/services/auth";
 import { isAccessExpired } from "@/lib/services/sessions";
 import {
@@ -25,6 +26,7 @@ import {
   ActionError,
   getRequestContext,
   parseInput,
+  requireActionAuth,
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
@@ -33,6 +35,7 @@ import {
   loginSchema,
   requestResetSchema,
   resetPasswordSchema,
+  setInitialPasswordSchema,
 } from "@/lib/utils/validation";
 
 export type AuthFormState = ActionResult<undefined> | null;
@@ -117,6 +120,38 @@ export async function acceptInviteAction(
 
   // Spec 8.1: accepted invite → auto-login → onboarding.
   if (result.ok && done) redirect("/onboarding");
+  return result;
+}
+
+/**
+ * Forced initial password (walk 12.4/A2): the «Придумай свой пароль» screen after
+ * logging in with an admin-issued temporary password. Requires the pending-change
+ * flag (defense: the regular in-profile change uses changePasswordAction with the
+ * old password). Clears the flag and routes home — a student lands on onboarding
+ * (the name gate) if they have no name yet, staff on /admin.
+ */
+export async function setInitialPasswordAction(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  let target: string | null = null;
+
+  const result = await runAction<undefined>(async () => {
+    const auth = await requireActionAuth();
+    if (!auth.user.mustChangePassword) {
+      throw new ActionError("not_required", "Пароль уже установлен");
+    }
+    const input = parseInput(setInitialPasswordSchema, { password: formData.get("password") });
+    await setInitialPassword(prisma, {
+      user: auth.user,
+      currentSessionId: auth.session.id,
+      newPassword: input.password,
+    });
+    target = homePathFor({ ...auth.user, mustChangePassword: false }, auth.accessExpired);
+    return undefined;
+  });
+
+  if (result.ok && target) redirect(target);
   return result;
 }
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { getLessonForEditor } from "@/lib/services/content-admin";
 import { listLessonQuestionLinks } from "@/lib/services/questions";
 import { stripMarkdown } from "@/lib/utils/text";
@@ -18,7 +18,7 @@ interface EditorPageProps {
 
 /** Two-pane lesson editor (spec 8.5): markdown ↔ live preview + metadata. */
 export default async function LessonEditorPage({ params }: EditorPageProps) {
-  await requireAdminZone();
+  await requirePermission("content.manage");
   const { id } = await params;
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();

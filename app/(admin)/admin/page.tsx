@@ -14,7 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { getPultData, type MetricDelta } from "@/lib/services/admin-dashboard";
 import { emitEvent } from "@/lib/services/events";
 import { formatDateRu, pluralRu } from "@/lib/utils/dates";
@@ -26,7 +26,7 @@ export const metadata: Metadata = { title: "Пульт" };
 // /admin (Пульт, spec 8.5): weekly metrics with delta + red-flag widgets.
 // Data is cached 10 min (spec 12/7.13). mentor+ (nav filters sections by role).
 export default async function AdminDashboardPage() {
-  const { user } = await requireAdminZone();
+  const { user } = await requirePermission("analytics.view");
   const data = await getPultData();
   // dashboard.viewed (spec 7.13 «События») — без деталей.
   await emitEvent(prisma, "dashboard.viewed", {}, { userId: user.id });

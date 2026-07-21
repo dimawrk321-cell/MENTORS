@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BookMarked } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireAdminZone } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { listGuidesAdmin } from "@/lib/services/guides";
 import { GUIDE_SECTIONS, GUIDE_SECTION_LABEL } from "@/lib/constants";
 import { ContentStudioTabs } from "@/components/features/content-studio-tabs";
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 /** Guides CRUD tab of the content studio (spec 8.5): list by section. */
 export default async function AdminGuidesPage() {
-  await requireAdminZone();
+  await requirePermission("content.manage");
   const guides = await listGuidesAdmin(prisma);
 
   return (
