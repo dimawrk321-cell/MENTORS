@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getPultData, type MetricDelta } from "@/lib/services/admin-dashboard";
 import { emitEvent } from "@/lib/services/events";
 import { formatDateRu, pluralRu } from "@/lib/utils/dates";
@@ -32,6 +33,9 @@ export default async function AdminDashboardPage() {
   await emitEvent(prisma, "dashboard.viewed", {}, { userId: user.id });
 
   const { metrics, flags } = data;
+  // Walk 12.4/B2: resolving a content report needs content.manage — mirror the
+  // view/mutate split in the UI (the action fails closed regardless).
+  const canResolveReports = hasPermission(user, "content.manage");
 
   return (
     <div className="flex flex-col gap-6">
@@ -162,7 +166,7 @@ export default async function AdminDashboardPage() {
                   // as plain text so the row isn't a dead link (spec 12.1/A2).
                   <div className="min-w-0 flex-1 text-[13px]">{body}</div>
                 )}
-                <ResolveReportButton reportId={r.id} />
+                {canResolveReports && <ResolveReportButton reportId={r.id} />}
               </li>
             );
           })}

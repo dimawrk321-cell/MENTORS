@@ -47,6 +47,15 @@ function asRole(role: Role) {
   });
 }
 
+function asPendingPassword(role: Role) {
+  getAuthMock.mockResolvedValue({
+    state: "valid",
+    session: { id: "s1", impersonatorId: null },
+    user: { id: "u1", role, permissions: null, mustChangePassword: true },
+    accessExpired: false,
+  });
+}
+
 function rejects(res: { ok: boolean; error?: { code: string } } | null): void {
   expect(res && res.ok).toBe(false); // also catches an unexpected null
   if (res && !res.ok) expect(res.error?.code).toBe("forbidden");
@@ -124,5 +133,22 @@ describe("команда (owner-only) — spec 12.4/B3 owner-supremacy", () => {
     // Empty userId fails zod AFTER the owner gate — proves owner is not forbidden.
     passesGate(await setTeamRoleAction({ userId: "", role: "admin" }));
     passesGate(await setTeamInterviewerAction({ userId: "", isInterviewer: true }));
+  });
+});
+
+describe("must_change_password gate (12.4/A2) — Server Actions", () => {
+  it("blocks every action variant until the password is set (page guard is not enough)", async () => {
+    // A pending-change admin: the action layer must reject before any permission
+    // check — the /set-password redirect only guards page renders, not action POSTs.
+    asPendingPassword("admin");
+    const results = [
+      await blockStudentAction("u"), // requireActionPermission
+      await setTeamRoleAction({ userId: "u", role: "admin" }), // requireActionOwner
+      await loadMoreAuditAction({ cursor: "x" }), // requireActionOwner
+    ];
+    for (const res of results) {
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error.code).toBe("password_change_required");
+    }
   });
 });

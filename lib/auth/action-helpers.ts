@@ -50,10 +50,21 @@ export function parseInput<T>(schema: ZodType<T>, input: unknown): T {
   return result.data;
 }
 
-export async function requireActionAuth(): Promise<ZoneAuth> {
+export async function requireActionAuth(opts?: {
+  /** Only setInitialPasswordAction may act while a password change is pending. */
+  allowPendingPasswordChange?: boolean;
+}): Promise<ZoneAuth> {
   const auth = await getAuth();
   if (auth.state !== "valid") {
     throw new ActionError("unauthorized", "Сессия истекла — войди заново");
+  }
+  // Walk 12.4/A2: the page-render layer bounces a pending-change user to
+  // /set-password, but Server Actions are a separate entry point (a Next-Action
+  // id from the public bundle + the same-origin cookie reaches them directly).
+  // Gate them here too so no mutation/read runs on the admin-issued temp password
+  // before the user picks their own — every action variant inherits this check.
+  if (!opts?.allowPendingPasswordChange && auth.user.mustChangePassword) {
+    throw new ActionError("password_change_required", "Сначала придумай свой пароль");
   }
   return {
     user: auth.user,

@@ -137,7 +137,9 @@ export async function setInitialPasswordAction(
   let target: string | null = null;
 
   const result = await runAction<undefined>(async () => {
-    const auth = await requireActionAuth();
+    // The one action allowed while a password change is pending (the gate in
+    // requireActionAuth would otherwise reject it).
+    const auth = await requireActionAuth({ allowPendingPasswordChange: true });
     if (!auth.user.mustChangePassword) {
       throw new ActionError("not_required", "Пароль уже установлен");
     }
