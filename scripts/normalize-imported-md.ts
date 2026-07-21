@@ -145,30 +145,35 @@ async function main(): Promise<void> {
     select: { id: true },
   });
 
-  await prisma.$transaction(async (tx) => {
-    for (const c of changes) {
-      // NB: no content_updated_at bump — this is a formatting repair, not a rewrite.
-      if (c.table === "lessons")
-        await tx.lesson.update({ where: { id: c.id }, data: { contentMd: c.after } });
-      else if (c.table === "questions")
-        await tx.question.update({ where: { id: c.id }, data: { answerMd: c.after } });
-      else await tx.guide.update({ where: { id: c.id }, data: { contentMd: c.after } });
-    }
-    if (actor) {
-      await writeAudit(tx, {
-        actorId: actor.id,
-        action: "content.normalized",
-        entityType: "content",
-        entityId: "batch",
-        after: {
-          lessons: byTable("lessons"),
-          questions: byTable("questions"),
-          guides: byTable("guides"),
-          total: changes.length,
-        },
-      });
-    }
-  });
+  await prisma.$transaction(
+    async (tx) => {
+      for (const c of changes) {
+        // NB: no content_updated_at bump — this is a formatting repair, not a rewrite.
+        if (c.table === "lessons")
+          await tx.lesson.update({ where: { id: c.id }, data: { contentMd: c.after } });
+        else if (c.table === "questions")
+          await tx.question.update({ where: { id: c.id }, data: { answerMd: c.after } });
+        else await tx.guide.update({ where: { id: c.id }, data: { contentMd: c.after } });
+      }
+      if (actor) {
+        await writeAudit(tx, {
+          actorId: actor.id,
+          action: "content.normalized",
+          entityType: "content",
+          entityId: "batch",
+          after: {
+            lessons: byTable("lessons"),
+            questions: byTable("questions"),
+            guides: byTable("guides"),
+            total: changes.length,
+          },
+        });
+      }
+    },
+    // Hundreds of row updates in one atomic batch — the 5s interactive default is
+    // easily exceeded over a remote (tunnelled) connection; give it real headroom.
+    { timeout: 180_000, maxWait: 15_000 },
+  );
 
   console.log(
     `\nПрименено: ${changes.length} записей нормализовано${actor ? " + 1 запись в аудит" : ""}.`,
