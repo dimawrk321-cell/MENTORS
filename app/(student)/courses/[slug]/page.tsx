@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ModuleTree, type ModuleTreeModule } from "@/components/features/module-tree";
+import { ModuleAccordion, CourseStickyCta } from "@/components/features/module-accordion";
 
 const GATING_LABEL = {
   strict: "строгий порядок",
@@ -74,6 +75,9 @@ export default async function CoursePage({ params }: CoursePageProps) {
     };
   });
 
+  // The mobile sticky CTA targets the current (next open, incomplete) lesson.
+  const currentLesson = treeModules.flatMap((m) => m.lessons).find((l) => l.current) ?? null;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -106,11 +110,22 @@ export default async function CoursePage({ params }: CoursePageProps) {
           />
         </Card>
       ) : (
-        <Card>
-          <CardContent className="p-3 md:p-5">
-            <ModuleTree modules={treeModules} />
-          </CardContent>
-        </Card>
+        <>
+          {/* Desktop: unchanged ModuleTree. Mobile (<768px): accordion + sticky CTA. */}
+          <Card className="hidden md:block">
+            <CardContent className="p-5">
+              <ModuleTree modules={treeModules} />
+            </CardContent>
+          </Card>
+          <div className="md:hidden">
+            <ModuleAccordion modules={treeModules} />
+            {/* Clearance so the last row is not hidden behind the fixed CTA + nav. */}
+            {currentLesson && <div aria-hidden="true" className="h-16" />}
+          </div>
+          {currentLesson && (
+            <CourseStickyCta lessonId={currentLesson.id} lessonTitle={currentLesson.title} />
+          )}
+        </>
       )}
     </div>
   );
