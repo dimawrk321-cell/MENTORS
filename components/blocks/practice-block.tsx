@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Dumbbell } from "lucide-react";
+import { MaterialGrid } from "@/components/blocks/callout";
 
 /** :::practice — блок «Практика» с внешними ссылками (spec 7.3). */
 export function PracticeBlock({ children }: { children?: ReactNode }) {
@@ -9,7 +10,7 @@ export function PracticeBlock({ children }: { children?: ReactNode }) {
         <Dumbbell size={16} strokeWidth={1.75} className="text-accent" aria-hidden="true" />
         Практика
       </h3>
-      {children}
+      <MaterialGrid>{children}</MaterialGrid>
     </section>
   );
 }

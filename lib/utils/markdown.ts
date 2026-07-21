@@ -80,6 +80,34 @@ function parseMetaString(meta: string): Record<string, unknown> {
   return /\bnumbers\b/.test(meta) ? { "data-line-numbers": "" } : {};
 }
 
+// Link-style emojis the imported content puts before a bare URL (🔗 🌐 📎 📌).
+const LINK_EMOJI_TRAIL_RE = /[\u{1F517}\u{1F310}\u{1F4CE}\u{1F4CC}️\s]+$/u;
+
+/**
+ * External-material link cards (walk 12.3, P3c). A link whose visible text is the
+ * URL itself (or empty) is a «сходить почитать» reference, not prose — retag it as
+ * a <material-link> that LessonRenderer maps to a domain-chip card. A leading link
+ * emoji on the preceding text is dropped so the card stands alone.
+ */
+const rehypeMaterialLinks: Plugin<[], HastRoot> = () => (tree) => {
+  visit(tree, "element", (node: Element, index, parent) => {
+    if (node.tagName !== "a") return;
+    const href = node.properties?.href;
+    if (typeof href !== "string" || !/^https?:\/\//i.test(href)) return;
+    const text = extractText(node as unknown as { children?: unknown[] }).trim();
+    if (text !== "" && text !== href.trim()) return; // human label → keep as prose link
+
+    node.tagName = "material-link";
+    node.properties = { url: href };
+    if (parent && typeof index === "number" && index > 0) {
+      const prev = parent.children[index - 1];
+      if (prev && prev.type === "text") {
+        prev.value = prev.value.replace(LINK_EMOJI_TRAIL_RE, "");
+      }
+    }
+  });
+};
+
 const shikiOptions: RehypeShikiOptions = {
   // Dual theme switched by CSS variables (globals.css keys on html[data-theme]).
   themes: { light: "github-light", dark: "github-dark-default" },
@@ -99,6 +127,7 @@ const processor = unified()
   .use(remarkDirective)
   .use(remarkDirectiveBlocks)
   .use(remarkRehype)
+  .use(rehypeMaterialLinks)
   .use(rehypeKatex)
   .use(rehypeSlug)
   .use(rehypeShiki, shikiOptions)

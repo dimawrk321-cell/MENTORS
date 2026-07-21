@@ -26,7 +26,20 @@ export function Callout({ type, children }: { type?: string; children?: ReactNod
         typeClasses[resolved],
       )}
     >
-      {children}
+      {resolved === "material" ? <MaterialGrid>{children}</MaterialGrid> : children}
     </aside>
+  );
+}
+
+/**
+ * Lays external-material link cards out as a wrapping card grid (walk 12.3, P3c).
+ * `display:contents` on the wrapping paragraphs/lists lets the cards become direct
+ * flex items so they flow into columns; prose and human-labelled links flow too.
+ */
+export function MaterialGrid({ children }: { children?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 [&_li]:contents [&_ol]:contents [&_p]:contents [&_ul]:contents">
+      {children}
+    </div>
   );
 }

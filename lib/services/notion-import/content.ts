@@ -1,5 +1,6 @@
 import { parseYouTubeId } from "@/lib/utils/youtube";
 import { MISSING_IMAGE_PLACEHOLDER, type ImageResolver } from "./images";
+import { normalizeImportedMarkdown } from "./normalize";
 
 // Content conversion (spec 7.14 п.4/п.5). Pure string transforms turning a raw
 // Notion node body into platform markdown: emoji section headers → clean h3,
@@ -86,7 +87,10 @@ export function convertLessonBody(rawBody: string, resolver: ImageResolver): Con
   const categoryLinkNames: string[] = [];
   let videoUrl: string | null = null;
 
-  const src = withImages.split("\n");
+  // Normalize block indentation first (P3a): the raw export nests bodies deeper
+  // than their headings, which would otherwise become indented code blocks.
+  const normalized = normalizeImportedMarkdown(withImages);
+  const src = normalized.split("\n");
   const out: string[] = [];
 
   for (let i = 0; i < src.length; i += 1) {
@@ -142,7 +146,7 @@ export function convertLessonBody(rawBody: string, resolver: ImageResolver): Con
   // If the first video was buried in prose (not a standalone line), still pull
   // the first YouTube URL anywhere as the header video.
   if (!videoUrl) {
-    const anyId = [...withImages.matchAll(/https?:\/\/\S+/g)]
+    const anyId = [...normalized.matchAll(/https?:\/\/\S+/g)]
       .map((m) => canonicalYouTube(m[0]))
       .find((u): u is string => u !== null);
     videoUrl = anyId ?? null;
@@ -178,7 +182,7 @@ export function convertGuideBody(rawBody: string, resolver: ImageResolver): Conv
   const todoImages: Array<{ path: string }> = [];
   const withImages = rewriteImages(rawBody, resolver, todoImages);
 
-  const src = withImages.split("\n");
+  const src = normalizeImportedMarkdown(withImages).split("\n");
   const out: string[] = [];
 
   for (let i = 0; i < src.length; i += 1) {
@@ -238,9 +242,7 @@ export interface ConvertedAnswer {
 export function convertQuestionAnswer(rawBody: string, resolver: ImageResolver): ConvertedAnswer {
   const todoImages: Array<{ path: string }> = [];
   const needsLatex = rawBody.trim() !== "" && isImageOnly(rawBody);
-  const answerMd = rewriteImages(rawBody, resolver, todoImages)
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const answerMd = normalizeImportedMarkdown(rewriteImages(rawBody, resolver, todoImages));
   return { answerMd, needsLatex, todoImages };
 }
 

@@ -8,6 +8,7 @@ import { CodeBlock } from "@/components/blocks/code-block";
 import { VideoEmbed } from "@/components/blocks/video-embed";
 import { PracticeBlock } from "@/components/blocks/practice-block";
 import { MockCta } from "@/components/blocks/mock-cta";
+import { MaterialLinkCard } from "@/components/blocks/material-link";
 
 // The single markdown render path (spec 8.5: admin preview is identical to the
 // student view — both call exactly this).
@@ -60,6 +61,7 @@ const components = {
   "video-embed": VideoEmbed,
   "practice-block": PracticeBlock,
   "mock-cta": MockCta,
+  "material-link": MaterialLinkCard,
   pre: CodeBlock,
   table: TableWrap,
   a: SmartLink,

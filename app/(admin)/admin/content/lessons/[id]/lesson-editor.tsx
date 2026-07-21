@@ -221,6 +221,34 @@ export function LessonEditor({
     });
   }
 
+  // Wraps the selected lines in a :::callout{type=material} block (walk 12.3, P3d):
+  // the fast path for turning a pasted list of source links into a materials card.
+  function wrapLinesInMaterial(): void {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const value = content;
+    const lineStart = value.lastIndexOf("\n", textarea.selectionStart - 1) + 1;
+    let lineEnd = value.indexOf("\n", textarea.selectionEnd);
+    if (lineEnd === -1) lineEnd = value.length;
+    const block = value.slice(lineStart, lineEnd).trim();
+    if (!block) {
+      toast({ title: "Выдели строки со ссылками", variant: "danger" });
+      return;
+    }
+    const before = value.slice(0, lineStart);
+    const after = value.slice(lineEnd);
+    const lead =
+      before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+    const trail = after === "" || after.startsWith("\n") ? "" : "\n";
+    const wrapped = `:::callout{type="material"}\n${block}\n:::`;
+    const next = before + lead + wrapped + trail + after;
+    onContentChange(next);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = (before + lead + wrapped).length;
+    });
+  }
+
   function wrapSelection(before: string, after: string): void {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -455,6 +483,17 @@ export function LessonEditor({
               {m.label}
             </button>
           ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-text-3 text-[11px] uppercase">Выделение</span>
+          <button
+            type="button"
+            title="Обернуть выделенные строки со ссылками в блок материалов (карточки)"
+            onClick={wrapLinesInMaterial}
+            className="rounded-pill border-border text-text-2 ease-app hover:border-border-strong hover:text-text-1 h-7 border px-3 text-[12px] transition-colors duration-150"
+          >
+            Обернуть в материалы
+          </button>
         </div>
       </div>
 
