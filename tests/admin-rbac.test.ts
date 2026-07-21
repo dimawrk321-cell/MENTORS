@@ -22,6 +22,7 @@ const {
   extendAccessAction,
   blockStudentAction,
   resetStudentSessionsAction,
+  issuePasswordResetLinkAction,
   impersonateAction,
 } = await import("@/lib/actions/students");
 const { createAnnouncementAction } = await import("@/lib/actions/announcements");
@@ -86,6 +87,7 @@ describe("доступ ученика (продление/блок/сессии/
       rejects(await extendAccessAction({ userId: "u", days: 30 }));
       rejects(await blockStudentAction("u"));
       rejects(await resetStudentSessionsAction("u"));
+      rejects(await issuePasswordResetLinkAction("u"));
       rejects(await impersonateAction("u"));
     }
   });

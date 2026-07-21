@@ -19,6 +19,8 @@ import {
   validateSessionToken,
 } from "@/lib/services/sessions";
 import { setSectionAccess } from "@/lib/services/library";
+import { adminIssuePasswordReset } from "@/lib/services/auth";
+import { isApiRateLimited } from "@/lib/utils/rate-limit";
 import {
   clearedCookieOptions,
   IMPERSONATION_RETURN_COOKIE,
@@ -133,6 +135,29 @@ export async function resendInviteAction(
     }
     revalidateStudent(userId);
     return { inviteUrl: res.inviteUrl };
+  });
+}
+
+export async function issuePasswordResetLinkAction(
+  userId: string,
+): Promise<ActionResult<{ resetUrl: string }>> {
+  return runAction(async () => {
+    const auth = await requireActionRole("admin");
+    // No more than one link per student per minute (spec P1).
+    if (isApiRateLimited(`reset-issue:${userId}`, 1, 60_000)) {
+      throw new ActionError("rate_limited", "Ссылку можно выдавать не чаще раза в минуту");
+    }
+    const res = await adminIssuePasswordReset(prisma, { actorId: auth.user.id, userId });
+    if (!res.ok) {
+      throw new ActionError(
+        res.code,
+        res.code === "not_eligible"
+          ? "Сброс доступен только активированным ученикам"
+          : "Ученик не найден",
+      );
+    }
+    revalidateStudent(userId);
+    return { resetUrl: res.resetUrl };
   });
 }
 

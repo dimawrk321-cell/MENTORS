@@ -9,6 +9,7 @@ import { pauseStreak } from "@/lib/services/streak";
 import { lookupIp } from "@/lib/services/geoip";
 import { checkGeoAnomalyOnLogin } from "@/lib/services/security";
 import { sendNewDeviceEmail, sendPasswordResetEmail } from "@/lib/services/mail";
+import { writeAudit } from "@/lib/services/audit";
 import {
   createSession,
   registerDevice,
@@ -259,6 +260,58 @@ export async function requestPasswordReset(
     await sendPasswordResetEmail(user.email, `${env.platformUrl}/reset/${token}`);
   }
   return { ok: true };
+}
+
+export type AdminIssueResetResult =
+  { ok: true; resetUrl: string } | { ok: false; code: "not_found" | "not_eligible" };
+
+/**
+ * Admin-issued password-reset link (walk 12.3, P1). Unlike self-serve /forgot it
+ * INVALIDATES the student's other live reset tokens (only the newest link works),
+ * writes one audit record (never the token), and returns the copyable link;
+ * sessions are deliberately NOT revoked (that is a separate button). Applies only
+ * to activated students (active|expired with a password) — invited students use
+ * the repeat-invite flow, blocked users must be unblocked first.
+ */
+export async function adminIssuePasswordReset(
+  db: PrismaClient,
+  input: { actorId: string; userId: string; now?: Date },
+): Promise<AdminIssueResetResult> {
+  const now = input.now ?? new Date();
+  const user = await db.user.findUnique({ where: { id: input.userId } });
+  if (!user || user.role !== "student") return { ok: false, code: "not_found" };
+  if (!user.passwordHash || !(user.status === "active" || user.status === "expired")) {
+    return { ok: false, code: "not_eligible" };
+  }
+
+  const token = generateToken();
+  await db.$transaction(async (tx) => {
+    // Invalidate the user's other unused reset tokens — the new link supersedes them.
+    await tx.passwordReset.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: now },
+    });
+    await tx.passwordReset.create({
+      data: {
+        userId: user.id,
+        // Stored hashed (spec 11); the raw value lives only in the returned link.
+        token: sha256Hex(token),
+        expiresAt: new Date(now.getTime() + RESET_TOKEN_TTL_MS),
+        createdAt: now,
+      },
+    });
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "password_reset.issued",
+      entityType: "user",
+      entityId: user.id,
+    });
+  });
+
+  const resetUrl = `${env.platformUrl}/reset/${token}`;
+  // Email is a secondary channel (dev → log); the copyable link is the main path.
+  await sendPasswordResetEmail(user.email, resetUrl);
+  return { ok: true, resetUrl };
 }
 
 export async function isResetTokenValid(

@@ -31,6 +31,7 @@ import {
   SectionAccessToggle,
   UnblockButton,
 } from "./student-controls";
+import { ResetPasswordDialog } from "./reset-password-dialog";
 
 export const metadata: Metadata = {
   title: "Карточка ученика",
@@ -159,8 +160,11 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
             )}
           </div>
           {canManage && (
-            <div>
+            <div className="flex flex-wrap gap-2">
               <ResetSessionsButton userId={user.id} />
+              {(user.status === "active" || user.status === "expired") && (
+                <ResetPasswordDialog userId={user.id} />
+              )}
             </div>
           )}
         </CardContent>
