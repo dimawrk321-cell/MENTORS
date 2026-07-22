@@ -42,7 +42,7 @@ export default async function ContentPreviewPage({ params }: PreviewPageProps) {
         {lesson.status === "draft" && <Badge variant="warning">черновик</Badge>}
       </div>
       {lesson.videoUrl && (
-        <VideoEmbed url={lesson.videoUrl} title={lesson.title} status={lesson.videoStatus} />
+        <VideoEmbed url={lesson.videoUrl} title={lesson.title} status={lesson.videoStatus} eager />
       )}
       <div className="relative">
         <Watermark email={user.email} />

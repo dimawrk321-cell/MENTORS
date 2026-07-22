@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useId, useState, useTransition, type ReactNode } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -168,6 +168,10 @@ function SortableList({
   children: ReactNode;
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  // 13.2 block 6: dnd-kit's internal counter-based ids diverge between SSR and
+  // hydration (React 19 logs a hydration mismatch on the drag-handle a11y
+  // attributes) — a stable React useId pins them (documented DndContext escape).
+  const dndId = useId();
 
   function handleDragEnd(event: DragEndEvent): void {
     const { active, over } = event;
@@ -179,7 +183,12 @@ function SortableList({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext
+      id={dndId}
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         {children}
       </SortableContext>

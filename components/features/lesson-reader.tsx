@@ -105,6 +105,7 @@ export function LessonReader({
           status={video.status}
           startAt={initialVideoPos ?? undefined}
           onProgress={onVideoProgress}
+          eager
         />
       )}
       {children}

@@ -14,6 +14,13 @@ interface VideoEmbedProps {
   startAt?: number;
   /** Streams the current playback second (debounced upstream). */
   onProgress?: (seconds: number) => void;
+  /**
+   * 13.2 block 6 (perf): the lesson HEADER video sits at the top of the page,
+   * so its poster IS the LCP element — preload it (next/image priority) and
+   * skip the optimizer proxy (hqdefault is already 480w, ~25KB; CSP img-src
+   * allows i.ytimg directly). In-content ::video embeds stay lazy.
+   */
+  eager?: boolean;
 }
 
 /**
@@ -27,6 +34,7 @@ export function VideoEmbed({
   status = "unchecked",
   startAt,
   onProgress,
+  eager = false,
 }: VideoEmbedProps) {
   const [playing, setPlaying] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -106,6 +114,8 @@ export function VideoEmbed({
               fill
               sizes="(max-width: 768px) 100vw, 680px"
               className="object-cover"
+              priority={eager}
+              unoptimized={eager}
             />
             <span className="ease-app absolute inset-0 bg-black/25 transition-colors duration-150 group-hover:bg-black/35" />
             <span className="rounded-pill ease-app absolute top-1/2 left-1/2 flex size-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center bg-black/65 text-white transition-transform duration-150 group-hover:scale-105">
