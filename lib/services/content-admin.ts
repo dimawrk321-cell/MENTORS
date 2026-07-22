@@ -63,7 +63,32 @@ export async function createCourse(
 }
 
 export type AdminContentResult =
-  { ok: true } | { ok: false; code: "not_found" | "slug_taken" | "not_draft" };
+  { ok: true } | { ok: false; code: "not_found" | "slug_taken" | "not_draft" | "has_student_data" };
+
+// 13.2 audit: the "draft-only" delete guard is bypassable (unpublish→draft→delete),
+// and the Cascade FKs would then wipe student history (LessonProgress / QuizAnswer /
+// TestAttempt). These predicates gate deletion on the ACTUAL existence of dependent
+// student rows, regardless of draft/published status. `db` may be a tx client.
+async function lessonHasStudentData(db: Db, lessonIds: string[]): Promise<boolean> {
+  if (lessonIds.length === 0) return false;
+  const where = { lessonId: { in: lessonIds } };
+  return (
+    (await db.lessonProgress.count({ where })) > 0 || (await db.quizAnswer.count({ where })) > 0
+  );
+}
+
+async function moduleHasStudentData(db: Db, moduleIds: string[]): Promise<boolean> {
+  if (moduleIds.length === 0) return false;
+  if ((await db.testAttempt.count({ where: { moduleId: { in: moduleIds } } })) > 0) return true;
+  const lessons = await db.lesson.findMany({
+    where: { moduleId: { in: moduleIds } },
+    select: { id: true },
+  });
+  return lessonHasStudentData(
+    db,
+    lessons.map((l) => l.id),
+  );
+}
 
 export async function updateCourse(
   db: PrismaClient,
@@ -121,6 +146,18 @@ export async function deleteCourse(
   const course = await db.course.findUnique({ where: { id: input.courseId } });
   if (!course) return { ok: false, code: "not_found" };
   if (course.status !== "draft") return { ok: false, code: "not_draft" };
+  const courseModules = await db.module.findMany({
+    where: { courseId: course.id },
+    select: { id: true },
+  });
+  if (
+    await moduleHasStudentData(
+      db,
+      courseModules.map((m) => m.id),
+    )
+  ) {
+    return { ok: false, code: "has_student_data" };
+  }
   await db.course.delete({ where: { id: course.id } });
   await writeAudit(db, {
     actorId: input.actorId,
@@ -201,6 +238,9 @@ export async function deleteModule(
   const mod = await db.module.findUnique({ where: { id: input.moduleId } });
   if (!mod) return { ok: false, code: "not_found" };
   if (mod.status !== "draft") return { ok: false, code: "not_draft" };
+  if (await moduleHasStudentData(db, [mod.id])) {
+    return { ok: false, code: "has_student_data" };
+  }
   await db.module.delete({ where: { id: mod.id } });
   await writeAudit(db, {
     actorId: input.actorId,
@@ -572,6 +612,9 @@ export async function deleteLesson(
   const lesson = await db.lesson.findUnique({ where: { id: input.lessonId } });
   if (!lesson) return { ok: false, code: "not_found" };
   if (lesson.status !== "draft") return { ok: false, code: "not_draft" };
+  if (await lessonHasStudentData(db, [lesson.id])) {
+    return { ok: false, code: "has_student_data" };
+  }
   await db.lesson.delete({ where: { id: lesson.id } });
   await writeAudit(db, {
     actorId: input.actorId,

@@ -317,7 +317,7 @@ export async function getPendingInvite(db: Db, user: User, now: Date = new Date(
 
 export type ExtendAccessResult =
   | { ok: true; newAccessUntil: Date }
-  | { ok: false; code: "not_found" | "not_activated" | "date_not_future" };
+  | { ok: false; code: "not_found" | "not_activated" | "date_not_future" | "blocked" };
 
 export async function extendAccess(
   db: PrismaClient,
@@ -336,6 +336,13 @@ export async function extendAccess(
   // Extension needs a started countdown: инвайт ещё не принят — продлевать нечего.
   if (user.status === "invited" || user.accessUntil === null) {
     return { ok: false, code: "not_activated" };
+  }
+  // 13.2 audit: `blocked` is now exclusively a punitive/security state (expiry
+  // maps to `expired`, not `blocked`). A routine bulk «продлить» must NOT
+  // silently resurrect a security-auto-blocked sharer — reactivation of a
+  // blocked account requires an explicit unblock decision (spec 8.5).
+  if (user.status === "blocked") {
+    return { ok: false, code: "blocked" };
   }
 
   let days: number;
@@ -361,7 +368,8 @@ export async function extendAccess(
         createdAt: now,
       },
     });
-    // Spec 7.1.7: extension reactivates (blocked/expired → active); bookings are
+    // Spec 7.1.7: extension reactivates `expired` → active (a `blocked` student
+    // is refused above — unblock is a separate, explicit decision). Bookings are
     // not restored (nothing to restore before stage 6).
     await tx.user.update({
       where: { id: user.id },
@@ -395,8 +403,9 @@ export async function extendAccess(
 export async function bulkExtendAccess(
   db: PrismaClient,
   input: { actorId: string; userIds: string[]; days: number; now?: Date },
-): Promise<{ extended: number; skipped: number }> {
+): Promise<{ extended: number; skipped: number; blocked: number }> {
   let extended = 0;
+  let blocked = 0;
   for (const userId of input.userIds) {
     const res = await extendAccess(db, {
       actorId: input.actorId,
@@ -405,8 +414,11 @@ export async function bulkExtendAccess(
       now: input.now,
     });
     if (res.ok) extended += 1;
+    // 13.2 audit: blocked students are refused (not reactivated) and surfaced
+    // distinctly so lifting a security block is never an invisible side effect.
+    else if (res.code === "blocked") blocked += 1;
   }
-  return { extended, skipped: input.userIds.length - extended };
+  return { extended, skipped: input.userIds.length - extended, blocked };
 }
 
 // --- Streak freeze gift (spec 7.7: «Admin может подарить заморозку»; bulk 13.1/C5) ---

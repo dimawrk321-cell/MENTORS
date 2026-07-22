@@ -76,6 +76,8 @@ function failWith(res: { ok: false; code: string }): never {
     not_found: "Элемент не найден",
     slug_taken: "Такой адрес уже занят",
     not_draft: "Удалять можно только черновики — сначала сними с публикации",
+    has_student_data:
+      "Нельзя удалить: есть история учеников (прогресс, ответы, попытки). Так безопаснее — данные сохранены.",
   };
   throw new ActionError(res.code, messages[res.code] ?? "Не получилось выполнить действие");
 }

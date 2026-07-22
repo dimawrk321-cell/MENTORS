@@ -151,6 +151,7 @@ export async function extendAccessAction(
         not_found: "Ученик не найден",
         not_activated: "Ученик ещё не активировал аккаунт — продлевать нечего",
         date_not_future: "Дата должна быть позже текущего окончания доступа",
+        blocked: "Ученик заблокирован — сначала сними блокировку, потом продлевай доступ",
       };
       throw new ActionError(res.code, messages[res.code]);
     }
@@ -181,7 +182,13 @@ export async function bulkExtendAccessAction(
       days: parsed.days,
     });
     revalidateStudent();
-    const skipNote = res.skipped > 0 ? ` · ${res.skipped} пропущено (не активированы)` : "";
+    // Blocked students are surfaced separately from ordinary «не активированы»
+    // skips so an admin never lifts a security block without noticing (13.2 audit).
+    const otherSkipped = res.skipped - res.blocked;
+    const parts: string[] = [];
+    if (otherSkipped > 0) parts.push(`${otherSkipped} пропущено (не активированы)`);
+    if (res.blocked > 0) parts.push(`${res.blocked} заблокировано (нужен разбан)`);
+    const skipNote = parts.length > 0 ? ` · ${parts.join(" · ")}` : "";
     return { message: `Продлено на ${parsed.days} дн.: ${res.extended}${skipNote}` };
   });
 }

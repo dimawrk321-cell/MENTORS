@@ -497,11 +497,19 @@ export async function cancelBooking(
   const late = booking.slot.startsAt.getTime() - now.getTime() < cancelFreeHours * HOUR_MS;
   const freesSlot = booking.slot.startsAt > now;
 
+  // 13.2 audit: gate the transition on status="booked" atomically so a
+  // concurrent double-cancel (double-click / two tabs) can't apply twice and
+  // mint a second late_cancel strike → spurious 14-day lock. The loser no-ops.
+  let applied = true;
   await db.$transaction(async (tx) => {
-    await tx.booking.update({
-      where: { id: booking.id },
+    const upd = await tx.booking.updateMany({
+      where: { id: booking.id, status: "booked" },
       data: { status: "cancelled_student", cancelledAt: now },
     });
+    if (upd.count === 0) {
+      applied = false;
+      return;
+    }
     if (freesSlot) {
       await tx.slot.update({ where: { id: booking.slotId }, data: { status: "open" } });
     }
@@ -530,6 +538,7 @@ export async function cancelBooking(
     }
   });
 
+  if (!applied) return { ok: false, code: "not_cancellable" };
   return { ok: true, late, strikeIssued: late };
 }
 
@@ -554,13 +563,24 @@ export async function markNoShow(
     return { ok: false, code: "too_early" };
   }
 
+  // 13.2 audit: same atomic gate as cancelBooking — a concurrent double
+  // «Не пришёл» must not mint two no_show strikes (two strikes alone → 14-day lock).
+  let applied = true;
   await db.$transaction(async (tx) => {
-    await tx.booking.update({ where: { id: booking.id }, data: { status: "no_show" } });
+    const upd = await tx.booking.updateMany({
+      where: { id: booking.id, status: "booked" },
+      data: { status: "no_show" },
+    });
+    if (upd.count === 0) {
+      applied = false;
+      return;
+    }
     await tx.bookingStrike.create({
       data: { userId: booking.userId, bookingId: booking.id, reason: "no_show", createdAt: now },
     });
     await emitEvent(tx, "mock.no_show", { bookingId: booking.id }, { userId: booking.userId });
   });
+  if (!applied) return { ok: false, code: "not_bookable" };
   return { ok: true };
 }
 
@@ -570,11 +590,14 @@ async function cancelByInterviewerTx(
   tx: Db,
   booking: Booking & { slot: { id: string; startsAt: Date; interviewerId: string } },
   now: Date,
-): Promise<void> {
-  await tx.booking.update({
-    where: { id: booking.id },
+): Promise<boolean> {
+  // 13.2 audit: atomic status gate — a concurrent double-cancel by the
+  // interviewer (or a race with closeDay) mustn't apply twice / double-strike.
+  const upd = await tx.booking.updateMany({
+    where: { id: booking.id, status: "booked" },
     data: { status: "cancelled_interviewer", cancelledAt: now },
   });
+  if (upd.count === 0) return false;
   await tx.slot.update({ where: { id: booking.slotId }, data: { status: "closed" } });
   await emitEvent(
     tx,
@@ -584,6 +607,7 @@ async function cancelByInterviewerTx(
   );
   await notify(tx, booking.userId, "mock_cancelled", { audience: "student" });
   await prioritizeWaitlistForVictim(tx, { userId: booking.userId, type: booking.type, now });
+  return true;
 }
 
 export type InterviewerCancelResult =
@@ -603,7 +627,8 @@ export async function cancelBookingByInterviewer(
     return { ok: false, code: "not_found" };
   }
   if (booking.status !== "booked") return { ok: false, code: "not_cancellable" };
-  await db.$transaction((tx) => cancelByInterviewerTx(tx, booking, now));
+  const applied = await db.$transaction((tx) => cancelByInterviewerTx(tx, booking, now));
+  if (!applied) return { ok: false, code: "not_cancellable" };
   return { ok: true };
 }
 
@@ -652,7 +677,7 @@ export async function closeDay(
     for (const slot of slots) {
       const active = slot.bookings[0];
       if (slot.status === "booked" && active && active.status === "booked") {
-        await cancelByInterviewerTx(
+        const didCancel = await cancelByInterviewerTx(
           tx,
           {
             ...active,
@@ -660,7 +685,7 @@ export async function closeDay(
           },
           now,
         );
-        cancelled += 1;
+        if (didCancel) cancelled += 1;
       } else if (slot.status === "open") {
         await tx.slot.update({ where: { id: slot.id }, data: { status: "closed" } });
         closed += 1;

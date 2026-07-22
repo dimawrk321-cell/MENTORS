@@ -2,7 +2,7 @@ import "katex/dist/katex.min.css";
 import type { ReactNode } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { toJsxRuntime, type Components } from "hast-util-to-jsx-runtime";
-import { renderLessonHast, type LessonHeading } from "@/lib/utils/markdown";
+import { renderLessonHast, sanitizeUrl, type LessonHeading } from "@/lib/utils/markdown";
 import { Callout } from "@/components/blocks/callout";
 import { CodeBlock } from "@/components/blocks/code-block";
 import { VideoEmbed } from "@/components/blocks/video-embed";
@@ -23,9 +23,12 @@ function TableWrap(props: React.ComponentProps<"table">) {
 }
 
 function SmartLink({ href, children, ...props }: React.ComponentProps<"a">) {
-  const external = typeof href === "string" && /^https?:\/\//.test(href);
+  // 13.2 audit: defense-in-depth href scrub (the pipeline already sanitizes, and
+  // React 19 sanitizes javascript: at render — this makes the safety explicit).
+  const safeHref = typeof href === "string" ? sanitizeUrl(href, "href") : href;
+  const external = typeof safeHref === "string" && /^https?:\/\//.test(safeHref);
   return (
-    <a href={href} {...(external ? { target: "_blank", rel: "noreferrer" } : {})} {...props}>
+    <a href={safeHref} {...(external ? { target: "_blank", rel: "noreferrer" } : {})} {...props}>
       {children}
     </a>
   );

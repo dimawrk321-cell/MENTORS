@@ -24,6 +24,7 @@ import {
 import { getAuth, homePathFor } from "@/lib/auth/guards";
 import {
   ActionError,
+  assertNotImpersonating,
   getRequestContext,
   parseInput,
   requireActionAuth,
@@ -140,6 +141,11 @@ export async function setInitialPasswordAction(
     // The one action allowed while a password change is pending (the gate in
     // requireActionAuth would otherwise reject it).
     const auth = await requireActionAuth({ allowPendingPasswordChange: true });
+    // 13.2 audit: impersonation is strictly read-only (spec 7.2). This is the one
+    // student-facing mutation the /set-password screen exposes, so it must refuse
+    // an impersonating admin — otherwise an admin could set the student's real
+    // password and force-logout their genuine sessions from "view" mode.
+    assertNotImpersonating(auth);
     if (!auth.user.mustChangePassword) {
       throw new ActionError("not_required", "Пароль уже установлен");
     }

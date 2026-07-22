@@ -463,10 +463,16 @@ export async function setQuestionStatus(
 export async function deleteQuestion(
   db: PrismaClient,
   input: { actorId: string; questionId: string },
-): Promise<{ ok: true } | { ok: false; code: "not_found" | "not_draft" }> {
+): Promise<{ ok: true } | { ok: false; code: "not_found" | "not_draft" | "has_student_data" }> {
   const question = await db.question.findUnique({ where: { id: input.questionId } });
   if (!question) return { ok: false, code: "not_found" };
   if (question.status !== "draft") return { ok: false, code: "not_draft" };
+  // 13.2 audit: refuse if the question carries student history (SRS cards or quiz
+  // answers) — the Cascade FKs would otherwise wipe it via unpublish→delete.
+  const where = { questionId: question.id };
+  if ((await db.srsCard.count({ where })) > 0 || (await db.quizAnswer.count({ where })) > 0) {
+    return { ok: false, code: "has_student_data" };
+  }
   await db.question.delete({ where: { id: question.id } });
   await writeAudit(db, {
     actorId: input.actorId,

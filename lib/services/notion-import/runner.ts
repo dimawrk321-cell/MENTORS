@@ -24,7 +24,8 @@ export function collectImages(dir: string): Map<string, string> {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (/\.(png|jpe?g|gif|webp|svg)$/i.test(entry.name)) map.set(entry.name, full);
+      // 13.2 audit: no svg (active-content stored-XSS) — see zip.ts IMAGE_RE.
+      else if (/\.(png|jpe?g|gif|webp)$/i.test(entry.name)) map.set(entry.name, full);
     }
   };
   if (fs.existsSync(dir)) walk(dir);

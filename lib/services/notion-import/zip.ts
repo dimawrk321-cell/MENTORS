@@ -16,7 +16,10 @@ import { imageBasename } from "./images";
 const EOCD_SIG = 0x06054b50;
 const CDH_SIG = 0x02014b50;
 const LFH_SIG = 0x04034b50;
-const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg)$/i;
+// 13.2 audit: SVG excluded — an imported .svg lands in public/media and would
+// execute inline <script> on direct navigation (stored XSS). Notion screenshots
+// are always rasterized, so dropping svg loses nothing.
+const IMAGE_RE = /\.(png|jpe?g|gif|webp)$/i;
 
 /** Anti-bomb budgets (spec 7.14 hardening). Overridable in tests. */
 export const ZIP_MAX_ENTRY_UNCOMPRESSED = 30 * 1024 * 1024; // 30 MB per image

@@ -68,6 +68,14 @@ export async function login(
     return { ok: false, code: "invalid_credentials" };
   }
   if (user.status === "blocked") {
+    // 13.2 audit: consume a rate-limit attempt here too, so a blocked account's
+    // login is throttled identically to the invalid-credentials path — the
+    // distinct «заблокирован» response can't be used as a FREE, unlimited
+    // password-confirmation oracle. DECISION: the informative message is kept (a
+    // genuinely blocked user must understand why login fails); the residual — a
+    // now-rate-limited, message-based confirmation that already requires holding
+    // a candidate password AND knowing the account is blocked — is accepted as low.
+    await recordAuthAttempt(db, "login", email, ctx.ip, now);
     return { ok: false, code: "blocked" };
   }
 

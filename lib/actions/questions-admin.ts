@@ -162,12 +162,13 @@ export async function deleteQuestionAction(questionId: string): Promise<ActionRe
       questionId: parseInput(idSchema, questionId),
     });
     if (!result.ok) {
-      throw new ActionError(
-        result.code,
-        result.code === "not_draft"
-          ? "Удалять можно только черновики — сначала сними с публикации"
-          : "Вопрос не найден",
-      );
+      const messages: Record<typeof result.code, string> = {
+        not_draft: "Удалять можно только черновики — сначала сними с публикации",
+        has_student_data:
+          "Нельзя удалить: у вопроса есть история учеников (карточки повторений, ответы). Данные сохранены.",
+        not_found: "Вопрос не найден",
+      };
+      throw new ActionError(result.code, messages[result.code]);
     }
     revalidateBank();
     return undefined;

@@ -188,9 +188,23 @@ export async function generateSlots(
   const existingTimes = new Set(existing.map((s) => s.startsAt.getTime()));
 
   // Свободные будущие слоты вне целевого набора (окно сузилось/правило снято) — удаляем.
-  const toRemove = existing
+  let toRemove = existing
     .filter((s) => s.status === "open" && !targetByTime.has(s.startsAt.getTime()))
     .map((s) => s.id);
+  // 13.2 audit: a slot held by an active waitlist offer stays status="open"
+  // during the ~2h hold. Deleting it would SetNull offeredSlotId and strand the
+  // waitlist row in status="offered" (a phantom offer until it expires). Keep
+  // any open slot that currently backs an active offer.
+  if (toRemove.length > 0) {
+    const held = await db.waitlist.findMany({
+      where: { status: "offered", offeredSlotId: { in: toRemove }, offerExpiresAt: { gt: now } },
+      select: { offeredSlotId: true },
+    });
+    if (held.length > 0) {
+      const heldIds = new Set(held.map((w) => w.offeredSlotId));
+      toRemove = toRemove.filter((id) => !heldIds.has(id));
+    }
+  }
   let removed = 0;
   if (toRemove.length > 0) {
     removed = (await db.slot.deleteMany({ where: { id: { in: toRemove } } })).count;
