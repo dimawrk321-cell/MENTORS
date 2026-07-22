@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
 import { getLessonForEditor } from "@/lib/services/content-admin";
-import { renderLessonContent } from "@/components/blocks/lesson-renderer";
+import { renderLessonContentSafe } from "@/components/blocks/lesson-renderer";
 import { VideoEmbed } from "@/components/blocks/video-embed";
 import { Watermark } from "@/components/features/watermark";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,7 @@ export default async function ContentPreviewPage({ params }: PreviewPageProps) {
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();
 
-  const { content } = await renderLessonContent(lesson.contentMd);
+  const content = await renderLessonContentSafe(lesson.contentMd);
 
   return (
     <main className="mx-auto w-full max-w-[680px] px-4 py-8">

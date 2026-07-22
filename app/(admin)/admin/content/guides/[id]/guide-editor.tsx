@@ -17,6 +17,7 @@ import { toast } from "@/components/ui/toast";
 import { BackButton } from "@/components/ui/back-button";
 import { ActionButton } from "@/components/features/action-button";
 import { cn } from "@/lib/utils/cn";
+import { applySnippet, type SnippetDef } from "@/lib/utils/editor-insert";
 import {
   deleteGuideAction,
   saveGuideContentAction,
@@ -37,55 +38,72 @@ interface EditorGuide {
 
 // Directive panel (spec 8.5 / 12.1-C10) — guides share the markdown pipeline but
 // have no video-lesson/mock semantics; grouped with human names + hints.
+// D5 (spec 13.1): `%s` marks where the selection is wrapped (or `placeholder`).
 interface Snippet {
   group: string;
   label: string;
   hint: string;
   snippet: string;
+  placeholder: string;
 }
 
 const SNIPPETS: Snippet[] = [
   {
     group: "Врезки",
     label: "Совет",
-    hint: "Зелёная врезка с подсказкой",
-    snippet: '\n:::callout{type="tip"}\nТекст совета.\n:::\n',
+    hint: "Зелёная врезка с подсказкой (обернёт выделение)",
+    snippet: '\n:::callout{type="tip"}\n%s\n:::\n',
+    placeholder: "Текст совета.",
   },
   {
     group: "Врезки",
     label: "Важное",
-    hint: "Жёлтая врезка-акцент",
-    snippet: '\n:::callout{type="important"}\nВажный текст.\n:::\n',
+    hint: "Жёлтая врезка-акцент (обернёт выделение)",
+    snippet: '\n:::callout{type="important"}\n%s\n:::\n',
+    placeholder: "Важный текст.",
   },
   {
     group: "Врезки",
     label: "Материал",
-    hint: "Серая врезка со ссылками на источники",
-    snippet: '\n:::callout{type="material"}\n- [Ссылка](https://)\n:::\n',
+    hint: "Серая врезка со ссылками на источники (обернёт выделение)",
+    snippet: '\n:::callout{type="material"}\n%s\n:::\n',
+    placeholder: "- [Ссылка](https://)",
   },
   {
     group: "Медиа",
     label: "Видео",
     hint: "Встроенный YouTube-плеер",
     snippet: '\n:::video{url="https://youtu.be/..." title="Название"}\n:::\n',
+    placeholder: "",
   },
   {
     group: "Медиа",
     label: "Практика",
-    hint: "Блок практических заданий",
-    snippet: "\n:::practice\n- [Задание](https://)\n:::\n",
+    hint: "Блок практических заданий (обернёт выделение)",
+    snippet: "\n:::practice\n%s\n:::\n",
+    placeholder: "- [Задание](https://)",
   },
   {
     group: "Блоки",
     label: "Код",
-    hint: "Подсветка Shiki (python/ts/sql/bash/json/yaml)",
-    snippet: '\n```python\nprint("hello")\n```\n',
+    hint: "Подсветка Shiki (обернёт выделение)",
+    snippet: "\n```python\n%s\n```\n",
+    placeholder: 'print("hello")',
+  },
+  {
+    // D5 (spec 13.1): guide editor gains the inline-formula button for parity.
+    group: "Блоки",
+    label: "Формула",
+    hint: "Инлайн-формула $…$ (курсор внутри; обернёт выделение)",
+    snippet: "$%s$",
+    placeholder: "",
   },
   {
     group: "Блоки",
     label: "Таблица",
     hint: "GFM-таблица (скроллится по горизонтали)",
     snippet: "\n| Колонка | Колонка |\n| --- | --- |\n| Ячейка | Ячейка |\n",
+    placeholder: "",
   },
 ];
 
@@ -169,16 +187,16 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [flushSave, fullscreen]);
 
-  function insertSnippet(snippet: string): void {
+  // D5 (spec 13.1): directive insert wraps the selection (applySnippet) rather
+  // than discarding it, then re-selects the wrapped body / placeholder.
+  function insertSnippet(def: SnippetDef): void {
     const textarea = textareaRef.current;
     if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const next = content.slice(0, start) + snippet + content.slice(end);
-    onContentChange(next);
+    const res = applySnippet(content, textarea.selectionStart, textarea.selectionEnd, def);
+    onContentChange(res.content);
     requestAnimationFrame(() => {
       textarea.focus();
-      textarea.selectionStart = textarea.selectionEnd = start + snippet.length;
+      textarea.setSelectionRange(res.selectionStart, res.selectionEnd);
     });
   }
 
@@ -397,7 +415,7 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
                 key={item.label}
                 type="button"
                 title={item.hint}
-                onClick={() => insertSnippet(item.snippet)}
+                onClick={() => insertSnippet(item)}
                 className="rounded-pill border-border text-text-2 ease-app hover:border-border-strong hover:text-text-1 h-7 border px-3 text-[12px] transition-colors duration-150"
               >
                 {item.label}

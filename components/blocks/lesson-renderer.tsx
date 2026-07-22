@@ -85,3 +85,52 @@ export async function LessonRenderer({ markdown }: { markdown: string }) {
   const { content } = await renderLessonContent(markdown);
   return <>{content}</>;
 }
+
+// D5 (spec 13.1): a hard render failure in the preview must show a readable
+// message with a line number, not the global zone-error page (the (preview) group
+// has no error.tsx, so a throw would otherwise escalate to app/error.tsx).
+function describeRenderError(error: unknown): { line: number | null; message: string } {
+  const e = (error ?? {}) as {
+    message?: unknown;
+    line?: unknown;
+    position?: { start?: { line?: unknown } };
+  };
+  const line =
+    typeof e.line === "number"
+      ? e.line
+      : typeof e.position?.start?.line === "number"
+        ? (e.position.start.line as number)
+        : null;
+  const message = typeof e.message === "string" ? e.message : String(error);
+  if (line === null) {
+    // remark/rehype messages often embed «line:column» — pull the line out.
+    const m = /(\d+):\d+/.exec(message);
+    if (m) return { line: Number(m[1]), message };
+  }
+  return { line, message };
+}
+
+function RenderError({ error }: { error: unknown }) {
+  const { line, message } = describeRenderError(error);
+  return (
+    <div className="rounded-card border-danger/40 bg-danger/10 text-danger border p-4 text-[14px]">
+      <p className="font-semibold">
+        Ошибка рендера markdown{line !== null ? ` · строка ${line}` : ""}
+      </p>
+      <p className="mt-1 text-[13px] opacity-80">{message}</p>
+      <p className="text-text-3 mt-2 text-[12px]">
+        Поправь разметку — предпросмотр обновится после сохранения.
+      </p>
+    </div>
+  );
+}
+
+/** Render markdown for a preview without ever blowing up the pane (spec 13.1/D5). */
+export async function renderLessonContentSafe(markdown: string): Promise<ReactNode> {
+  try {
+    const { content } = await renderLessonContent(markdown);
+    return content;
+  } catch (error) {
+    return <RenderError error={error} />;
+  }
+}

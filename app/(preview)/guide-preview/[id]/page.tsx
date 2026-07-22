@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
 import { getGuideForEditor } from "@/lib/services/guides";
 import { GUIDE_SECTION_LABEL } from "@/lib/constants";
-import { renderLessonContent } from "@/components/blocks/lesson-renderer";
+import { renderLessonContentSafe } from "@/components/blocks/lesson-renderer";
 import { Watermark } from "@/components/features/watermark";
 import { Badge } from "@/components/ui/badge";
 
@@ -24,7 +24,7 @@ export default async function GuidePreviewPage({ params }: GuidePreviewPageProps
   const guide = await getGuideForEditor(prisma, id);
   if (!guide) notFound();
 
-  const { content } = await renderLessonContent(guide.contentMd);
+  const content = await renderLessonContentSafe(guide.contentMd);
 
   return (
     <main className="mx-auto w-full max-w-[680px] px-4 py-8">
