@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Brand favicon (spec 13.2 block 1): "M" monogram on the accent indigo
+       gradient (tokens --gradient-accent). Rounded corners match --radius-card
+       proportions; the flat full-bleed variant for apple/maskable icons is
+       generated from this same shape at build-asset time. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5e6ad2"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <path fill="#ffffff" d="M16 46 L16 18 L23.5 18 L32 31 L40.5 18 L48 18 L48 46 L41 46 L41 29.5 L32 43 L23 29.5 L23 46 Z"/>
+</svg>
