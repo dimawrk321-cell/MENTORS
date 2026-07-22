@@ -32,13 +32,11 @@ import {
   RecordingFormDialog,
   type RecordingFormValue,
 } from "@/components/features/recording-form-dialog";
-import { RecordingStatusButton } from "@/components/features/recording-status-button";
-import { RecordingDeleteButton } from "@/components/features/recording-delete-button";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils/cn";
 import { Library } from "lucide-react";
+import { LibraryBulkTable, type LibRow } from "./library-bulk-table";
 
 export const metadata: Metadata = {
   title: "Библиотека — админка",
@@ -134,6 +132,42 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
   const staleCount = recordings.filter((r) => isLinkStale(r.linkUpdatedAt, now)).length;
   const hasFilter = Object.values(filters).some(Boolean);
 
+  // C3 (spec 13.1): map to serializable rows for the client bulk table.
+  const rows: LibRow[] = recordings.map((recording) => {
+    const complete = isChecklistComplete(recording.checklist);
+    const checklist = (recording.checklist as unknown as RecordingFormValue["checklist"]) ?? {
+      faces: false,
+      voice: false,
+      names: false,
+      consent: false,
+    };
+    return {
+      id: recording.id,
+      title: recording.title,
+      cardTitle: recordingCardTitle(recording),
+      status: recording.status,
+      complete,
+      checklistCount: (["faces", "voice", "names", "consent"] as const).filter((k) => checklist[k])
+        .length,
+      linkUpdatedText: formatDateRu(recording.linkUpdatedAt, "Europe/Moscow"),
+      stale: isLinkStale(recording.linkUpdatedAt, now),
+      views: recording._count.views,
+      formValue: {
+        id: recording.id,
+        title: recording.title,
+        stage: recording.stage,
+        direction: recording.direction,
+        grade: recording.grade,
+        outcome: recording.outcome,
+        companyType: recording.companyType,
+        durationMinutes: recording.durationMinutes,
+        url: recording.url,
+        embedUrl: recording.embedUrl,
+        checklist,
+      },
+    };
+  });
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -217,94 +251,7 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
           />
         </Card>
       ) : (
-        <div className="rounded-card border-border overflow-x-auto border">
-          <table className="w-full min-w-[720px] text-left text-[13px]">
-            <thead className="text-text-3 border-border border-b">
-              <tr>
-                <th className="p-3 font-medium">Запись</th>
-                <th className="p-3 font-medium">Статус</th>
-                <th className="p-3 font-medium">Чеклист</th>
-                <th className="p-3 font-medium">Ссылка обновлена</th>
-                <th className="p-3 font-medium">Просмотры</th>
-                <th className="p-3 font-medium">Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recordings.map((recording) => {
-                const complete = isChecklistComplete(recording.checklist);
-                const stale = isLinkStale(recording.linkUpdatedAt, now);
-                const formValue: RecordingFormValue = {
-                  id: recording.id,
-                  title: recording.title,
-                  stage: recording.stage,
-                  direction: recording.direction,
-                  grade: recording.grade,
-                  outcome: recording.outcome,
-                  companyType: recording.companyType,
-                  durationMinutes: recording.durationMinutes,
-                  url: recording.url,
-                  embedUrl: recording.embedUrl,
-                  checklist:
-                    (recording.checklist as unknown as RecordingFormValue["checklist"]) ?? {
-                      faces: false,
-                      voice: false,
-                      names: false,
-                      consent: false,
-                    },
-                };
-                return (
-                  <tr key={recording.id} className="border-border border-b align-top last:border-0">
-                    <td className="p-3">
-                      <div className="text-text-1 font-medium">{recording.title}</div>
-                      <div className="text-text-3 text-[12px]">{recordingCardTitle(recording)}</div>
-                    </td>
-                    <td className="p-3">
-                      {recording.status === "published" ? (
-                        <Badge variant="success">опубликовано</Badge>
-                      ) : (
-                        <Badge>черновик</Badge>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      {complete ? (
-                        <Badge variant="success">4/4</Badge>
-                      ) : (
-                        <Badge variant="warning">
-                          {
-                            (["faces", "voice", "names", "consent"] as const).filter(
-                              (k) => formValue.checklist[k],
-                            ).length
-                          }
-                          /4
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <span className={cn(stale && "text-warning")}>
-                        {formatDateRu(recording.linkUpdatedAt, "Europe/Moscow")}
-                        {stale && " · устарела"}
-                      </span>
-                    </td>
-                    <td className="p-3 tabular-nums">{recording._count.views}</td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <RecordingFormDialog recording={formValue} />
-                        <RecordingStatusButton
-                          id={recording.id}
-                          status={recording.status}
-                          canPublish={complete}
-                        />
-                        {recording.status === "draft" && recording._count.views === 0 && (
-                          <RecordingDeleteButton id={recording.id} />
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <LibraryBulkTable rows={rows} />
       )}
     </div>
   );

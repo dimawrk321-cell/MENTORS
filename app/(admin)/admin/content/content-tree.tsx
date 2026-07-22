@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   AlertTriangle,
   BookCheck,
+  BookX,
   ClipboardCheck,
   Eye,
   EyeOff,
@@ -68,6 +69,7 @@ import {
   reorderContentAction,
   setCourseStatusAction,
   setModuleStatusAction,
+  unpublishLessonsAction,
   updateCourseAction,
 } from "@/lib/actions/content-admin";
 import { upsertModuleTestAction } from "@/lib/actions/questions-admin";
@@ -275,6 +277,18 @@ function bulkPublishDone(result: { data: unknown }): void {
   });
 }
 
+/** Toast for the bulk «В черновик» action (C4) — count of unpublished lessons. */
+function bulkUnpublishDone(result: { data: unknown }): void {
+  const { unpublished } = result.data as { unpublished: number };
+  toast({
+    title:
+      unpublished > 0
+        ? `В черновик: ${unpublished} ${pluralRu(unpublished, "урок", "урока", "уроков")}`
+        : "Нет опубликованных уроков",
+    variant: unpublished > 0 ? "success" : "default",
+  });
+}
+
 /** Название-подтверждение для диалогов с одним текстовым полем. */
 function TitleDialog({
   open,
@@ -446,6 +460,19 @@ function CourseCard({ course }: { course: TreeCourse }) {
               }
             >
               <BookCheck size={14} strokeWidth={1.75} />
+            </IconAction>
+          )}
+          {courseHasPublishedLesson(course) && (
+            <IconAction
+              label="Все уроки курса в черновик"
+              onClick={() =>
+                act(
+                  () => unpublishLessonsAction({ kind: "course", courseId: course.id }),
+                  bulkUnpublishDone,
+                )
+              }
+            >
+              <BookX size={14} strokeWidth={1.75} />
             </IconAction>
           )}
           <IconAction label="Добавить модуль" onClick={() => setNewModuleOpen(true)}>
@@ -679,6 +706,19 @@ function ModuleBlock({ module }: { module: TreeModule }) {
                 }
               >
                 <BookCheck size={13} strokeWidth={1.75} />
+              </IconAction>
+            )}
+            {moduleHasPublishedLesson(module) && (
+              <IconAction
+                label="Все уроки модуля в черновик"
+                onClick={() =>
+                  act(
+                    () => unpublishLessonsAction({ kind: "module", moduleId: module.id }),
+                    bulkUnpublishDone,
+                  )
+                }
+              >
+                <BookX size={13} strokeWidth={1.75} />
               </IconAction>
             )}
             <IconAction label="Добавить урок" onClick={() => setNewLessonOpen(true)}>

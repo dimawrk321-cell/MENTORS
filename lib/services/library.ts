@@ -265,6 +265,47 @@ export async function setRecordingStatus(
   return { ok: true };
 }
 
+/**
+ * Bulk publish/draft (spec 13.1/C3). Publish flips only draft recordings that pass
+ * the 4/4 checklist — the rest are skipped and counted (the gate is
+ * server-authoritative, never bypassed by bulk). Draft flips published → draft.
+ * One audit row with counts.
+ */
+export async function bulkSetRecordingStatus(
+  db: PrismaClient,
+  input: { actorId: string; recordingIds: string[]; status: ContentStatus },
+): Promise<{ updated: number; skipped: number }> {
+  let updated = 0;
+  if (input.status === "published") {
+    const recs = await db.recording.findMany({
+      where: { id: { in: input.recordingIds }, status: "draft" },
+      select: { id: true, checklist: true },
+    });
+    const valid = recs.filter((r) => isChecklistComplete(r.checklist)).map((r) => r.id);
+    if (valid.length > 0) {
+      await db.recording.updateMany({
+        where: { id: { in: valid } },
+        data: { status: "published" },
+      });
+    }
+    updated = valid.length;
+  } else {
+    const result = await db.recording.updateMany({
+      where: { id: { in: input.recordingIds }, status: "published" },
+      data: { status: "draft" },
+    });
+    updated = result.count;
+  }
+  await writeAudit(db, {
+    actorId: input.actorId,
+    action: "recording.bulk_status",
+    entityType: "recording",
+    entityId: "bulk",
+    after: { requested: input.recordingIds.length, updated, status: input.status },
+  });
+  return { updated, skipped: input.recordingIds.length - updated };
+}
+
 export type DeleteRecordingResult =
   { ok: true } | { ok: false; code: "not_found" | "not_draft" | "has_views" };
 

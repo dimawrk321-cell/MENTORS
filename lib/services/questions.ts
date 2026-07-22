@@ -265,9 +265,12 @@ export interface AdminQuestionFilters {
   page?: number;
 }
 
-export async function listQuestionsAdmin(db: Db, filters: AdminQuestionFilters) {
-  const page = Math.max(1, filters.page ?? 1);
-  const where: Prisma.QuestionWhereInput = {
+/** The admin-list Prisma filter (shared by the paginated list and select-all-by-filter). */
+async function buildAdminQuestionWhere(
+  db: Db,
+  filters: AdminQuestionFilters,
+): Promise<Prisma.QuestionWhereInput> {
+  return {
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.needsLatex ? { needsLatex: true } : {}),
@@ -276,6 +279,29 @@ export async function listQuestionsAdmin(db: Db, filters: AdminQuestionFilters) 
       : {}),
     ...(filters.q ? { textMd: { contains: filters.q, mode: "insensitive" } } : {}),
   };
+}
+
+/** Upper bound on a single bulk operation / select-all-by-filter (spec 13.1/C). */
+export const BULK_MAX = 1000;
+
+/** All question ids matching a filter (spec 13.1/C1: «выбрать всё по фильтру»), capped. */
+export async function listQuestionIdsForFilter(
+  db: Db,
+  filters: AdminQuestionFilters,
+): Promise<string[]> {
+  const where = await buildAdminQuestionWhere(db, filters);
+  const rows = await db.question.findMany({
+    where,
+    select: { id: true },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    take: BULK_MAX,
+  });
+  return rows.map((r) => r.id);
+}
+
+export async function listQuestionsAdmin(db: Db, filters: AdminQuestionFilters) {
+  const page = Math.max(1, filters.page ?? 1);
+  const where = await buildAdminQuestionWhere(db, filters);
   const [items, total] = await Promise.all([
     db.question.findMany({
       where,
@@ -495,6 +521,25 @@ export async function bulkPublish(
     after: { requested: input.questionIds.length, published },
   });
   return { published, skipped: input.questionIds.length - published };
+}
+
+/** Bulk «в черновик» (spec 13.1/C1): unpublishes the published ones, one audit row. */
+export async function bulkSetDraft(
+  db: PrismaClient,
+  input: { actorId: string; questionIds: string[] },
+): Promise<{ updated: number }> {
+  const result = await db.question.updateMany({
+    where: { id: { in: input.questionIds }, status: "published" },
+    data: { status: "draft" },
+  });
+  await writeAudit(db, {
+    actorId: input.actorId,
+    action: "question.bulk_unpublished",
+    entityType: "question",
+    entityId: "bulk",
+    after: { requested: input.questionIds.length, unpublished: result.count },
+  });
+  return { updated: result.count };
 }
 
 export async function bulkLinkToLesson(

@@ -3,13 +3,17 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
   adminResetSessions,
   blockStudent,
   buildCredentialMessage,
+  bulkExtendAccess,
+  bulkGrantFreeze,
   createStudentCredentials,
   extendAccess,
+  grantFreeze,
   unblockStudent,
 } from "@/lib/services/access";
 import { adminResetPasswordToTemp } from "@/lib/services/auth";
@@ -149,6 +153,63 @@ export async function extendAccessAction(
     }
     revalidateStudent(parsed.userId);
     return { newAccessUntilText: formatDateRu(res.newAccessUntil, auth.user.timezone) };
+  });
+}
+
+// --- Bulk student ops (spec 13.1/C5) — students.manage ---
+
+const bulkIdsSchema = z.array(z.string().min(1)).min(1, "Выбери учеников").max(500);
+const bulkExtendSchema = z.object({
+  userIds: bulkIdsSchema,
+  days: z.union([z.literal(30), z.literal(90)]),
+});
+const bulkFreezeSchema = z.object({ userIds: bulkIdsSchema });
+
+/** Bulk «продлить доступ» (+30/+90) over a selection (spec 13.1/C5). */
+export async function bulkExtendAccessAction(
+  input: unknown,
+): Promise<ActionResult<{ message: string }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("students.manage");
+    const parsed = parseInput(bulkExtendSchema, input);
+    const res = await bulkExtendAccess(prisma, {
+      actorId: auth.user.id,
+      userIds: parsed.userIds,
+      days: parsed.days,
+    });
+    revalidateStudent();
+    const skipNote = res.skipped > 0 ? ` · ${res.skipped} пропущено (не активированы)` : "";
+    return { message: `Продлено на ${parsed.days} дн.: ${res.extended}${skipNote}` };
+  });
+}
+
+/** Bulk «подарить заморозку» over a selection (spec 13.1/C5). */
+export async function bulkGiftFreezeAction(
+  input: unknown,
+): Promise<ActionResult<{ message: string }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("students.manage");
+    const parsed = parseInput(bulkFreezeSchema, input);
+    const res = await bulkGrantFreeze(prisma, { actorId: auth.user.id, userIds: parsed.userIds });
+    revalidateStudent();
+    const skipNote = res.skipped > 0 ? ` · ${res.skipped} пропущено (максимум)` : "";
+    return { message: `Заморозка подарена: ${res.granted}${skipNote}` };
+  });
+}
+
+/** Single «подарить заморозку» from the student card (spec 7.7). */
+export async function giftFreezeAction(
+  userId: string,
+): Promise<ActionResult<{ granted: boolean }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("students.manage");
+    const res = await grantFreeze(prisma, {
+      actorId: auth.user.id,
+      userId: parseInput(z.string().min(1), userId),
+    });
+    if (!res.ok) throw new ActionError(res.code, "Ученик не найден");
+    revalidateStudent(userId);
+    return { granted: res.granted };
   });
 }
 

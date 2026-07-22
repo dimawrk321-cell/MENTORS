@@ -4,12 +4,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
+  BULK_MAX,
   bulkLinkToLesson,
   bulkPublish,
   bulkSetCategory,
+  bulkSetDraft,
   createCategory,
   createQuestion,
   deleteQuestion,
+  listQuestionIdsForFilter,
   removeQuestionLessonLink,
   searchQuestionsForLink,
   setQuestionStatus,
@@ -174,10 +177,11 @@ export async function deleteQuestionAction(questionId: string): Promise<ActionRe
 // --- Bulk (spec 8.5: массовые операции) ---
 
 const bulkSchema = z.object({
-  questionIds: z.array(idSchema).min(1, "Выбери вопросы").max(500),
+  questionIds: z.array(idSchema).min(1, "Выбери вопросы").max(BULK_MAX),
   op: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("category"), categoryId: idSchema }),
     z.object({ kind: z.literal("publish") }),
+    z.object({ kind: z.literal("draft") }),
     z
       .object({
         kind: z.literal("link"),
@@ -189,6 +193,32 @@ const bulkSchema = z.object({
       .refine(isValidQuestionLinkFlags, QUESTION_LINK_ROLE_ERROR),
   ]),
 });
+
+// select-all-by-filter (spec 13.1/C1): the current filter set, mapped to the service.
+const questionFilterSchema = z.object({
+  q: z.string().max(200).optional(),
+  category: z.string().optional(),
+  type: z.enum(["open", "single", "multi", "tf", "short_text"]).optional(),
+  status: z.enum(["draft", "published"]).optional(),
+  latex: z.boolean().optional(),
+});
+
+export async function questionIdsForFilterAction(
+  input: unknown,
+): Promise<ActionResult<{ ids: string[] }>> {
+  return runAction(async () => {
+    await requireActionPermission("content.manage");
+    const f = parseInput(questionFilterSchema, input);
+    const ids = await listQuestionIdsForFilter(prisma, {
+      q: f.q || undefined,
+      categoryId: f.category || undefined,
+      type: f.type,
+      status: f.status,
+      needsLatex: f.latex,
+    });
+    return { ids };
+  });
+}
 
 export async function bulkQuestionsAction(
   input: unknown,
@@ -215,6 +245,12 @@ export async function bulkQuestionsAction(
         result.skipped > 0
           ? `Опубликовано ${result.published}, пропущено ${result.skipped} (не проходят проверку)`
           : `Опубликовано ${result.published}`;
+    } else if (parsed.op.kind === "draft") {
+      const result = await bulkSetDraft(prisma, {
+        actorId: auth.user.id,
+        questionIds: parsed.questionIds,
+      });
+      message = `В черновик: ${result.updated}`;
     } else {
       const result = await bulkLinkToLesson(prisma, {
         actorId: auth.user.id,

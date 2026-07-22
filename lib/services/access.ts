@@ -1,4 +1,4 @@
-import type { PrismaClient, User } from "@prisma/client";
+import type { Prisma, PrismaClient, User } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
@@ -16,8 +16,9 @@ import { hashPassword } from "@/lib/utils/password";
 import { emitEvent } from "@/lib/services/events";
 import { writeAudit } from "@/lib/services/audit";
 import { revokeSessions } from "@/lib/services/sessions";
-import { pauseStreak, unpauseStreak } from "@/lib/services/streak";
+import { pauseStreak, unpauseStreak, STREAK_FREEZE_CAP } from "@/lib/services/streak";
 import { getTotalXp } from "@/lib/services/xp";
+import { getNumericSetting, OPS_STREAK_FREEZE_CAP_KEY } from "@/lib/services/settings";
 import {
   cancelFutureBookingsForInactiveStudents,
   getMocksCompletedCount,
@@ -385,6 +386,114 @@ export async function extendAccess(
   });
 
   return { ok: true, newAccessUntil };
+}
+
+/** Bulk extend (+30/+90) over a selection (spec 13.1/C5). Reuses extendAccess so
+ * each student keeps its own AccessExtension record + audit (a distinct access
+ * grant, not a reversible status flip). Invited / not-activated students are
+ * skipped and counted. */
+export async function bulkExtendAccess(
+  db: PrismaClient,
+  input: { actorId: string; userIds: string[]; days: number; now?: Date },
+): Promise<{ extended: number; skipped: number }> {
+  let extended = 0;
+  for (const userId of input.userIds) {
+    const res = await extendAccess(db, {
+      actorId: input.actorId,
+      userId,
+      term: { kind: "days", days: input.days },
+      now: input.now,
+    });
+    if (res.ok) extended += 1;
+  }
+  return { extended, skipped: input.userIds.length - extended };
+}
+
+// --- Streak freeze gift (spec 7.7: «Admin может подарить заморозку»; bulk 13.1/C5) ---
+
+/** Raise a student's freeze count by one, never above the cap. Pure over tx. */
+async function incrementFreeze(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  cap: number,
+): Promise<{ granted: boolean; freezes: number }> {
+  const streak = await tx.streak.findUnique({ where: { userId }, select: { freezes: true } });
+  const current = streak?.freezes ?? 0;
+  if (current >= cap) return { granted: false, freezes: current };
+  const freezes = current + 1;
+  await tx.streak.upsert({
+    where: { userId },
+    create: { userId, freezes },
+    update: { freezes },
+  });
+  return { granted: true, freezes };
+}
+
+export type GiftFreezeResult =
+  { ok: true; granted: boolean; freezes: number } | { ok: false; code: "not_found" };
+
+/**
+ * DECISION (spec 7.7): the gifted freeze respects the streak freeze cap
+ * (`ops_streak_freeze_cap`, default 2) — at the cap it is a no-op (granted:false),
+ * so a gift never pushes a student past the normal ceiling.
+ */
+export async function grantFreeze(
+  db: PrismaClient,
+  input: { actorId: string; userId: string },
+): Promise<GiftFreezeResult> {
+  const user = await db.user.findUnique({ where: { id: input.userId }, select: { role: true } });
+  if (!user || user.role !== "student") return { ok: false, code: "not_found" };
+  const cap = await getNumericSetting(db, OPS_STREAK_FREEZE_CAP_KEY, STREAK_FREEZE_CAP, {
+    min: 0,
+    max: 10,
+  });
+  let result: { granted: boolean; freezes: number } = { granted: false, freezes: 0 };
+  await db.$transaction(async (tx) => {
+    result = await incrementFreeze(tx, input.userId, cap);
+    if (result.granted) {
+      await writeAudit(tx, {
+        actorId: input.actorId,
+        action: "streak.freeze_gifted",
+        entityType: "user",
+        entityId: input.userId,
+        before: { freezes: result.freezes - 1 },
+        after: { freezes: result.freezes },
+      });
+    }
+  });
+  return { ok: true, granted: result.granted, freezes: result.freezes };
+}
+
+/** Bulk gift-freeze over a selection (spec 13.1/C5): one audit row with the count. */
+export async function bulkGrantFreeze(
+  db: PrismaClient,
+  input: { actorId: string; userIds: string[] },
+): Promise<{ granted: number; skipped: number }> {
+  const cap = await getNumericSetting(db, OPS_STREAK_FREEZE_CAP_KEY, STREAK_FREEZE_CAP, {
+    min: 0,
+    max: 10,
+  });
+  const students = await db.user.findMany({
+    where: { id: { in: input.userIds }, role: "student" },
+    select: { id: true },
+  });
+  const studentIds = new Set(students.map((s) => s.id));
+  let granted = 0;
+  await db.$transaction(async (tx) => {
+    for (const id of input.userIds) {
+      if (!studentIds.has(id)) continue;
+      const r = await incrementFreeze(tx, id, cap);
+      if (r.granted) granted += 1;
+    }
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "streak.bulk_freeze_gifted",
+      entityType: "user",
+      entityId: "bulk",
+      after: { requested: input.userIds.length, granted },
+    });
+  });
+  return { granted, skipped: input.userIds.length - granted };
 }
 
 // --- Expiry (spec 7.1.5): status flip; scheduled by the stage-9 worker ---

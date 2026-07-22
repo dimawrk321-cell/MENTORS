@@ -17,6 +17,8 @@ export function Checkbox({
         "border-border-strong size-4 shrink-0 rounded-[4px] border bg-transparent",
         "ease-app transition-colors duration-150",
         "data-[state=checked]:border-accent data-[state=checked]:bg-accent data-[state=checked]:text-white",
+        // Tri-state «select all on page» header (spec 13.1/C): indeterminate reads as filled.
+        "data-[state=indeterminate]:border-accent data-[state=indeterminate]:bg-accent data-[state=indeterminate]:text-white",
         "disabled:pointer-events-none disabled:opacity-50",
         className,
       )}

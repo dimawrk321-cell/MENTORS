@@ -516,6 +516,55 @@ export async function publishLessonsInScope(
   return { ok: true, published: valid.length, skipped, courseSlug };
 }
 
+/**
+ * Bulk «в черновик» (spec 13.1/C4): unpublishes every published lesson under a
+ * module or course. Mirror of publishLessonsInScope; keeps publishedAt (a later
+ * republish should not reset the «урок обновлён» clock). One audit entry.
+ */
+export async function unpublishLessonsInScope(
+  db: PrismaClient,
+  input: { actorId: string; scope: BulkPublishScope },
+): Promise<
+  { ok: true; unpublished: number; courseSlug: string } | { ok: false; code: "not_found" }
+> {
+  let courseSlug: string;
+  let where: { status: "published"; moduleId?: string; module?: { courseId: string } };
+  if (input.scope.kind === "module") {
+    const mod = await db.module.findUnique({
+      where: { id: input.scope.moduleId },
+      include: { course: { select: { slug: true } } },
+    });
+    if (!mod) return { ok: false, code: "not_found" };
+    courseSlug = mod.course.slug;
+    where = { status: "published", moduleId: mod.id };
+  } else {
+    const course = await db.course.findUnique({
+      where: { id: input.scope.courseId },
+      select: { slug: true },
+    });
+    if (!course) return { ok: false, code: "not_found" };
+    courseSlug = course.slug;
+    where = { status: "published", module: { courseId: input.scope.courseId } };
+  }
+
+  const published = await db.lesson.findMany({ where, select: { id: true } });
+  const ids = published.map((l) => l.id);
+  if (ids.length > 0) {
+    await db.$transaction(async (tx) => {
+      await tx.lesson.updateMany({ where: { id: { in: ids } }, data: { status: "draft" } });
+      await writeAudit(tx, {
+        actorId: input.actorId,
+        action: "lessons.bulk_unpublished",
+        entityType: input.scope.kind,
+        entityId: input.scope.kind === "module" ? input.scope.moduleId : input.scope.courseId,
+        after: { unpublished: ids.length, lessonIds: ids },
+      });
+    });
+  }
+
+  return { ok: true, unpublished: ids.length, courseSlug };
+}
+
 export async function deleteLesson(
   db: PrismaClient,
   input: { actorId: string; lessonId: string },

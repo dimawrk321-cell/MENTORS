@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { testDb, resetDb, createTestUser } from "./helpers/db";
-import { publishLessonsInScope, isLessonPublishable } from "@/lib/services/content-admin";
+import {
+  publishLessonsInScope,
+  unpublishLessonsInScope,
+  isLessonPublishable,
+} from "@/lib/services/content-admin";
 
 // Bulk «Опубликовать уроки» on a module/course (spec 8.5): only valid draft
 // lessons flip, one audit entry carries the count, re-run is a no-op.
@@ -111,5 +115,72 @@ describe("publishLessonsInScope", () => {
       scope: { kind: "module", moduleId: "nope" },
     });
     expect(res).toEqual({ ok: false, code: "not_found" });
+  });
+});
+
+describe("unpublishLessonsInScope (spec 13.1/C4)", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it("unpublishes all published lessons under a course, audits once with the count", async () => {
+    const { owner, course } = await makeCourse();
+    // Publish everything valid first (l1, l4) — l3 is already published → 3 total.
+    await publishLessonsInScope(testDb, {
+      actorId: owner.id,
+      scope: { kind: "course", courseId: course.id },
+    });
+    expect(await testDb.lesson.count({ where: { status: "published" } })).toBe(3);
+
+    const res = await unpublishLessonsInScope(testDb, {
+      actorId: owner.id,
+      scope: { kind: "course", courseId: course.id },
+    });
+    expect(res).toMatchObject({ ok: true, unpublished: 3 });
+    expect(await testDb.lesson.count({ where: { status: "published" } })).toBe(0);
+
+    const audits = await testDb.auditLog.findMany({
+      where: { action: "lessons.bulk_unpublished" },
+    });
+    expect(audits).toHaveLength(1);
+    expect((audits[0]!.after as { unpublished: number }).unpublished).toBe(3);
+  });
+
+  it("keeps publishedAt so a later republish doesn't reset «урок обновлён»", async () => {
+    const { owner, m1 } = await makeCourse();
+    await publishLessonsInScope(testDb, {
+      actorId: owner.id,
+      scope: { kind: "module", moduleId: m1.id },
+    });
+    const before = await testDb.lesson.findUniqueOrThrow({
+      where: { moduleId_slug: { moduleId: m1.id, slug: "l1" } },
+    });
+    await unpublishLessonsInScope(testDb, {
+      actorId: owner.id,
+      scope: { kind: "module", moduleId: m1.id },
+    });
+    const after = await testDb.lesson.findUniqueOrThrow({
+      where: { moduleId_slug: { moduleId: m1.id, slug: "l1" } },
+    });
+    expect(after.status).toBe("draft");
+    expect(after.publishedAt).toEqual(before.publishedAt); // preserved
+  });
+
+  it("re-run is a no-op with no extra audit", async () => {
+    const { owner, m1 } = await makeCourse();
+    await publishLessonsInScope(testDb, {
+      actorId: owner.id,
+      scope: { kind: "module", moduleId: m1.id },
+    });
+    await unpublishLessonsInScope(testDb, {
+      actorId: owner.id,
+      scope: { kind: "module", moduleId: m1.id },
+    });
+    const again = await unpublishLessonsInScope(testDb, {
+      actorId: owner.id,
+      scope: { kind: "module", moduleId: m1.id },
+    });
+    expect(again).toMatchObject({ ok: true, unpublished: 0 });
+    expect(await testDb.auditLog.count({ where: { action: "lessons.bulk_unpublished" } })).toBe(1);
   });
 });

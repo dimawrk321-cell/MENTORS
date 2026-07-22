@@ -33,10 +33,12 @@ import {
   type QuestionLinkRole,
 } from "@/components/features/question-role-select";
 import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants";
+import { useRowSelection, pageCheckState } from "@/lib/hooks/use-row-selection";
 import {
   bulkQuestionsAction,
   createCategoryAction,
   createQuestionAction,
+  questionIdsForFilterAction,
 } from "@/lib/actions/questions-admin";
 
 export interface BankCategory {
@@ -79,7 +81,8 @@ export function QuestionsBank({
   filters,
 }: QuestionsBankProps) {
   const router = useRouter();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const selection = useRowSelection();
+  const pageIds = rows.map((r) => r.id);
   const [pending, startTransition] = useTransition();
 
   const [newQuestionOpen, setNewQuestionOpen] = useState(false);
@@ -105,12 +108,29 @@ export function QuestionsBank({
     router.push(`/admin/questions${params.size ? `?${params}` : ""}`);
   }
 
-  function toggleRow(id: string): void {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  function togglePage(): void {
+    const allOn = pageIds.length > 0 && pageIds.every((id) => selection.has(id));
+    selection.setMany(pageIds, !allOn);
+  }
+
+  function selectAllByFilter(): void {
+    startTransition(async () => {
+      const result = await questionIdsForFilterAction({
+        q: filters.q || undefined,
+        category: filters.category || undefined,
+        type: filters.type || undefined,
+        status: filters.status || undefined,
+        latex: filters.latex,
+      });
+      if (!result) return;
+      if (result.ok) {
+        selection.replace(result.data.ids);
+        if (result.data.ids.length >= 1000) {
+          toast({ title: "Выбраны первые 1000 по фильтру", variant: "default" });
+        }
+      } else {
+        toast({ title: result.error.message, variant: "danger" });
+      }
     });
   }
 
@@ -118,14 +138,15 @@ export function QuestionsBank({
     op:
       | { kind: "category"; categoryId: string }
       | { kind: "publish" }
+      | { kind: "draft" }
       | { kind: "link"; lessonId: string; isKey: boolean; inQuiz: boolean },
   ): void {
     startTransition(async () => {
-      const result = await bulkQuestionsAction({ questionIds: [...selected], op });
+      const result = await bulkQuestionsAction({ questionIds: [...selection.selected], op });
       if (!result) return;
       if (result.ok) {
         toast({ title: result.data.message, variant: "success" });
-        setSelected(new Set());
+        selection.clear();
         setLinkDialogOpen(false);
         router.refresh();
       } else {
@@ -227,9 +248,14 @@ export function QuestionsBank({
       </div>
 
       {/* Панель массовых операций */}
-      {selected.size > 0 && (
+      {selection.size > 0 && (
         <Card className="flex flex-wrap items-center gap-3 p-3">
-          <span className="text-text-2 text-[13px]">Выбрано: {selected.size}</span>
+          <span className="text-text-2 text-[13px]">Выбрано: {selection.size}</span>
+          {selection.size < total && (
+            <Button variant="ghost" size="sm" loading={pending} onClick={selectAllByFilter}>
+              Выбрать все {total}
+            </Button>
+          )}
           <div className="flex items-center gap-2">
             <Select value={bulkCategoryId || "none"} onValueChange={setBulkCategoryId}>
               <SelectTrigger className="w-48" aria-label="Новая категория">
@@ -270,7 +296,15 @@ export function QuestionsBank({
           >
             Опубликовать
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={pending}
+            onClick={() => runBulk({ kind: "draft" })}
+          >
+            В черновик
+          </Button>
+          <Button variant="ghost" size="sm" onClick={selection.clear}>
             Снять выбор
           </Button>
         </Card>
@@ -290,7 +324,13 @@ export function QuestionsBank({
             <table className="w-full min-w-[760px] text-[14px]">
               <thead>
                 <tr className="border-border text-text-3 border-b text-left text-[12px] tracking-wide uppercase">
-                  <th className="w-10 px-4 py-3" aria-label="Выбор" />
+                  <th className="w-10 px-4 py-3">
+                    <Checkbox
+                      checked={pageCheckState(selection, pageIds)}
+                      onCheckedChange={togglePage}
+                      aria-label="Выбрать все на странице"
+                    />
+                  </th>
                   <th className="px-3 py-3 font-medium">Вопрос</th>
                   <th className="px-3 py-3 font-medium">Категория</th>
                   <th className="px-3 py-3 font-medium">Тип</th>
@@ -307,8 +347,8 @@ export function QuestionsBank({
                   >
                     <td className="px-4 py-2.5">
                       <Checkbox
-                        checked={selected.has(row.id)}
-                        onCheckedChange={() => toggleRow(row.id)}
+                        checked={selection.has(row.id)}
+                        onCheckedChange={() => selection.toggle(row.id)}
                         aria-label="Выбрать вопрос"
                       />
                     </td>
@@ -526,7 +566,7 @@ export function QuestionsBank({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Привязать к уроку</DialogTitle>
-            <DialogDescription>Выбрано вопросов: {selected.size}</DialogDescription>
+            <DialogDescription>Выбрано вопросов: {selection.size}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">

@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
+  bulkSetRecordingStatus,
   deleteRecording,
   getRecordingForView,
   logRecordingOpen,
@@ -118,6 +120,34 @@ export async function setRecordingStatusAction(
     }
     revalidateLibrary(id);
     return undefined;
+  });
+}
+
+const bulkRecordingSchema = z.object({
+  recordingIds: z.array(z.string().min(1)).min(1, "Выбери записи").max(500),
+  status: z.enum(["draft", "published"]),
+});
+
+/** Bulk publish (only 4/4-passing) / draft library records (spec 13.1/C3). */
+export async function bulkRecordingStatusAction(
+  input: unknown,
+): Promise<ActionResult<{ message: string }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(bulkRecordingSchema, input);
+    const res = await bulkSetRecordingStatus(prisma, {
+      actorId: auth.user.id,
+      recordingIds: parsed.recordingIds,
+      status: parsed.status,
+    });
+    revalidatePath("/admin/library");
+    revalidatePath("/library");
+    const verb = parsed.status === "published" ? "Опубликовано" : "В черновик";
+    const skipNote =
+      parsed.status === "published" && res.skipped > 0
+        ? ` · ${res.skipped} пропущено (нет 4/4 или уже опубликованы)`
+        : "";
+    return { message: `${verb}: ${res.updated}${skipNote}` };
   });
 }
 

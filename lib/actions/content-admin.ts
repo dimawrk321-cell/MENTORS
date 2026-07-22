@@ -11,6 +11,7 @@ import {
   deleteLesson,
   deleteModule,
   publishLessonsInScope,
+  unpublishLessonsInScope,
   renameModule,
   reorderSiblings,
   saveLessonContent,
@@ -300,6 +301,20 @@ export async function publishLessonsAction(
     if (!res.ok) failWith(res);
     revalidateContent(res.courseSlug);
     return { published: res.published, skipped: res.skipped };
+  });
+}
+
+/** Bulk-«в черновик» every published lesson under a module/course (spec 13.1/C4). */
+export async function unpublishLessonsAction(
+  input: unknown,
+): Promise<ActionResult<{ unpublished: number }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(publishLessonsScopeSchema, input);
+    const res = await unpublishLessonsInScope(prisma, { actorId: auth.user.id, scope: parsed });
+    if (!res.ok) failWith(res);
+    revalidateContent(res.courseSlug);
+    return { unpublished: res.unpublished };
   });
 }
 

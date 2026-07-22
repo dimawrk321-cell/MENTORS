@@ -292,6 +292,29 @@ export async function setGuideStatus(
   return { ok: true };
 }
 
+/**
+ * Bulk publish/draft (spec 13.1/C2): flips only the guides that need changing
+ * (idempotent), one audit row with the count. Drives selection- and section-wide
+ * bulk from the studio list.
+ */
+export async function bulkSetGuideStatus(
+  db: PrismaClient,
+  input: { actorId: string; guideIds: string[]; status: ContentStatus },
+): Promise<{ updated: number }> {
+  const result = await db.guide.updateMany({
+    where: { id: { in: input.guideIds }, status: { not: input.status } },
+    data: { status: input.status },
+  });
+  await writeAudit(db, {
+    actorId: input.actorId,
+    action: "guide.bulk_status",
+    entityType: "guide",
+    entityId: "bulk",
+    after: { requested: input.guideIds.length, updated: result.count, status: input.status },
+  });
+  return { updated: result.count };
+}
+
 /** Delete — drafts only (spec changelog 8.5: published content is never deleted). */
 export async function deleteGuide(
   db: PrismaClient,

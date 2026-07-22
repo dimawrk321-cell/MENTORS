@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
+  bulkSetGuideStatus,
   createGuide,
   deleteGuide,
   logGuideOpen,
@@ -137,6 +138,29 @@ export async function setGuideStatusAction(
     if (!res.ok) failGuide(res.code);
     revalidateGuides(undefined, guideId);
     return undefined;
+  });
+}
+
+const bulkGuideStatusSchema = z.object({
+  guideIds: z.array(z.string().min(1)).min(1, "Выбери гайды").max(500),
+  status: z.enum(["draft", "published"]),
+});
+
+/** Bulk publish/draft guides by selection or whole section (spec 13.1/C2). */
+export async function bulkGuideStatusAction(
+  input: unknown,
+): Promise<ActionResult<{ message: string }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(bulkGuideStatusSchema, input);
+    const res = await bulkSetGuideStatus(prisma, {
+      actorId: auth.user.id,
+      guideIds: parsed.guideIds,
+      status: parsed.status,
+    });
+    revalidateGuides();
+    const verb = parsed.status === "published" ? "Опубликовано" : "В черновик";
+    return { message: `${verb}: ${res.updated}` };
   });
 }
 
