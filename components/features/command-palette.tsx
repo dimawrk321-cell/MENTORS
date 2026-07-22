@@ -19,6 +19,7 @@ import {
   filterActionsByQuery,
   groupLabel,
   isOpenPaletteHotkey,
+  normalizeGroupType,
   wrapIndex,
 } from "@/lib/palette-logic";
 import { cn } from "@/lib/utils/cn";
@@ -48,7 +49,9 @@ interface ApiResult {
   fuzzy: boolean;
 }
 interface RecentEntry {
-  type: GroupType;
+  // NB: the recent API returns the DB's SINGULAR RecentItemType ("lesson"),
+  // not the plural GroupType — resolved via iconFor()/normalizeGroupType().
+  type: string;
   id: string;
   title: string;
   url: string;
@@ -78,6 +81,17 @@ const GROUP_ICON: Record<GroupType, LucideIcon> = {
   guides: BookMarked,
   recordings: Library,
 };
+
+/**
+ * Icon for a result/recent row. Normalises the type (recent rows are singular,
+ * result groups plural) and ALWAYS returns a defined icon — an unknown type
+ * degrades to the search glyph instead of rendering `undefined` (React #130,
+ * block 0.1). No row-icon lookup can crash the palette again.
+ */
+function iconFor(type: string): LucideIcon {
+  const gt = normalizeGroupType(type);
+  return (gt && GROUP_ICON[gt]) || Search;
+}
 
 export function CommandPalette({ zone }: { zone: "student" | "admin" }) {
   const router = useRouter();
@@ -199,7 +213,7 @@ export function CommandPalette({ zone }: { zone: "student" | "admin" }) {
             snippet: it.snippet || undefined,
             meta: it.meta || undefined,
             url: it.url,
-            icon: GROUP_ICON[g.type],
+            icon: iconFor(g.type),
           })),
         });
       }
@@ -213,7 +227,7 @@ export function CommandPalette({ zone }: { zone: "student" | "admin" }) {
             key: `recent:${r.type}:${r.id}`,
             title: r.title,
             url: r.url,
-            icon: GROUP_ICON[r.type],
+            icon: iconFor(r.type),
           })),
         });
       }

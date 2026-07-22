@@ -5,6 +5,32 @@ import { SEARCH_GROUP_LABEL } from "@/lib/constants";
 
 export type PaletteGroupType = "lessons" | "questions" | "guides" | "recordings";
 
+/**
+ * Normalize a type to the plural PaletteGroupType used by GROUP_ICON.
+ *
+ * Search-result groups arrive plural ("lessons"), but «Недавнее» rows carry the
+ * DB's singular RecentItemType ("lesson"/"guide"/…). The palette used the raw
+ * value to index GROUP_ICON, so a recent row resolved to `undefined` and rendered
+ * `<undefined/>` → React #130 (the crash of walk 13.1 / block 0.1). Returns null
+ * for anything unrecognised so the caller can fall back to a safe default icon
+ * rather than crash.
+ */
+const GROUP_TYPE_ALIASES: Record<string, PaletteGroupType> = {
+  lesson: "lessons",
+  lessons: "lessons",
+  question: "questions",
+  questions: "questions",
+  guide: "guides",
+  guides: "guides",
+  recording: "recordings",
+  recordings: "recordings",
+  library: "recordings",
+};
+
+export function normalizeGroupType(type: string): PaletteGroupType | null {
+  return GROUP_TYPE_ALIASES[type] ?? null;
+}
+
 /** Cmd+K (mac) / Ctrl+K (win/linux) toggles the palette (spec 7.11). */
 export function isOpenPaletteHotkey(e: {
   metaKey: boolean;
