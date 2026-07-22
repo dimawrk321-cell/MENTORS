@@ -79,7 +79,7 @@ interface GuideSectionAccess {
 const HL_START = "";
 const HL_END = "";
 
-const HEADLINE_OPTS =
+export const HEADLINE_OPTS =
   `StartSel=${HL_START},StopSel=${HL_END},` +
   `MaxFragments=2,MaxWords=14,MinWords=5,ShortWord=2,FragmentDelimiter=" … "`;
 

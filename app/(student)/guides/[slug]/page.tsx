@@ -2,14 +2,16 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
-import { getGuideBySlug, isGuideBookmarked } from "@/lib/services/guides";
+import { getGuideBySlug, isGuideBookmarked, listSimilarGuides } from "@/lib/services/guides";
 import { GUIDE_SECTION_LABEL } from "@/lib/constants";
 import { renderLessonContent } from "@/components/blocks/lesson-renderer";
 import { Watermark } from "@/components/features/watermark";
 import { GuideBookmark } from "@/components/features/guide-bookmark";
 import { ReadingSizeControl } from "@/components/features/reading-size-control";
+import { LessonTocSheet } from "@/components/features/lesson-toc";
 import { Badge } from "@/components/ui/badge";
 import { BackButton } from "@/components/ui/back-button";
+import Link from "next/link";
 
 interface GuidePageProps {
   params: Promise<{ slug: string }>;
@@ -35,10 +37,13 @@ export default async function GuidePage({ params }: GuidePageProps) {
   if (guide.section === "resume" && !user.guidesResumeEnabled) notFound();
   if (guide.section === "legend" && !user.guidesLegendEnabled) notFound();
 
-  const [bookmarked, { content }] = await Promise.all([
+  const [bookmarked, rendered, similar] = await Promise.all([
     isGuideBookmarked(prisma, user.id, guide.id),
     renderLessonContent(guide.contentMd),
+    // D6 (spec 13.1): «Похожие гайды» — others in the same section.
+    listSimilarGuides(prisma, { section: guide.section, excludeId: guide.id }),
   ]);
+  const { content, headings } = rendered;
 
   // Hierarchical back target (spec 12.1/C7): promoted sections → their landing page.
   const back =
@@ -57,6 +62,8 @@ export default async function GuidePage({ params }: GuidePageProps) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <Badge>{GUIDE_SECTION_LABEL[guide.section] ?? guide.section}</Badge>
         <div className="flex items-center gap-2">
+          {/* D6 (spec 13.1): auto table of contents from headings (шторка). */}
+          <LessonTocSheet headings={headings} />
           <ReadingSizeControl initial={user.readingFontSize} />
           <GuideBookmark guideId={guide.id} initialBookmarked={bookmarked} />
         </div>
@@ -69,6 +76,26 @@ export default async function GuidePage({ params }: GuidePageProps) {
           {content}
         </div>
       </div>
+
+      {similar.length > 0 && (
+        <section className="border-border mt-10 border-t pt-6">
+          <h2 className="text-text-2 mb-3 text-[13px] font-medium tracking-wide uppercase">
+            Похожие гайды
+          </h2>
+          <ul className="flex flex-col gap-1.5">
+            {similar.map((g) => (
+              <li key={g.id}>
+                <Link
+                  href={`/guides/${g.slug}`}
+                  className="text-text-1 hover:text-accent text-[14px]"
+                >
+                  {g.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </article>
   );
 }

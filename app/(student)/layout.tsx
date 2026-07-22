@@ -11,6 +11,7 @@ import { EmailVerifyBanner } from "@/components/features/email-verify-banner";
 import { OfflineBanner } from "@/components/features/offline-banner";
 import { prisma } from "@/lib/db";
 import { getActiveBannersForUser } from "@/lib/services/announcements";
+import { hasVisibleGuides } from "@/lib/services/guides";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
 
@@ -21,7 +22,14 @@ export default async function StudentLayout({ children }: { children: ReactNode 
   // Layout guard (spec 3): active students only; expired → /expired, mentors+ → /admin.
   const { user, impersonated } = await requireStudentZone();
   // Active banners in this student's segment (spec 8.5).
-  const banners = await getActiveBannersForUser(prisma, user.id);
+  const [banners, guidesEnabled] = await Promise.all([
+    getActiveBannersForUser(prisma, user.id),
+    // D6 (spec 13.1): hide «Справочник» when the student has no reachable guides.
+    hasVisibleGuides(prisma, {
+      resume: user.guidesResumeEnabled,
+      legend: user.guidesLegendEnabled,
+    }),
+  ]);
 
   return (
     <>
@@ -31,6 +39,7 @@ export default async function StudentLayout({ children }: { children: ReactNode 
         <StudentSidebar
           brandName={brandName}
           libraryEnabled={user.libraryEnabled}
+          guidesEnabled={guidesEnabled}
           guidesResumeEnabled={user.guidesResumeEnabled}
           guidesLegendEnabled={user.guidesLegendEnabled}
         />
@@ -63,6 +72,7 @@ export default async function StudentLayout({ children }: { children: ReactNode 
       </div>
       <BottomNav
         libraryEnabled={user.libraryEnabled}
+        guidesEnabled={guidesEnabled}
         guidesResumeEnabled={user.guidesResumeEnabled}
         guidesLegendEnabled={user.guidesLegendEnabled}
         theme={user.theme}

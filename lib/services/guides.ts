@@ -2,8 +2,10 @@ import type { ContentStatus, GuideSection, PrismaClient } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { emitEvent } from "@/lib/services/events";
 import { writeAudit } from "@/lib/services/audit";
+import { HEADLINE_OPTS, renderSnippet } from "@/lib/services/search";
 import { computeReadingMinutes } from "@/lib/utils/markdown";
 import { slugify } from "@/lib/utils/slug";
+import { GUIDE_HUB_SECTIONS } from "@/lib/constants";
 
 // Guides service (spec 7.10): the reference section. No progression, no ticks —
 // just published markdown grouped by section, with per-user bookmarks and a
@@ -56,6 +58,85 @@ export async function searchGuidesByTitle(db: Db, q: string): Promise<GuideNavIt
     select: { id: true, slug: true, section: true, title: true },
     take: 50,
   });
+}
+
+export interface GuideContentHit extends GuideNavItem {
+  /** HTML snippet — only <mark> highlights, cleaned of markdown (see renderSnippet). */
+  snippet: string;
+}
+
+interface GuideSectionAccess {
+  resume: boolean;
+  legend: boolean;
+}
+
+interface GuideHitRow {
+  id: string;
+  slug: string;
+  section: string;
+  title: string;
+  snippet: string;
+}
+
+/**
+ * D6 (spec 13.1): hub search by CONTENT (was title-substring only). Full Postgres
+ * FTS over the guide search_vector (title A + body B) with a cleaned, highlighted
+ * snippet, respecting the per-student resume/legend section gates.
+ */
+export async function searchGuidesByContent(
+  db: Db,
+  q: string,
+  allow: GuideSectionAccess,
+): Promise<GuideContentHit[]> {
+  const query = q.trim();
+  if (!query) return [];
+  const rows = await db.$queryRaw<GuideHitRow[]>`
+    SELECT g.id,
+           g.slug,
+           g.section::text AS section,
+           g.title,
+           ts_headline('russian', g.content_md, query, ${HEADLINE_OPTS}) AS snippet
+    FROM guides g, websearch_to_tsquery('russian', ${query}) query
+    WHERE g.status = 'published' AND g.search_vector @@ query
+      AND (${allow.resume} OR g.section <> 'resume')
+      AND (${allow.legend} OR g.section <> 'legend')
+    ORDER BY ts_rank(g.search_vector, query) DESC, g.id
+    LIMIT 50`;
+  return rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    section: r.section as GuideSection,
+    title: r.title,
+    snippet: renderSnippet(r.snippet),
+  }));
+}
+
+/** D6 (spec 13.1): other published guides in the same section («Похожие гайды»). */
+export async function listSimilarGuides(
+  db: Db,
+  input: { section: GuideSection; excludeId: string; limit?: number },
+): Promise<GuideNavItem[]> {
+  return db.guide.findMany({
+    where: { status: "published", section: input.section, id: { not: input.excludeId } },
+    orderBy: [{ order: "asc" }, { title: "asc" }],
+    select: { id: true, slug: true, section: true, title: true },
+    take: input.limit ?? 5,
+  });
+}
+
+/**
+ * D6 (spec 13.1): does the student have ANY reachable guide? Drives hiding the
+ * «Справочник» nav item when every section they can see is empty. Hub sections
+ * are always visible; resume/legend depend on the per-student flags.
+ */
+export async function hasVisibleGuides(db: Db, access: GuideSectionAccess): Promise<boolean> {
+  const sections: GuideSection[] = [...GUIDE_HUB_SECTIONS];
+  if (access.resume) sections.push("resume");
+  if (access.legend) sections.push("legend");
+  const count = await db.guide.count({
+    where: { status: "published", section: { in: sections } },
+  });
+  return count > 0;
 }
 
 // --- Bookmarks (spec 7.10) ---

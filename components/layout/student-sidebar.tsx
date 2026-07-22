@@ -69,11 +69,14 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
 export function StudentSidebar({
   brandName,
   libraryEnabled,
+  guidesEnabled,
   guidesResumeEnabled,
   guidesLegendEnabled,
 }: {
   brandName: string;
   libraryEnabled: boolean;
+  /** D6 (spec 13.1): false hides «Справочник» when the student has no visible guides. */
+  guidesEnabled: boolean;
   guidesResumeEnabled: boolean;
   guidesLegendEnabled: boolean;
 }) {
@@ -82,7 +85,7 @@ export function StudentSidebar({
   const items: NavItem[] = [
     ...mainItems.slice(0, 5),
     ...(libraryEnabled ? [libraryItem] : []),
-    mainItems[5]!,
+    ...(guidesEnabled ? [mainItems[5]!] : []),
     ...(guidesResumeEnabled ? [resumeItem] : []),
     ...(guidesLegendEnabled ? [legendItem] : []),
   ];

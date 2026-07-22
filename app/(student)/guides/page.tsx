@@ -17,7 +17,8 @@ import { requireStudentZone } from "@/lib/auth/guards";
 import {
   listBookmarkedGuides,
   listPublishedGuides,
-  searchGuidesByTitle,
+  searchGuidesByContent,
+  type GuideContentHit,
   type GuideNavItem,
 } from "@/lib/services/guides";
 import { GUIDE_HUB_SECTIONS, GUIDE_SECTION_LABEL } from "@/lib/constants";
@@ -65,6 +66,32 @@ function GuideRow({ guide }: { guide: GuideNavItem }) {
   );
 }
 
+/** Content-search hit with a highlighted snippet (spec 13.1/D6). */
+function GuideHitRow({ hit }: { hit: GuideContentHit }) {
+  return (
+    <Card interactive className="group relative">
+      <CardContent className="flex flex-col gap-1 p-3.5">
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/guides/${hit.slug}`}
+            className="text-text-1 group-hover:text-accent text-[14px] font-medium after:absolute after:inset-0 after:content-['']"
+          >
+            {hit.title}
+          </Link>
+          <Badge className="ml-auto">{GUIDE_SECTION_LABEL[hit.section] ?? hit.section}</Badge>
+        </div>
+        {hit.snippet && (
+          <p
+            className="text-text-3 [&_mark]:bg-accent/20 [&_mark]:text-text-1 text-[13px] [&_mark]:rounded-[2px] [&_mark]:px-0.5"
+            // Snippet is HTML-escaped with only <mark> revealed (renderSnippet).
+            dangerouslySetInnerHTML={{ __html: hit.snippet }}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Large entry tile for the hub landing (spec 12.2/12.1-fix). */
 function HubCardTile({ card }: { card: HubCard }) {
   const Icon = card.icon;
@@ -98,7 +125,11 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
   const query = q?.trim();
 
   if (query) {
-    const results = await searchGuidesByTitle(prisma, query);
+    // D6 (spec 13.1): search by content (FTS), not just the title.
+    const results = await searchGuidesByContent(prisma, query, {
+      resume: user.guidesResumeEnabled,
+      legend: user.guidesLegendEnabled,
+    });
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-[22px] font-semibold">Поиск: «{query}»</h1>
@@ -107,13 +138,13 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
             <EmptyState
               icon={Search}
               title="Ничего не нашлось"
-              description="По этому запросу гайдов нет. Попробуй другое слово из заголовка."
+              description="По этому запросу гайдов нет. Попробуй другое слово."
             />
           </Card>
         ) : (
           <div className="flex flex-col gap-2">
-            {results.map((guide) => (
-              <GuideRow key={guide.id} guide={guide} />
+            {results.map((hit) => (
+              <GuideHitRow key={hit.id} hit={hit} />
             ))}
           </div>
         )}
@@ -169,6 +200,51 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
   ];
   const hubCards = [...sectionCards, ...flagCards];
 
+  const sectionsBlock =
+    hubCards.length > 0 ? (
+      <section key="sections" className="flex flex-col gap-3">
+        <h2 className="text-[15px] font-semibold">Разделы</h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {hubCards.map((card) => (
+            <HubCardTile key={card.key} card={card} />
+          ))}
+        </div>
+      </section>
+    ) : (
+      // Fresh install before content import — friendly, not a blank page.
+      <Card key="sections">
+        <EmptyState
+          icon={BookMarked}
+          title="Справочник скоро наполнится"
+          description="Здесь появятся гайды по этапам собеседований, вопросам интервьюеру и поиску работы."
+        />
+      </Card>
+    );
+
+  const bookmarksBlock = (
+    <section key="bookmarks" className="flex flex-col gap-3">
+      <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+        <Bookmark size={16} strokeWidth={1.75} aria-hidden="true" />
+        Закладки
+      </h2>
+      {bookmarks.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={BookMarked}
+            title="Пока нет закладок"
+            description="Открой любой гайд и нажми на иконку закладки — он появится здесь."
+          />
+        </Card>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {bookmarks.map((guide) => (
+            <GuideRow key={guide.id} guide={guide} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -179,47 +255,8 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
         </p>
       </div>
 
-      {hubCards.length > 0 ? (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-[15px] font-semibold">Разделы</h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {hubCards.map((card) => (
-              <HubCardTile key={card.key} card={card} />
-            ))}
-          </div>
-        </section>
-      ) : (
-        // Fresh install before content import — friendly, not a blank page.
-        <Card>
-          <EmptyState
-            icon={BookMarked}
-            title="Справочник скоро наполнится"
-            description="Здесь появятся гайды по этапам собеседований, вопросам интервьюеру и поиску работы."
-          />
-        </Card>
-      )}
-
-      <section className="flex flex-col gap-3">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold">
-          <Bookmark size={16} strokeWidth={1.75} aria-hidden="true" />
-          Закладки
-        </h2>
-        {bookmarks.length === 0 ? (
-          <Card>
-            <EmptyState
-              icon={BookMarked}
-              title="Пока нет закладок"
-              description="Открой любой гайд и нажми на иконку закладки — он появится здесь."
-            />
-          </Card>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {bookmarks.map((guide) => (
-              <GuideRow key={guide.id} guide={guide} />
-            ))}
-          </div>
-        )}
-      </section>
+      {/* D6 (spec 13.1): bookmarks lead the hub when the student has them. */}
+      {bookmarks.length > 0 ? [bookmarksBlock, sectionsBlock] : [sectionsBlock, bookmarksBlock]}
     </div>
   );
 }

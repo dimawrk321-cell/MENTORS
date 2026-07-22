@@ -49,11 +49,14 @@ function isActive(pathname: string, href: string): boolean {
 
 export function BottomNav({
   libraryEnabled,
+  guidesEnabled,
   guidesResumeEnabled,
   guidesLegendEnabled,
   theme,
 }: {
   libraryEnabled: boolean;
+  /** D6 (spec 13.1): false hides «Справочник» when the student has no visible guides. */
+  guidesEnabled: boolean;
   guidesResumeEnabled: boolean;
   guidesLegendEnabled: boolean;
   theme: Theme;
@@ -61,7 +64,7 @@ export function BottomNav({
   const pathname = usePathname();
 
   const moreItems: NavItem[] = [
-    guidesItem,
+    ...(guidesEnabled ? [guidesItem] : []),
     ...(guidesResumeEnabled ? [resumeItem] : []),
     ...(guidesLegendEnabled ? [legendItem] : []),
     ...(libraryEnabled ? [libraryItem] : []),
