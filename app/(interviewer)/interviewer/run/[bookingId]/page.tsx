@@ -13,19 +13,15 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RunConducting } from "@/components/features/run-conducting";
 import { RubricForm } from "@/components/features/rubric-form";
+import { BackButton } from "@/components/ui/back-button";
 
 export const metadata: Metadata = {
   title: "Проведение мока",
 };
 
+// D4 (spec 13.1): unified onto BackButton (icon + 44px touch target).
 function BackLink() {
-  return (
-    <p className="text-text-3 text-[13px]">
-      <Link href="/interviewer/bookings" className="hover:text-text-1">
-        ← К броням
-      </Link>
-    </p>
-  );
+  return <BackButton href="/interviewer/bookings" label="К броням" />;
 }
 
 /** /interviewer/run/[bookingId] (spec 7.8/8.4): доступен с −15 мин; проведение →

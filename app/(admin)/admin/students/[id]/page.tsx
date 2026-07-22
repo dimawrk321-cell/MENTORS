@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MonitorSmartphone } from "lucide-react";
+import { MonitorSmartphone } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
 import { hasPermission, isOwner } from "@/lib/auth/permissions";
@@ -18,6 +17,7 @@ import {
 import { daysUntil, formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
 import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
 import { StudentTabs } from "./student-tabs";
+import { BackButton } from "@/components/ui/back-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserStatusBadge } from "@/components/features/user-status-badge";
@@ -76,13 +76,8 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href="/admin/students"
-        className="text-text-3 ease-app hover:text-text-1 flex w-fit items-center gap-1.5 text-[13px] transition-colors duration-150"
-      >
-        <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
-        Ученики
-      </Link>
+      {/* D4 (spec 13.1): hierarchical back, unified onto BackButton (44px touch target). */}
+      <BackButton href="/admin/students" label="Ученики" />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">

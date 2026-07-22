@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check, CircleOff, Trophy, X } from "lucide-react";
+import { Check, CircleOff, Trophy, X } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getCourseView } from "@/lib/services/content";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/services/tests";
 import { parseOptions } from "@/lib/utils/answers";
 import { seededShuffle } from "@/lib/utils/shuffle";
+import { BackButton } from "@/components/ui/back-button";
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,15 +61,8 @@ export default async function TestPage({ params, searchParams }: TestPageProps) 
 
   const overview = await getTestOverview(prisma, { userId: user.id, moduleId: mod.id });
 
-  const backLink = (
-    <Link
-      href={`/courses/${mod.course.slug}`}
-      className="text-text-3 ease-app hover:text-text-1 flex w-fit items-center gap-1.5 text-[13px] transition-colors duration-150"
-    >
-      <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
-      {mod.course.title}
-    </Link>
-  );
+  // D4 (spec 13.1): hierarchical back, unified onto BackButton (44px touch target).
+  const backLink = <BackButton href={`/courses/${mod.course.slug}`} label={mod.course.title} />;
 
   if (!overview || !overview.test.enabled) {
     return (

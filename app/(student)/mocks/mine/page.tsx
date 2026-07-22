@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/back-button";
 
 export const metadata: Metadata = {
   title: "Мои моки",
@@ -61,6 +62,8 @@ export default async function MyMocksPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* D4 (spec 13.1): missing hierarchical back added (/mocks/mine is a child of /mocks). */}
+      <BackButton href="/mocks" label="Моки" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[24px] font-semibold">Мои моки</h1>
         <Button asChild variant="secondary" size="sm">

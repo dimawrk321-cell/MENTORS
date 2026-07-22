@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getCourseView } from "@/lib/services/content";
@@ -12,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ModuleTree, type ModuleTreeModule } from "@/components/features/module-tree";
 import { ModuleAccordion, CourseStickyCta } from "@/components/features/module-accordion";
 import { Linkify } from "@/components/blocks/linkify";
+import { BackButton } from "@/components/ui/back-button";
 
 const GATING_LABEL = {
   strict: "строгий порядок",
@@ -82,13 +82,8 @@ export default async function CoursePage({ params }: CoursePageProps) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link
-          href="/courses"
-          className="text-text-3 ease-app hover:text-text-1 mb-3 flex w-fit items-center gap-1.5 text-[13px] transition-colors duration-150"
-        >
-          <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
-          Обучение
-        </Link>
+        {/* D4 (spec 13.1): hierarchical back, unified onto BackButton (44px touch target). */}
+        <BackButton href="/courses" label="Обучение" className="mb-3" />
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-[24px] font-semibold">{course.title}</h1>
           <Badge>{GATING_LABEL[course.gating]}</Badge>

@@ -105,6 +105,8 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
   if (!type) {
     return (
       <div className="flex flex-col gap-6">
+        {/* D4 (spec 13.1): step 1 back to the mocks hub (was the only step with no back). */}
+        <StepBack href="/mocks" label="Моки" />
         <h1 className="text-[24px] font-semibold">Какой мок бронируем?</h1>
         <div className="grid gap-3 sm:grid-cols-2">
           {(["theory", "legend"] as const).map((t) => (

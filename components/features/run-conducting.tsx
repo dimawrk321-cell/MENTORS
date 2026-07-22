@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Check, ExternalLink } from "lucide-react";
 import type { RunScreenData, RunQuestion } from "@/lib/services/mock-queries";
 import {
@@ -16,6 +15,7 @@ import { cn } from "@/lib/utils/cn";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/back-button";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { toast } from "@/components/ui/toast";
 import {
@@ -332,11 +332,8 @@ export function RunConducting({ data }: { data: RunScreenData }) {
         </DialogContent>
       </Dialog>
 
-      <p className="text-text-3 text-[13px]">
-        <Link href="/interviewer/bookings" className="hover:text-text-1">
-          ← К броням
-        </Link>
-      </p>
+      {/* D4 (spec 13.1): unified onto BackButton (icon + 44px touch target). */}
+      <BackButton href="/interviewer/bookings" label="К броням" />
     </div>
   );
 }
