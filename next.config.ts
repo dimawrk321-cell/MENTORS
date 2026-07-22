@@ -17,7 +17,52 @@ const YANDEX_DISK_FRAME_SRC = [
   "https://*.yandex.net",
 ].join(" ");
 
-const LIBRARY_VIEW_CSP = `frame-src 'self' ${YANDEX_DISK_FRAME_SRC}`;
+// Site-wide CSP (spec 13.2 block 2). Notes on the relaxations:
+// - script-src 'unsafe-inline': Next App Router injects inline bootstrap/RSC
+//   scripts and the anti-FOUC theme script (app/layout.tsx) — nonce plumbing
+//   would require dynamic rendering of every page; accepted for the closed
+//   platform. Dev additionally needs 'unsafe-eval' (react-refresh) and ws:
+//   (HMR websocket) — appended only when NODE_ENV=development.
+// - style-src 'unsafe-inline': Tailwind v4 runtime <style>, KaTeX and Shiki
+//   inline style attributes.
+// - img-src data: blob:: KaTeX data-URIs, upload previews; i.ytimg.com is the
+//   YouTube poster CDN (also used via next/image).
+// - frame-src youtube-nocookie: lesson video embeds (spec 5.3). The recording
+//   viewer additionally needs the Я.Диск range — appended point-wise on
+//   /library/:id only (spec 7.9), the rest of the site keeps the tight list.
+const isDev = process.env.NODE_ENV === "development";
+
+function csp(frameExtra = ""): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://i.ytimg.com",
+    "font-src 'self'",
+    `connect-src 'self'${isDev ? " ws:" : ""}`,
+    `frame-src 'self' https://www.youtube-nocookie.com${frameExtra ? ` ${frameExtra}` : ""}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    // Modern twin of X-Frame-Options: DENY (kept below for older agents).
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+const SECURITY_HEADERS = [
+  // Spec changelog to section 11: the whole platform is closed from
+  // indexing (noindex metadata + this header).
+  { key: "X-Robots-Tag", value: "noindex, nofollow" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  // Only meaningful over TLS (browsers ignore it on http:// responses, so it is
+  // safe to send unconditionally — including local dev).
+  { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+  // No sensor/media APIs anywhere; fullscreen keeps its default ('self' +
+  // delegation via the video iframe allow attribute).
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+];
 
 const nextConfig: NextConfig = {
   // Standalone output for the Docker prod image (dev-stand mini-stage / spec 18):
@@ -38,18 +83,21 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/:path*",
-        headers: [
-          // Spec changelog to section 11: the whole platform is closed from
-          // indexing (noindex metadata + this header).
-          { key: "X-Robots-Tag", value: "noindex, nofollow" },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "Referrer-Policy", value: "strict-origin" },
-        ],
+        headers: SECURITY_HEADERS,
       },
       {
-        // Recording viewer only (spec 7.9): allow the Я.Диск iframe.
-        source: "/library/:id",
-        headers: [{ key: "Content-Security-Policy", value: LIBRARY_VIEW_CSP }],
+        // Everything except /library/<id> — tight frame-src. Multiple CSP
+        // headers on one response INTERSECT, so the two rules must not overlap:
+        // path-to-regexp negative lookahead keeps /library/* out of this rule
+        // (/library itself — no slash after — still matches and gets the tight CSP).
+        source: "/((?!library/).*)",
+        headers: [{ key: "Content-Security-Policy", value: csp() }],
+      },
+      {
+        // Recording viewer only (spec 7.9): the same CSP with the Я.Диск range
+        // appended to frame-src for the embedded player.
+        source: "/library/:id*",
+        headers: [{ key: "Content-Security-Policy", value: csp(YANDEX_DISK_FRAME_SRC) }],
       },
     ];
   },
