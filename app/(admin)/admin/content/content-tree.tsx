@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  AlertTriangle,
   BookCheck,
   ClipboardCheck,
   Eye,
@@ -53,6 +54,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
+import { courseHasPublishedLesson, moduleHasPublishedLesson } from "@/lib/utils/content-status";
 import type { ActionResult } from "@/lib/auth/action-helpers";
 import {
   createCourseAction,
@@ -116,6 +118,25 @@ function StatusBadge({ status }: { status: "draft" | "published" }) {
     <Badge variant="success">опубликован</Badge>
   ) : (
     <Badge variant="warning">черновик</Badge>
+  );
+}
+
+/**
+ * A3 (spec 13.1): warning badge on a PUBLISHED course/module that has no
+ * published lessons — students would open an empty shell. Distinct from the
+ * amber «черновик» (that only shows on drafts; a published node shows the green
+ * «опубликован» instead, so the two never collide).
+ */
+function EmptyPublishWarning({ kind }: { kind: "курс" | "модуль" }) {
+  return (
+    <Badge
+      variant="warning"
+      className="gap-1"
+      title={`Ученики видят пустой ${kind} — нет опубликованных уроков`}
+    >
+      <AlertTriangle size={11} strokeWidth={2} />
+      нет видимых уроков
+    </Badge>
   );
 }
 
@@ -360,6 +381,7 @@ function CourseCard({ course }: { course: TreeCourse }) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [newModuleOpen, setNewModuleOpen] = useState(false);
+  const [publishWarnOpen, setPublishWarnOpen] = useState(false);
   const [form, setForm] = useState({
     title: course.title,
     slug: course.slug,
@@ -383,6 +405,7 @@ function CourseCard({ course }: { course: TreeCourse }) {
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 py-1">
         <h2 className="min-w-0 truncate text-[16px] font-semibold">{course.title}</h2>
         <StatusBadge status={course.status} />
+        {published && !courseHasPublishedLesson(course) && <EmptyPublishWarning kind="курс" />}
         <Badge>{GATING_OPTIONS.find((option) => option.value === course.gating)?.label}</Badge>
         <div className="ml-auto flex items-center gap-0.5">
           <IconAction label="Редактировать курс" onClick={() => setEditOpen(true)}>
@@ -390,7 +413,12 @@ function CourseCard({ course }: { course: TreeCourse }) {
           </IconAction>
           <IconAction
             label={published ? "Снять с публикации" : "Опубликовать курс"}
-            onClick={() =>
+            onClick={() => {
+              // A3: publishing a course with no visible lessons warns first.
+              if (!published && !courseHasPublishedLesson(course)) {
+                setPublishWarnOpen(true);
+                return;
+              }
               act(
                 () => setCourseStatusAction(course.id, published ? "draft" : "published"),
                 () =>
@@ -398,8 +426,8 @@ function CourseCard({ course }: { course: TreeCourse }) {
                     title: published ? "Курс снят с публикации" : "Курс опубликован",
                     variant: "success",
                   }),
-              )
-            }
+              );
+            }}
           >
             {published ? (
               <EyeOff size={14} strokeWidth={1.75} />
@@ -569,6 +597,22 @@ function CourseCard({ course }: { course: TreeCourse }) {
           )
         }
       />
+
+      <ConfirmDialog
+        open={publishWarnOpen}
+        onOpenChange={setPublishWarnOpen}
+        title="Опубликовать пустой курс?"
+        description="Ученики увидят пустой курс — в нём нет ни одного опубликованного урока. Можно опубликовать сейчас и добавить уроки позже."
+        actionLabel="Опубликовать всё равно"
+        pending={pending}
+        onConfirm={() => {
+          setPublishWarnOpen(false);
+          act(
+            () => setCourseStatusAction(course.id, "published"),
+            () => toast({ title: "Курс опубликован", variant: "success" }),
+          );
+        }}
+      />
     </div>
   );
 }
@@ -580,6 +624,7 @@ function ModuleBlock({ module }: { module: TreeModule }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [newLessonOpen, setNewLessonOpen] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
+  const [publishWarnOpen, setPublishWarnOpen] = useState(false);
   const [testForm, setTestForm] = useState({
     poolSize: module.test?.poolSize ?? 12,
     threshold: module.test?.threshold ?? 80,
@@ -594,13 +639,19 @@ function ModuleBlock({ module }: { module: TreeModule }) {
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="min-w-0 truncate text-[14px] font-medium">{module.title}</h3>
           <StatusBadge status={module.status} />
+          {published && !moduleHasPublishedLesson(module) && <EmptyPublishWarning kind="модуль" />}
           <div className="ml-auto flex items-center gap-0.5">
             <IconAction label="Переименовать модуль" onClick={() => setRenameOpen(true)}>
               <Pencil size={13} strokeWidth={1.75} />
             </IconAction>
             <IconAction
               label={published ? "Снять с публикации" : "Опубликовать модуль"}
-              onClick={() =>
+              onClick={() => {
+                // A3: publishing a module with no visible lessons warns first.
+                if (!published && !moduleHasPublishedLesson(module)) {
+                  setPublishWarnOpen(true);
+                  return;
+                }
                 act(
                   () => setModuleStatusAction(module.id, published ? "draft" : "published"),
                   () =>
@@ -608,8 +659,8 @@ function ModuleBlock({ module }: { module: TreeModule }) {
                       title: published ? "Модуль снят с публикации" : "Модуль опубликован",
                       variant: "success",
                     }),
-                )
-              }
+                );
+              }}
             >
               {published ? (
                 <EyeOff size={13} strokeWidth={1.75} />
@@ -728,6 +779,22 @@ function ModuleBlock({ module }: { module: TreeModule }) {
             () => setDeleteOpen(false),
           )
         }
+      />
+
+      <ConfirmDialog
+        open={publishWarnOpen}
+        onOpenChange={setPublishWarnOpen}
+        title="Опубликовать пустой модуль?"
+        description="Ученики увидят пустой модуль — в нём нет ни одного опубликованного урока. Можно опубликовать сейчас и добавить уроки позже."
+        actionLabel="Опубликовать всё равно"
+        pending={pending}
+        onConfirm={() => {
+          setPublishWarnOpen(false);
+          act(
+            () => setModuleStatusAction(module.id, "published"),
+            () => toast({ title: "Модуль опубликован", variant: "success" }),
+          );
+        }}
       />
 
       {/* Настройка модульного теста (spec 8.5) */}

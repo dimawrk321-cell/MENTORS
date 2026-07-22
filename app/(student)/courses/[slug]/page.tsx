@@ -11,6 +11,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ModuleTree, type ModuleTreeModule } from "@/components/features/module-tree";
 import { ModuleAccordion, CourseStickyCta } from "@/components/features/module-accordion";
+import { Linkify } from "@/components/blocks/linkify";
 
 const GATING_LABEL = {
   strict: "строгий порядок",
@@ -93,7 +94,9 @@ export default async function CoursePage({ params }: CoursePageProps) {
           <Badge>{GATING_LABEL[course.gating]}</Badge>
         </div>
         {course.description && (
-          <p className="text-text-2 mt-1.5 max-w-[64ch] text-[14px]">{course.description}</p>
+          <p className="text-text-2 mt-1.5 max-w-[64ch] text-[14px]">
+            <Linkify text={course.description} />
+          </p>
         )}
         <div className="mt-4 flex max-w-sm items-center gap-3">
           <ProgressBar value={progressPct} aria-label={`Прогресс курса: ${progressPct}%`} />

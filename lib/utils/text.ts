@@ -13,5 +13,11 @@ export function stripMarkdown(markdown: string, maxLength = 160): string {
     .replace(/\s+/g, " ")
     .trim();
   if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength).trimEnd()}…`;
+  // Back up to the last word boundary so titles/teasers are not cut mid-word
+  // (spec 13.1/A2). Only when a space sits reasonably close to the limit —
+  // otherwise a single very long token would collapse the teaser to nothing.
+  const slice = text.slice(0, maxLength);
+  const lastSpace = slice.lastIndexOf(" ");
+  const cut = lastSpace > maxLength * 0.6 ? slice.slice(0, lastSpace) : slice;
+  return `${cut.trimEnd()}…`;
 }

@@ -55,6 +55,13 @@ export interface SearchInput {
    */
   guidesResumeEnabled?: boolean;
   guidesLegendEnabled?: boolean;
+  /**
+   * A1 (spec 13.1): the viewer is staff (mentor/admin/owner). Result URLs are
+   * then rewritten to content-studio destinations (editor/preview) instead of
+   * the student pages — otherwise a staff click lands on `requireStudentZone`,
+   * which bounces to the Пульт. Default false (student).
+   */
+  staff?: boolean;
 }
 
 /** Sections the caller may see — filters resume/legend out of guide search (C3). */
@@ -84,9 +91,66 @@ function escapeHtml(input: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Escape everything, then reveal only the <mark> highlights. */
+// A2 (spec 13.1): ts_headline highlights over the RAW markdown column, so the
+// fragment carries literal markup (**жирный**, [текст](url), link guts, #, :::
+// directives). Strip it to plain text BEFORE escaping, keeping the STX/ETX
+// highlight sentinels (/) intact. Char classes below explicitly
+// balance the sentinels afterwards, so a URL removal can't orphan a <mark>.
+function stripSnippetMarkdown(text: string): string {
+  return (
+    text
+      // images → keep alt text; markdown links → keep visible text
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      // orphan link guts left by a truncated fragment: `](url`, `(https://…`, bare URLs
+      .replace(/\]\((?:https?:\/\/)?[^)\s]*\)?/g, "")
+      .replace(/\((?:https?:\/\/)[^)\s]*\)?/g, "")
+      .replace(/https?:\/\/[^\s]+/g, "")
+      .replace(/[[\]]/g, "")
+      // directive fences (:::callout{...}, :::video, closing :::)
+      .replace(/:::\s*[a-z]+(?:\{[^}]*\})?/gi, "")
+      .replace(/:::/g, "")
+      // heading / blockquote markers at a fragment or line start
+      .replace(/(^|[\n\s…])#{1,6}\s+/g, "$1")
+      .replace(/(^|\n)>\s?/g, "$1")
+      // emphasis / inline-code / strike / table pipes
+      .replace(/\*\*|\*|`|~~|~|\|/g, "")
+      // collapse the whitespace the removals leave behind
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\s+([.,;:!?…])/g, "$1")
+      .trim()
+  );
+}
+
+// Drop unmatched highlight sentinels so renderSnippet always yields balanced
+// <mark></mark> (a strip can orphan a sentinel that sat inside a removed URL).
+// ts_headline never nests highlights, so a single open/close depth is enough.
+function balanceSentinels(s: string): string {
+  const out: string[] = [];
+  let openIdx = -1;
+  for (const ch of s) {
+    if (ch === HL_START) {
+      if (openIdx === -1) {
+        out.push(ch);
+        openIdx = out.length - 1;
+      }
+    } else if (ch === HL_END) {
+      if (openIdx !== -1) {
+        out.push(ch);
+        openIdx = -1;
+      }
+    } else {
+      out.push(ch);
+    }
+  }
+  if (openIdx !== -1) out.splice(openIdx, 1);
+  return out.join("");
+}
+
+/** Strip markdown to clean text, then escape and reveal only the <mark> highlights. */
 export function renderSnippet(raw: string): string {
-  return escapeHtml(raw).split(HL_START).join("<mark>").split(HL_END).join("</mark>");
+  const clean = balanceSentinels(stripSnippetMarkdown(raw));
+  return escapeHtml(clean).split(HL_START).join("<mark>").split(HL_END).join("</mark>");
 }
 
 // --- FTS queries (one per entity; each rides its GIN index) ---
@@ -315,6 +379,25 @@ function packGroups(parts: Record<SearchGroupType, SearchItem[]>): SearchGroup[]
     .filter((group) => group.items.length > 0);
 }
 
+// A1 (spec 13.1): where a staff click on a result should land. Keyed by group +
+// item.id (SearchItem.id is the entity id for every group, incl. guides whose
+// student url uses the slug). Questions have no preview route → the editor;
+// recordings have no per-record staff route → the library table.
+const STAFF_URL: Record<SearchGroupType, (id: string) => string> = {
+  lessons: (id) => `/admin/content/lessons/${id}`,
+  questions: (id) => `/admin/questions/${id}`,
+  guides: (id) => `/admin/content/guides/${id}`,
+  recordings: () => `/admin/library`,
+};
+
+/** Rewrite student result URLs to their content-studio equivalents for staff. */
+function withStaffUrls(groups: SearchGroup[]): SearchGroup[] {
+  return groups.map((group) => ({
+    type: group.type,
+    items: group.items.map((item) => ({ ...item, url: STAFF_URL[group.type](item.id) })),
+  }));
+}
+
 /**
  * Run the search (spec 7.11). FTS first; if every group is empty, fall back to a
  * trgm title search flagged `fuzzy`. Recordings are included only when the
@@ -336,7 +419,9 @@ export async function search(db: PrismaClient, input: SearchInput): Promise<Sear
   ]);
 
   const groups = packGroups({ lessons, questions, guides, recordings });
-  if (groups.length > 0) return { groups, fuzzy: false };
+  if (groups.length > 0) {
+    return { groups: input.staff ? withStaffUrls(groups) : groups, fuzzy: false };
+  }
 
   // FTS empty → typo-tolerant fallback. One tx so SET LOCAL scopes the
   // word_similarity threshold to these queries (spec «similarity > 0.3»);
@@ -349,5 +434,6 @@ export async function search(db: PrismaClient, input: SearchInput): Promise<Sear
     const fr = input.libraryEnabled ? await fuzzyRecordings(tx, q) : [];
     return packGroups({ lessons: fl, questions: fq, guides: fg, recordings: fr });
   });
-  return { groups: fuzzyGroups, fuzzy: fuzzyGroups.length > 0 };
+  const staffFuzzy = input.staff ? withStaffUrls(fuzzyGroups) : fuzzyGroups;
+  return { groups: staffFuzzy, fuzzy: staffFuzzy.length > 0 };
 }

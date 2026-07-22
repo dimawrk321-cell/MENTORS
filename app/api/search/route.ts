@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getAuth } from "@/lib/auth/guards";
+import { isStaff } from "@/lib/auth/permissions";
 import { isApiRateLimited } from "@/lib/utils/rate-limit";
 import { emitEvent } from "@/lib/services/events";
 import { search } from "@/lib/services/search";
@@ -40,6 +41,9 @@ export async function GET(request: NextRequest) {
     libraryEnabled: auth.user.libraryEnabled,
     guidesResumeEnabled: auth.user.guidesResumeEnabled,
     guidesLegendEnabled: auth.user.guidesLegendEnabled,
+    // A1 (spec 13.1): staff results route into the content studio, not the
+    // student pages (an impersonating admin is auth.user=student → not staff).
+    staff: isStaff(auth.user),
   });
   const tookMs = Math.round(performance.now() - startedAt);
 

@@ -180,6 +180,103 @@ describe("search — snippet escaping (spec 7.11)", () => {
   });
 });
 
+describe("search — clean snippets, no raw markdown (spec 13.1/A2)", () => {
+  const MARK = "";
+  const UNMARK = "";
+
+  it("strips bold markers but keeps the highlight and text", () => {
+    const html = renderSnippet(`**жирный** и ${MARK}хит${UNMARK} слово`);
+    expect(html).toContain("<mark>хит</mark>");
+    expect(html).toContain("жирный");
+    expect(html).not.toContain("**");
+  });
+
+  it("reduces a markdown link to its visible text, dropping the URL guts", () => {
+    const html = renderSnippet("см. [читать статью](https://example.com/foo?a=1) дальше");
+    expect(html).toContain("читать статью");
+    expect(html).not.toContain("](");
+    expect(html).not.toContain("https://");
+  });
+
+  it("cleans orphan link guts left by a truncated fragment", () => {
+    const html = renderSnippet(`важное ${MARK}слово${UNMARK} ](https://exa`);
+    expect(html).not.toContain("](");
+    expect(html).not.toContain("https");
+    expect(html).toContain("<mark>слово</mark>");
+  });
+
+  it("drops directive fences", () => {
+    const html = renderSnippet(':::callout{type="tip"} полезный совет :::');
+    expect(html).not.toContain(":::");
+    expect(html).not.toContain("callout");
+    expect(html).toContain("полезный совет");
+  });
+
+  it("keeps <mark> balanced even when a highlight sat inside a removed URL", () => {
+    // ts_headline highlighted inside the URL; the link removal orphans the open
+    // sentinel, which balanceSentinels drops → no dangling <mark>.
+    const html = renderSnippet(`[${MARK}текст](http://x)`);
+    const open = (html.match(/<mark>/g) ?? []).length;
+    const close = (html.match(/<\/mark>/g) ?? []).length;
+    expect(open).toBe(close);
+    expect(html).toContain("текст");
+  });
+
+  it("produces a clean snippet from real lesson content with callout/link/bold", async () => {
+    await resetDb();
+    lessonSeq = 0;
+    await seedContainers();
+    await makeLesson(
+      "Регуляризация в бою",
+      "Тема урока: **дропаут** описан в [статье](https://example.com/dropout) подробно; " +
+        ':::callout{type="tip"} не забывай про дропаут в проде :::',
+    );
+    const res = await search(testDb, { q: "дропаут", libraryEnabled: true });
+    const snippet = res.groups.find((g) => g.type === "lessons")!.items[0]!.snippet;
+    expect(snippet).toContain("<mark>");
+    expect(snippet).not.toContain("**");
+    expect(snippet).not.toContain("](");
+    expect(snippet).not.toContain(":::");
+    expect(snippet).not.toContain("https://");
+  });
+});
+
+describe("search — role-aware result routing (spec 13.1/A1)", () => {
+  beforeEach(async () => {
+    await resetDb();
+    lessonSeq = 0;
+    await seedContainers();
+  });
+
+  it("routes staff results into the content studio (editor/preview)", async () => {
+    const lesson = await makeLesson("Трансформеры", "внимание в трансформерах");
+    const question = await makeQuestion("Что такое трансформер?", "архитектура внимания");
+    const guide = await makeGuide("Трансформеры-гайд", "про трансформеры");
+    const recording = await makeRecording("Мок про трансформеры");
+    const res = await search(testDb, { q: "трансформер", libraryEnabled: true, staff: true });
+    const url = (t: string) => res.groups.find((g) => g.type === t)!.items[0]!.url;
+    expect(url("lessons")).toBe(`/admin/content/lessons/${lesson.id}`);
+    expect(url("questions")).toBe(`/admin/questions/${question.id}`);
+    // Guides route by id (not slug) into the studio editor.
+    expect(url("guides")).toBe(`/admin/content/guides/${guide.id}`);
+    // Recordings have no per-record staff route → the library table.
+    expect(url("recordings")).toBe("/admin/library");
+    void recording;
+  });
+
+  it("keeps student-facing URLs for students (default)", async () => {
+    const lesson = await makeLesson("Трансформеры", "внимание в трансформерах");
+    const guide = await makeGuide("Трансформеры-гайд", "про трансформеры");
+    const res = await search(testDb, { q: "трансформер", libraryEnabled: true });
+    expect(res.groups.find((g) => g.type === "lessons")!.items[0]!.url).toBe(
+      `/lessons/${lesson.id}`,
+    );
+    expect(res.groups.find((g) => g.type === "guides")!.items[0]!.url).toBe(
+      `/guides/${guide.slug}`,
+    );
+  });
+});
+
 describe("search — trgm typo fallback (spec 7.11)", () => {
   beforeEach(async () => {
     await resetDb();
