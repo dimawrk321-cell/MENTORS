@@ -496,6 +496,52 @@ export async function bulkGrantFreeze(
   return { granted, skipped: input.userIds.length - granted };
 }
 
+// --- Change email (spec 13.1/D2): owner-only; sessions survive ---
+
+export type ChangeEmailResult =
+  { ok: true; email: string } | { ok: false; code: "not_found" | "exists" };
+
+/**
+ * Change a student's login email (spec 13.1/D2). Email is the login identifier,
+ * so this is owner-only at the action layer. Resets email_verified_at (the new
+ * address is unverified) and audits before/after; active sessions are NOT
+ * touched (a rename does not log the student out). Caller passes an already
+ * trim+lowercased email (emailSchema); uniqueness is pre-checked for a clean
+ * message rather than a raw P2002.
+ */
+export async function changeStudentEmail(
+  db: PrismaClient,
+  input: { actorId: string; userId: string; email: string },
+): Promise<ChangeEmailResult> {
+  const user = await db.user.findUnique({
+    where: { id: input.userId },
+    select: { id: true, role: true, email: true },
+  });
+  if (!user || user.role !== "student") return { ok: false, code: "not_found" };
+  if (user.email === input.email) return { ok: true, email: user.email }; // no-op
+  const existing = await db.user.findUnique({
+    where: { email: input.email },
+    select: { id: true },
+  });
+  if (existing) return { ok: false, code: "exists" };
+
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: { email: input.email, emailVerifiedAt: null },
+    });
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "email.changed",
+      entityType: "user",
+      entityId: user.id,
+      before: { email: user.email },
+      after: { email: input.email },
+    });
+  });
+  return { ok: true, email: input.email };
+}
+
 // --- Expiry (spec 7.1.5): status flip; scheduled by the stage-9 worker ---
 
 /**

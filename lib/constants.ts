@@ -4,6 +4,15 @@
 // day-granular by schema (spec 6), calendar months would not fit the field.
 export const EXTENSION_MONTH_DAYS = 30;
 
+/**
+ * D1 (spec 13.1): the soft email-verification UI is @dormant. The mechanism stays
+ * fully live — the code is still issued on activation (acceptInvite), the verify
+ * service/actions and `users.email_verified_at` column all remain — but no student
+ * or admin UI surfaces it (no banner, no profile form/badge, no admin badge) until
+ * public self-registration exists. Flip to `true` to re-enable every gated site.
+ */
+export const EMAIL_VERIFICATION_UI_ENABLED = false;
+
 // --- Walk 12.4: team & granular permissions (spec 2/8.5) ---
 
 /**

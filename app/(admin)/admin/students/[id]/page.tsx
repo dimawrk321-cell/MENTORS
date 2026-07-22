@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, MonitorSmartphone } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
-import { hasPermission } from "@/lib/auth/permissions";
+import { hasPermission, isOwner } from "@/lib/auth/permissions";
 import { getStudentDetail } from "@/lib/services/access";
 import { getRecentSentNotifications } from "@/lib/services/notifications";
 import {
@@ -16,6 +16,7 @@ import {
   getStudentTestAttempts,
 } from "@/lib/services/admin-student";
 import { daysUntil, formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
+import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
 import { StudentTabs } from "./student-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +31,7 @@ import {
   UnblockButton,
 } from "./student-controls";
 import { ResetPasswordDialog } from "./reset-password-dialog";
+import { ChangeEmailDialog } from "./change-email-dialog";
 
 export const metadata: Metadata = {
   title: "Карточка ученика",
@@ -96,12 +98,14 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
           </div>
           <div>
             <h1 className="flex flex-wrap items-center gap-2.5 text-[24px] font-semibold">
-              {user.name}
+              {user.name || user.email}
               <UserStatusBadge status={user.status} />
-              {/* Soft email verification (spec 12.1/C8). */}
-              {!user.emailVerifiedAt && (user.status === "active" || user.status === "expired") && (
-                <Badge variant="warning">почта не подтверждена</Badge>
-              )}
+              {/* D1 (spec 13.1): email-verification badge is @dormant. */}
+              {EMAIL_VERIFICATION_UI_ENABLED &&
+                !user.emailVerifiedAt &&
+                (user.status === "active" || user.status === "expired") && (
+                  <Badge variant="warning">почта не подтверждена</Badge>
+                )}
             </h1>
             <p className="text-text-3 text-[13px]">{user.email}</p>
           </div>
@@ -167,6 +171,8 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
               {user.passwordHash && user.status !== "blocked" && (
                 <ResetPasswordDialog userId={user.id} email={user.email} />
               )}
+              {/* D2 (spec 13.1): change email is owner-only (a login-identity change). */}
+              {isOwner(viewer) && <ChangeEmailDialog userId={user.id} currentEmail={user.email} />}
             </div>
           )}
         </CardContent>

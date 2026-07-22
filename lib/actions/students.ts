@@ -11,6 +11,7 @@ import {
   buildCredentialMessage,
   bulkExtendAccess,
   bulkGrantFreeze,
+  changeStudentEmail,
   createStudentCredentials,
   extendAccess,
   grantFreeze,
@@ -36,11 +37,13 @@ import {
   ActionError,
   getRequestContext,
   parseInput,
+  requireActionOwner,
   requireActionPermission,
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
 import {
+  emailSchema,
   extendAccessSchema,
   issueCredentialsSchema,
   sectionAccessSchema,
@@ -194,6 +197,33 @@ export async function bulkGiftFreezeAction(
     revalidateStudent();
     const skipNote = res.skipped > 0 ? ` · ${res.skipped} пропущено (максимум)` : "";
     return { message: `Заморозка подарена: ${res.granted}${skipNote}` };
+  });
+}
+
+// --- Change email (spec 13.1/D2): owner-only ---
+
+const changeEmailSchema = z.object({ userId: z.string().min(1), email: emailSchema });
+
+/** Change a student's login email — owner-only (spec 13.1/D2). Sessions survive. */
+export async function changeStudentEmailAction(
+  input: unknown,
+): Promise<ActionResult<{ email: string }>> {
+  return runAction(async () => {
+    const auth = await requireActionOwner();
+    const parsed = parseInput(changeEmailSchema, input);
+    const res = await changeStudentEmail(prisma, {
+      actorId: auth.user.id,
+      userId: parsed.userId,
+      email: parsed.email,
+    });
+    if (!res.ok) {
+      throw new ActionError(
+        res.code,
+        res.code === "exists" ? "Этот email уже занят другим аккаунтом" : "Ученик не найден",
+      );
+    }
+    revalidateStudent(parsed.userId);
+    return { email: res.email };
   });
 }
 

@@ -12,6 +12,7 @@ import { OfflineBanner } from "@/components/features/offline-banner";
 import { prisma } from "@/lib/db";
 import { getActiveBannersForUser } from "@/lib/services/announcements";
 import { requireStudentZone } from "@/lib/auth/guards";
+import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
 
 // Spec 0.5: brand name only from env, never hardcoded.
 const brandName = process.env.BRAND_NAME ?? "MENTORS";
@@ -51,7 +52,10 @@ export default async function StudentLayout({ children }: { children: ReactNode 
           {/* B4 (spec 13.1): 5xl→6xl (1024→1152px) so wide displays gain density
               instead of growing side gutters; reading pages self-cap at 680px. */}
           <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10">
-            {!user.emailVerifiedAt && user.status === "active" && <EmailVerifyBanner />}
+            {/* D1 (spec 13.1): email verification is @dormant — the banner is gated off. */}
+            {EMAIL_VERIFICATION_UI_ENABLED && !user.emailVerifiedAt && user.status === "active" && (
+              <EmailVerifyBanner />
+            )}
             <AnnouncementBanners banners={banners} />
             {children}
           </div>

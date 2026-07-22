@@ -6,6 +6,7 @@ import { formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
 import { getUserAchievements } from "@/lib/services/achievements";
 import { getNotificationMatrix } from "@/lib/services/notifications";
 import { logoutAction } from "@/lib/actions/auth";
+import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,15 +49,16 @@ export default async function ProfilePage() {
             <span className="text-text-2">Email</span>
             <span className="inline-flex items-center gap-2">
               {user.email}
-              {user.emailVerifiedAt ? (
-                <Badge variant="success">подтверждён</Badge>
-              ) : (
-                <Badge variant="warning">не подтверждён</Badge>
-              )}
+              {/* D1 (spec 13.1): verification badge/form are @dormant. */}
+              {EMAIL_VERIFICATION_UI_ENABLED &&
+                (user.emailVerifiedAt ? (
+                  <Badge variant="success">подтверждён</Badge>
+                ) : (
+                  <Badge variant="warning">не подтверждён</Badge>
+                ))}
             </span>
           </div>
-          {/* Soft email verification (spec 12.1/C8) — code form while unverified. */}
-          {!user.emailVerifiedAt && (
+          {EMAIL_VERIFICATION_UI_ENABLED && !user.emailVerifiedAt && (
             <div className="border-border mt-1 border-t pt-3">
               <p className="text-text-3 mb-2 text-[13px]">
                 Введи код из письма, чтобы подтвердить почту. Это не обязательно.
