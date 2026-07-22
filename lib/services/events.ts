@@ -5,6 +5,7 @@ import { getTotalXp, levelForXp, planXp, xpEventRow } from "@/lib/services/xp";
 import { getXpMap } from "@/lib/services/settings";
 import { countStreakDay, STREAK_QUALIFYING_EVENTS } from "@/lib/services/streak";
 import { evaluateAchievements, type EarnedAchievement } from "@/lib/services/achievements";
+import { applyLevelUp } from "@/lib/services/level-progression";
 
 export type { EarnedAchievement };
 
@@ -147,7 +148,11 @@ export async function emitEvent(
     const totalAfter = await getTotalXp(db, userId);
     const after = levelForXp(totalAfter).level;
     const before = levelForXp(totalAfter - xpAwarded).level;
-    if (after > before) leveledUpTo = after;
+    if (after > before) {
+      leveledUpTo = after;
+      // D7 (spec 13.1): milestone freeze bonuses (5/10/15/20) + «Новый титул».
+      await applyLevelUp(db, { userId, before, after, day });
+    }
   }
 
   return {

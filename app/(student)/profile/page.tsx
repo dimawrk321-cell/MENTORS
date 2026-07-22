@@ -5,12 +5,16 @@ import { requireStudentZone } from "@/lib/auth/guards";
 import { formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
 import { getUserAchievements } from "@/lib/services/achievements";
 import { getNotificationMatrix } from "@/lib/services/notifications";
+import { getXpSummary } from "@/lib/services/xp";
+import { getLevelTitles } from "@/lib/services/settings";
+import { titleForLevel } from "@/lib/services/level-titles";
 import { logoutAction } from "@/lib/actions/auth";
 import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AchievementIcon } from "@/components/features/achievement-icon";
+import { LevelBadge } from "@/components/features/level-badge";
 import { ChangePasswordForm } from "./change-password-form";
 import { NameForm } from "./name-form";
 import { EmailVerifyForm } from "./email-verify-form";
@@ -26,15 +30,27 @@ export const metadata: Metadata = {
 // stages 2/5/9 per plan.
 export default async function ProfilePage() {
   const { user, session } = await requireStudentZone();
-  const [devices, achievements, notificationMatrix] = await Promise.all([
+  const [devices, achievements, notificationMatrix, xp, levelTitles] = await Promise.all([
     prisma.device.findMany({ where: { userId: user.id }, orderBy: { lastSeenAt: "desc" } }),
     getUserAchievements(prisma, user.id),
     getNotificationMatrix(prisma, user.id),
+    getXpSummary(prisma, user.id),
+    getLevelTitles(prisma),
   ]);
+  // D7 (spec 13.1): level + editable title in the profile header.
+  const levelTitle = titleForLevel(xp.level.level, levelTitles);
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-[24px] font-semibold">Профиль</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[24px] font-semibold">Профиль</h1>
+        <LevelBadge
+          level={xp.level.level}
+          progress={xp.level.progress}
+          toNext={xp.level.toNext}
+          title={levelTitle}
+        />
+      </div>
 
       <Card>
         <CardHeader>

@@ -52,6 +52,8 @@ export const NOTIFICATION_TYPES = {
   mock_booked: { inapp: ALWAYS_ON, email: ALWAYS_ON },
   streak_risk: { inapp: OFF_OPT_IN, email: OFF },
   freeze_used: { inapp: ALWAYS_ON, email: OFF },
+  // D7 (spec 13.1): «Новый титул» — celebratory in-app, always on, no email.
+  level_title: { inapp: ALWAYS_ON, email: OFF },
   lesson_new: { inapp: ON_TOGGLEABLE, email: OFF },
   lesson_updated: { inapp: ON_TOGGLEABLE, email: OFF },
   access_14d: { inapp: ALWAYS_ON, email: ALWAYS_ON },
@@ -87,6 +89,7 @@ export interface NotifyPayloads {
   waitlist_offer: Record<string, never>;
   streak_risk: { current: number };
   freeze_used: { freezesLeft: number };
+  level_title: { level: number; title: string };
   lesson_new: { lessonId: string; lessonTitle: string; courseTitle: string };
   lesson_updated: { lessonId: string; lessonTitle: string };
   access_14d: { untilText: string; contact: string };
@@ -203,6 +206,14 @@ export function renderNotification<T extends NotificationType>(
       return {
         title: "Серия спасена заморозкой",
         body: `Осталось ${p.freezesLeft} ${left}.`,
+        url: "/",
+      };
+    }
+    case "level_title": {
+      const p = payload as NotifyPayloads["level_title"];
+      return {
+        title: "Новый титул",
+        body: `Уровень ${p.level}: «${p.title}».`,
         url: "/",
       };
     }

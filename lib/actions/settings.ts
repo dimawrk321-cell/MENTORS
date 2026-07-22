@@ -1,17 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
   ACCESS_RULES_SETTING_KEY,
   DEFAULT_COURSE_GATING_SETTING_KEY,
   DEFAULT_DIGEST_TIME_KEY,
+  LEVEL_TITLES_SETTING_KEY,
   OPS_BOUNDS,
   RENEWAL_CONTACT_SETTING_KEY,
   XP_MAP_SETTING_KEY,
   upsertAppSetting,
 } from "@/lib/services/settings";
 import { DEFAULT_XP_MAP, XP_MAP_KEYS, type XpMapKey } from "@/lib/services/xp";
+import { parseLevelTitles } from "@/lib/services/level-titles";
 import {
   ActionError,
   parseInput,
@@ -116,6 +119,33 @@ export async function updateOperationalSettingsAction(
     });
 
     revalidatePath("/admin/settings");
+    return undefined;
+  });
+}
+
+/**
+ * Титулы уровней (spec 13.1/D7): редактируемая линейка, одна строка «уровень
+ * титул» в текстовом поле. Хранится JSON-массивом в app_settings; читается на лету
+ * через getLevelTitles. Аудит + сброс кеша — в upsertAppSetting.
+ */
+export async function updateLevelTitlesAction(input: unknown): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionPermission("settings.manage");
+    const parsed = parseInput(z.object({ text: z.string().max(10_000) }), input);
+    const ladder = parseLevelTitles(parsed.text);
+    if (ladder.length === 0) {
+      throw new ActionError("validation", "Нужна хотя бы одна строка «уровень титул»");
+    }
+    await upsertAppSetting(prisma, {
+      actorId: auth.user.id,
+      key: LEVEL_TITLES_SETTING_KEY,
+      // Plain-object array for Prisma's InputJsonValue (a named interface isn't
+      // structurally a JSON object without an index signature).
+      value: ladder.map((e) => ({ minLevel: e.minLevel, title: e.title })),
+    });
+    revalidatePath("/admin/settings");
+    // Dashboard/profile titles refresh.
+    revalidatePath("/", "layout");
     return undefined;
   });
 }

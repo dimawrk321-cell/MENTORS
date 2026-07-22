@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
-import { updateOperationalSettingsAction, updateXpMapAction } from "@/lib/actions/settings";
+import {
+  updateLevelTitlesAction,
+  updateOperationalSettingsAction,
+  updateXpMapAction,
+} from "@/lib/actions/settings";
+import { serializeLevelTitles, DEFAULT_LEVEL_TITLES } from "@/lib/services/level-titles";
 
 // Editable XP map (spec 12.1/C1) + operational rules (C2). Both persist to
 // app_settings; services read them live. «Сбросить к умолчанию» fills the code
@@ -84,6 +89,60 @@ export function XpMapForm({ items }: { items: XpItem[] }) {
           Сохранить
         </Button>
         <Button type="button" variant="ghost" onClick={resetDefaults}>
+          Сбросить к умолчанию
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Level-title ladder editor (spec 13.1/D7): one «<уровень> <титул>» per line. */
+export function LevelTitlesForm({ initialText }: { initialText: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [text, setText] = useState(initialText);
+
+  const submit = () => {
+    start(async () => {
+      const res = await updateLevelTitlesAction({ text });
+      if (res.ok) {
+        toast({ title: "Титулы сохранены", variant: "success" });
+        router.refresh();
+      } else {
+        toast({ title: res.error.message, variant: "danger" });
+      }
+    });
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+      className="flex flex-col gap-4"
+    >
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        spellCheck={false}
+        aria-label="Титулы уровней"
+        rows={12}
+        className="rounded-control border-border text-text-1 ease-app hover:border-border-strong w-full border bg-transparent p-3 font-mono text-[13px] leading-relaxed transition-colors duration-150"
+      />
+      <p className="text-text-3 text-[12px]">
+        По строке на титул: сначала минимальный уровень, затем название (например «5 Оверфиттер»).
+        Титул действует до следующего порога.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" loading={pending}>
+          Сохранить
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setText(serializeLevelTitles(DEFAULT_LEVEL_TITLES))}
+        >
           Сбросить к умолчанию
         </Button>
       </div>

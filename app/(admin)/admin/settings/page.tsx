@@ -15,16 +15,18 @@ import {
   OPS_STRIKE_LOCK_DAYS_KEY,
   RENEWAL_CONTACT_SETTING_KEY,
   getDefaultDigestTime,
+  getLevelTitles,
   getNumericSetting,
   getXpMap,
 } from "@/lib/services/settings";
+import { serializeLevelTitles } from "@/lib/services/level-titles";
 import { DEFAULT_XP_MAP, XP_MAP_KEYS, XP_MAP_LABEL } from "@/lib/services/xp";
 import { STREAK_FREEZE_CAP, STREAK_FREEZE_EVERY, STREAK_MILESTONES } from "@/lib/services/streak";
 import { SRS_NEW_PER_DAY } from "@/lib/services/srs";
 import { CANCEL_FREE_HOURS, SLOT_HORIZON_DAYS, STRIKE_LOCK_DAYS } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SettingsForm } from "./settings-form";
-import { OperationalSettingsForm, XpMapForm } from "./settings-editors";
+import { LevelTitlesForm, OperationalSettingsForm, XpMapForm } from "./settings-editors";
 
 export const metadata: Metadata = { title: "Настройки" };
 
@@ -97,6 +99,7 @@ export default async function SettingsPage() {
     }),
   );
   const digestValue = await getDefaultDigestTime(prisma);
+  const levelTitlesText = serializeLevelTitles(await getLevelTitles(prisma));
 
   return (
     <div className="flex flex-col gap-6">
@@ -151,6 +154,19 @@ export default async function SettingsPage() {
             items={opsItems}
             digest={{ value: digestValue, default: "09:00" }}
           />
+        </CardContent>
+      </Card>
+
+      {/* Титулы уровней (spec 13.1/D7) — редактируемая линейка */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Титулы уровней</CardTitle>
+          <CardDescription>
+            Показываются в шапке дашборда и профиле. Бонус-вехи 5/10/15/20 дают +1 заморозку.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <LevelTitlesForm initialText={levelTitlesText} />
         </CardContent>
       </Card>
 

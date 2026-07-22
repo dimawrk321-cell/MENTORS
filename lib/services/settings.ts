@@ -10,6 +10,11 @@ import {
   type XpMap,
   type XpMapKey,
 } from "@/lib/services/xp";
+import {
+  DEFAULT_LEVEL_TITLES,
+  parseStoredLevelTitles,
+  type LevelTitle,
+} from "@/lib/services/level-titles";
 
 // app_settings reader with the 60s cache required by spec 6 («читаются
 // сервисами с кешем 60с»). Writes happen in seed/admin (stage 10) and are rare.
@@ -151,6 +156,14 @@ const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export async function getDefaultDigestTime(db: Db = prisma): Promise<string> {
   const raw = await readRawSetting(db, DEFAULT_DIGEST_TIME_KEY);
   return typeof raw === "string" && HHMM_RE.test(raw) ? raw : "09:00";
+}
+
+export const LEVEL_TITLES_SETTING_KEY = "level_titles";
+
+/** Editable level-title ladder (spec 13.1/D7): app_settings → code default. */
+export async function getLevelTitles(db: Db = prisma): Promise<LevelTitle[]> {
+  const raw = await readRawSetting(db, LEVEL_TITLES_SETTING_KEY);
+  return parseStoredLevelTitles(raw) ?? DEFAULT_LEVEL_TITLES;
 }
 
 /**

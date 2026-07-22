@@ -10,6 +10,8 @@ import { getActiveBooking } from "@/lib/services/mocks";
 import { listCoursesForStudent } from "@/lib/services/content";
 import { getStreakState, processStreakDay } from "@/lib/services/streak";
 import { getTodayXp, getXpSummary } from "@/lib/services/xp";
+import { getLevelTitles } from "@/lib/services/settings";
+import { titleForLevel } from "@/lib/services/level-titles";
 import { formatDateOnlyRu, formatDateTimeRu, localDateStr, pluralRu } from "@/lib/utils/dates";
 import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +49,7 @@ export default async function DashboardPage() {
   // Ленивый «конец дня»: разрешаем пропущенные учебные дни до первого чтения серии.
   await processStreakDay(prisma, { userId: user.id, now });
 
-  const [streak, xp, todayXp, cont, queue, courses, lagging, heatmap, activeMock] =
+  const [streak, xp, todayXp, cont, queue, courses, lagging, heatmap, activeMock, levelTitles] =
     await Promise.all([
       getStreakState(prisma, {
         userId: user.id,
@@ -63,9 +65,11 @@ export default async function DashboardPage() {
       getLaggingCategories(prisma, { userId: user.id, now }),
       loadHeatmap(user.id, user.timezone, todayStr),
       getActiveBooking(prisma, user.id, now),
+      getLevelTitles(prisma),
     ]);
   const nextReview =
     queue.total === 0 ? await getNextReviewDate(prisma, { userId: user.id, now }) : null;
+  const levelTitle = titleForLevel(xp.level.level, levelTitles);
 
   const firstName = user.name.split(" ")[0] || user.name;
 
@@ -81,6 +85,7 @@ export default async function DashboardPage() {
               level={xp.level.level}
               progress={xp.level.progress}
               toNext={xp.level.toNext}
+              title={levelTitle}
             />
           </div>
         </div>
