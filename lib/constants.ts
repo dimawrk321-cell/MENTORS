@@ -70,6 +70,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { href: "/admin/content", label: "Контент", permission: "content.manage" },
   { href: "/admin/questions", label: "Вопросы", permission: "content.manage" },
   { href: "/admin/students", label: "Ученики", permission: "students.view" },
+  { href: "/admin/security", label: "Безопасность", permission: "students.manage" },
   { href: "/admin/interviews", label: "Интервью", permission: "interviews.manage" },
   { href: "/admin/library", label: "Библиотека", permission: "content.manage" },
   { href: "/admin/analytics", label: "Аналитика", permission: "analytics.view" },

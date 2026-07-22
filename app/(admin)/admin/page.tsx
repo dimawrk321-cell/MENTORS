@@ -87,6 +87,7 @@ export default async function AdminDashboardPage() {
           title="Security-флаги"
           count={flags.securityFlags.length}
           empty="Открытых флагов нет."
+          href="/admin/security"
         >
           {flags.securityFlags.map((f) => (
             <FlagRowLink key={f.id} href={f.href} label={f.label}>
@@ -198,6 +199,7 @@ function FlagWidget({
   count,
   empty,
   className,
+  href,
   children,
 }: {
   icon: typeof AlertTriangle;
@@ -205,6 +207,8 @@ function FlagWidget({
   count: number;
   empty: string;
   className?: string;
+  /** D3 (spec 13.1): makes the widget title a link to a full page (e.g. /admin/security). */
+  href?: string;
   children: ReactNode;
 }) {
   return (
@@ -216,7 +220,13 @@ function FlagWidget({
           className={count > 0 ? "text-warning" : "text-text-3"}
           aria-hidden="true"
         />
-        <h2 className="flex-1 text-[14px] font-semibold">{title}</h2>
+        {href ? (
+          <Link href={href} className="hover:text-accent flex-1 text-[14px] font-semibold">
+            {title}
+          </Link>
+        ) : (
+          <h2 className="flex-1 text-[14px] font-semibold">{title}</h2>
+        )}
       </div>
       {count === 0 ? (
         <p className="text-text-3 text-[13px]">{empty}</p>
