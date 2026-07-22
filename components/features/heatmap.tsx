@@ -6,7 +6,9 @@ import type { HeatmapData } from "@/lib/services/dashboard";
 // 5 градаций зелёного, tooltip с датой и действиями (дата + уроки/карточки/тесты).
 // Нативный title-tooltip — без JS, доступно и производительно на 182 ячейках.
 
-const LEVEL_OPACITY = [0, 22, 42, 66, 100]; // % от --success по градации
+// B2 (spec 13.1): floor raised 22→28 so the lowest activity clears the new
+// empty-cell tint (--heat-empty) in both themes; ramp still tops at 100%.
+const LEVEL_OPACITY = [0, 28, 48, 70, 100]; // % от --success по градации
 
 function cellTitle(cell: HeatmapData["columns"][number][number]): string {
   const date = formatDateOnlyRu(dateOnlyUtc(cell.date));
@@ -47,10 +49,11 @@ export function Heatmap({ data, mobileWeeks = 12 }: HeatmapProps) {
                   cell.future
                     ? { opacity: 0 }
                     : cell.level === 0
-                      ? undefined
-                      : {
+                      ? // B2: empty day is a faint tile (distinct from the page bg), keeps its border.
+                        { background: "var(--heat-empty)" }
+                      : // Filled: green ramp; keep the hairline border so cells read as tiles in light.
+                        {
                           background: `color-mix(in srgb, var(--success) ${LEVEL_OPACITY[cell.level]}%, transparent)`,
-                          borderColor: "transparent",
                         }
                 }
               />

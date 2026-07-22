@@ -182,7 +182,7 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
       {hubCards.length > 0 ? (
         <section className="flex flex-col gap-3">
           <h2 className="text-[15px] font-semibold">Разделы</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {hubCards.map((card) => (
               <HubCardTile key={card.key} card={card} />
             ))}

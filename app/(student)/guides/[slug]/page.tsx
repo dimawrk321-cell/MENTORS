@@ -48,8 +48,11 @@ export default async function GuidePage({ params }: GuidePageProps) {
         ? { href: "/legend", label: "Легенда" }
         : { href: "/guides", label: "Справочник" };
 
+  // B4 (spec 13.1): left-align the reading column in the guides content column
+  // (drop mx-auto) — centering a 680px article inside the rail-offset column made
+  // it look «съехавшим в центр» vs every other page.
   return (
-    <article className="mx-auto w-full max-w-[680px]">
+    <article className="w-full max-w-[680px]">
       <BackButton href={back.href} label={back.label} className="mb-3" />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <Badge>{GUIDE_SECTION_LABEL[guide.section] ?? guide.section}</Badge>

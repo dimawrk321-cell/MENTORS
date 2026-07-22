@@ -195,7 +195,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           />
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {recordings.map((recording) => (
             <RecordingCard key={recording.id} recording={recording} />
           ))}

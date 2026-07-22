@@ -38,7 +38,7 @@ export default async function CoursesPage() {
           />
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {courses.map((course) => (
             <Link key={course.id} href={`/courses/${course.slug}`} className="group">
               <Card interactive className="h-full">

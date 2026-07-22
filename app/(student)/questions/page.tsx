@@ -226,7 +226,7 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
         </Card>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {catalog.items.map((question) => {
               const colorIndex =
                 question.category.parent?.colorIndex ?? question.category.colorIndex;

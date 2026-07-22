@@ -182,7 +182,7 @@ export default async function DashboardPage() {
       {courses.length > 0 && (
         <section className="flex flex-col gap-3">
           <h2 className="text-[18px] font-semibold">Курсы</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {courses.map((course) => (
               <Link key={course.id} href={`/courses/${course.slug}`} className="group">
                 <Card interactive>

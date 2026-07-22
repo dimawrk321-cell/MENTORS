@@ -48,7 +48,9 @@ export default async function StudentLayout({ children }: { children: ReactNode 
               <SearchTriggerIcon className="-mr-2 md:hidden" />
             </div>
           </header>
-          <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">
+          {/* B4 (spec 13.1): 5xl→6xl (1024→1152px) so wide displays gain density
+              instead of growing side gutters; reading pages self-cap at 680px. */}
+          <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10">
             {!user.emailVerifiedAt && user.status === "active" && <EmailVerifyBanner />}
             <AnnouncementBanners banners={banners} />
             {children}

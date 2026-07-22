@@ -30,6 +30,13 @@
      components can apply it uniformly in both themes ("none" in dark). */
   --shadow-surface-2: none;
 
+  /* B2 (spec 13.1): heatmap empty-cell fill — a faint tile distinct from the page
+     background so «no activity» reads as a cell, not a gap. Light override below. */
+  --heat-empty: rgb(255 255 255 / 0.05);
+  /* B3 (spec 13.1): inline `code` fill — surface-2 equals surface-1 in light, so
+     inline code needs its own subtle tint to separate from prose (light override). */
+  --code-inline-bg: var(--surface-2);
+
   /* geometry */
   --radius-card: 14px;
   --radius-control: 10px;
@@ -83,6 +90,12 @@
   --danger: #c03e3e;
   --gradient-accent: linear-gradient(135deg, #5e6ad2, #8b5cf6);
   --shadow-surface-2: 0 1px 3px rgb(0 0 0 / 0.06);
+
+  /* B2 (spec 13.1): light heatmap empty cell — a warm light gray above the #fafaf9
+     page so empty days are visibly a tile (GitHub-style). */
+  --heat-empty: #e9ebee;
+  /* B3 (spec 13.1): inline code on white needs a real fill (surface-2 = #fff). */
+  --code-inline-bg: #f1f2f4;
 
   /* Light theme: darken category-label text 45% toward black — the pure colour on
      its own 12% tint over white fails 4.5 (2.3–2.9); this clears it (spec 12.2). */

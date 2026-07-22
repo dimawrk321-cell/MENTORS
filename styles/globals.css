@@ -247,7 +247,9 @@
   .lesson-prose code:not(pre code) {
     border: 1px solid var(--border);
     border-radius: 5px;
-    background: var(--surface-2);
+    /* B3 (spec 13.1): own tint — surface-2 == surface-1 (#fff) in light, which left
+       inline code invisible except for its hairline. Dark keeps surface-2. */
+    background: var(--code-inline-bg);
     padding: 0.1em 0.35em;
     font-size: 0.84em;
   }
@@ -306,7 +308,9 @@
     font-weight: var(--shiki-light-font-weight) !important;
   }
   html[data-theme="light"] pre.shiki {
-    background-color: var(--surface-1) !important;
+    /* B3 (spec 13.1): a light-gray panel so code blocks read as distinct on the
+       near-white page (surface-1 is #fff, all but invisible against #fafaf9). */
+    background-color: #f4f5f6 !important;
   }
 
   /* Optional line numbers: fence meta `numbers` (spec 5.3). */
