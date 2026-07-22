@@ -18,13 +18,17 @@ function groupBySection(guides: GuideNavItem[]): Array<{ section: string; items:
 }
 
 function GuideLink({ item, active }: { item: GuideNavItem; active: boolean }) {
+  // 0.2 (walk 13.2): guide links read as interactive (text-1 + hover background),
+  // clearly distinct from the muted small-caps section headers; active is filled.
   return (
     <Link
       href={`/guides/${item.slug}`}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "rounded-control ease-app block px-3 py-1.5 text-[13px] transition-colors duration-150",
-        active ? "bg-surface-2 text-text-1" : "text-text-2 hover:text-text-1",
+        "rounded-control ease-app block px-3 py-1.5 text-[13.5px] transition-colors duration-150",
+        active
+          ? "bg-surface-2 text-text-1 font-medium"
+          : "text-text-1 hover:bg-surface-2 hover:text-text-1",
       )}
     >
       {item.title}
@@ -68,10 +72,12 @@ export function GuidesNav({ guides }: { guides: GuideNavItem[] }) {
       <aside className="hidden w-60 shrink-0 flex-col gap-3 lg:flex">
         {search}
         {bookmarksLink}
-        <nav aria-label="Разделы справочника" className="flex flex-col gap-3">
+        {/* 0.2 (walk 13.2): секции — приглушённый мелкий капс с увеличенным
+            верхним отступом (gap-5), чтобы явно отделиться от ссылок-гайдов. */}
+        <nav aria-label="Разделы справочника" className="flex flex-col gap-5">
           {groups.map((group) => (
             <div key={group.section}>
-              <div className="text-text-3 px-3 pb-1 text-[11px] font-medium tracking-wide uppercase">
+              <div className="text-text-3 px-3 pb-1.5 text-[11px] font-semibold tracking-wider uppercase">
                 {GUIDE_SECTION_LABEL[group.section] ?? group.section}
               </div>
               <div className="flex flex-col">

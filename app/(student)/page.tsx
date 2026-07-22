@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   title: "Главная",
 };
 
-const HEATMAP_WEEKS = 26; // desktop; мобильный показывает последние 12 (spec 5.3)
+const HEATMAP_WEEKS = 20; // desktop; мобильный показывает последние 12 (spec 5.3, 0.3)
 
 /** Heatmap кешируется 60с на пользователя в сутки (spec 12: агрегаты дашборда). */
 function loadHeatmap(userId: string, timezone: string, todayStr: string) {
