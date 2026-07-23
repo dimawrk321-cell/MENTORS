@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 // Spec 0.5: brand name only from env, never hardcoded.
-const brandName = process.env.BRAND_NAME ?? "MENTORS";
+const brandName = process.env.BRAND_NAME ?? "PRIME";
 
 /**
  * Chromeless authenticated-account zone (walk 12.4/A2): the forced set-password

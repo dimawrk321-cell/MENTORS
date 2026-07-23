@@ -16,7 +16,7 @@ import { requireStudentZone } from "@/lib/auth/guards";
 import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
 
 // Spec 0.5: brand name only from env, never hardcoded.
-const brandName = process.env.BRAND_NAME ?? "MENTORS";
+const brandName = process.env.BRAND_NAME ?? "PRIME";
 
 export default async function StudentLayout({ children }: { children: ReactNode }) {
   // Layout guard (spec 3): active students only; expired → /expired, mentors+ → /admin.

@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 // PWA manifest (spec 13.2 block 1): name from env (spec 0.5 — no hardcoded
 // brand), graphite background + accent indigo from the design tokens (5.1).
 export default function manifest(): MetadataRoute.Manifest {
-  const brand = process.env.BRAND_NAME ?? "MENTORS";
+  const brand = process.env.BRAND_NAME ?? "PRIME";
   return {
     name: brand,
     short_name: brand,

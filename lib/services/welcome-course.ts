@@ -3,7 +3,7 @@ import { computeReadingMinutes } from "@/lib/utils/markdown";
 import type { Track } from "@prisma/client";
 
 // Idempotent seed (walk 12.3 P4; part of the main seed since walk 13.2 block 4)
-// of the intro course «Знакомство с MENTORS». The COURSE is created as `draft`
+// of the intro course «Знакомство с PRIME». The COURSE is created as `draft`
 // (gating free, one module) — the owner reads it through and publishes; its
 // module + lessons are already `published`, so a single course-level publish
 // reveals the whole thing. The welcome course id is prepended to every track's
@@ -17,7 +17,7 @@ import type { Track } from "@prisma/client";
 // parameter (repo test/seed convention) — never the singleton.
 
 const COURSE_SLUG = "welcome";
-const COURSE_TITLE = "Знакомство с MENTORS";
+const COURSE_TITLE = "Знакомство с PRIME";
 const COURSE_DESCRIPTION =
   "Короткий вводный курс: как устроены обучение, тренажёр, моки и справочник — и как выжать из платформы максимум.";
 const MODULE_TITLE = "Первое знакомство";

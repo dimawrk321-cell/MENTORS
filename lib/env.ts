@@ -2,7 +2,7 @@
 
 export const env = {
   get brandName(): string {
-    return process.env.BRAND_NAME ?? "MENTORS";
+    return process.env.BRAND_NAME ?? "PRIME";
   },
   get platformUrl(): string {
     return process.env.PLATFORM_URL ?? "http://localhost:3000";

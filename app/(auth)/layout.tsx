@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 // Spec 0.5: brand name only from env, never hardcoded.
-const brandName = process.env.BRAND_NAME ?? "MENTORS";
+const brandName = process.env.BRAND_NAME ?? "PRIME";
 
 /** Public auth zone (spec 8.1): centered single card, logo above. */
 export default function AuthLayout({ children }: { children: ReactNode }) {

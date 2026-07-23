@@ -4,7 +4,7 @@ import { NotificationBell } from "@/components/features/notification-bell";
 import { requireInterviewerZone } from "@/lib/auth/guards";
 
 // Spec 0.5: brand name only from env, never hardcoded.
-const brandName = process.env.BRAND_NAME ?? "MENTORS";
+const brandName = process.env.BRAND_NAME ?? "PRIME";
 
 export default async function InterviewerLayout({ children }: { children: ReactNode }) {
   // Layout guard (spec 3): is_interviewer flag only (spec 2).

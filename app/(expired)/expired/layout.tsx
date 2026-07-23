@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 // Spec 0.5: brand name only from env, never hardcoded.
-const brandName = process.env.BRAND_NAME ?? "MENTORS";
+const brandName = process.env.BRAND_NAME ?? "PRIME";
 
 // DECISION: /expired lives in its own route group (spec 4 lists it under
 // (student)): the student layout unconditionally redirects expired accounts to

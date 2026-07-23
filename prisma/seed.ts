@@ -11,7 +11,7 @@ import { ROOM_URL_PLACEHOLDER } from "../lib/constants";
 
 // Final seed (spec 18, walk 13.2 block 4): a fresh DB boots a working platform
 // first time. Owner (+ optional mentors) from SEED_* env; tracks ds/nlp/ai with
-// the welcome course «Знакомство с MENTORS» pinned first (draft — owner reads
+// the welcome course «Знакомство с PRIME» pinned first (draft — owner reads
 // through and publishes); the 8 root question categories (spec 7.4); the
 // achievements catalog (7.7); rubric templates (7.8); app_settings defaults
 // (access-rules text, level-title ladder). Real content arrives via the

@@ -6,7 +6,7 @@ import "@/styles/globals.css";
 import { Toaster } from "@/components/ui/toast";
 
 // Spec 0.5: brand name only from env, never hardcoded.
-const brandName = process.env.BRAND_NAME ?? "MENTORS";
+const brandName = process.env.BRAND_NAME ?? "PRIME";
 const platformUrl = process.env.PLATFORM_URL ?? "http://localhost:3000";
 // og slogan (spec 13.2 block 1) — the share-preview one-liner.
 const SLOGAN = "Платформа подготовки к ML-собеседованиям";

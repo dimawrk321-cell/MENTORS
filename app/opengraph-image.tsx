@@ -20,7 +20,7 @@ function font(file: string): Buffer {
 }
 
 export default function OgImage() {
-  const brand = process.env.BRAND_NAME ?? "MENTORS";
+  const brand = process.env.BRAND_NAME ?? "PRIME";
   return new ImageResponse(
     (
       <div
