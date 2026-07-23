@@ -140,6 +140,98 @@ function heatmapLevel(total: number): number {
   return 4;
 }
 
+// --- Activity bar (walk 13.4 block 2): last 28 days, intensity by day XP ---
+//
+// Replaces the GitHub-style Heatmap on the dashboard (owner: сетка перегружена).
+// getHeatmapData + the Heatmap component are kept for stats V1; the bar is the
+// dashboard surface. One row of ACTIVITY_BAR_DAYS cells, old (left) → today (right),
+// green intensity by the day's XP (empty + 4 steps). Tooltip data: date · XP · actions.
+
+export const ACTIVITY_BAR_DAYS = 28;
+
+export interface ActivityBarCell {
+  /** User-local date "YYYY-MM-DD". */
+  date: string;
+  xp: number;
+  /** Activity events that day (same set as the heatmap): lessons + cards + tests. */
+  actions: number;
+  /** 0..4 — green intensity by XP (0 = empty). */
+  level: number;
+  isToday: boolean;
+}
+
+export interface ActivityBarData {
+  /** ACTIVITY_BAR_DAYS cells, oldest first (left) → today last (right). */
+  days: ActivityBarCell[];
+  timezone: string;
+}
+
+/**
+ * XP → intensity step (empty + 4 steps, spec 13.4 block 2.1). DECISION: thresholds
+ * tuned to typical daily XP (queue.completed=30, lesson=20, quiz≈5·n, test=100+,
+ * mock=200) so a light day reads 1–2, a normal day 3, a heavy day 4. Independent of
+ * the per-user daily goal — the bar shows raw effort, not goal attainment.
+ */
+function activityLevel(xp: number): number {
+  if (xp <= 0) return 0;
+  if (xp < 20) return 1;
+  if (xp < 50) return 2;
+  if (xp < 100) return 3;
+  return 4;
+}
+
+/**
+ * Activity bar data (spec 13.4 block 2): the last N local days with per-day XP
+ * (xp_events.day, stamped in the user's TZ) and action count (analytics_events,
+ * grouped by the user's local date — same activity set as the heatmap). The last
+ * cell is always today in the user's TZ. Cached at the page level (unstable_cache).
+ */
+export async function getActivityBarData(
+  db: Db,
+  input: { userId: string; now: Date; timezone: string; days?: number },
+): Promise<ActivityBarData> {
+  const days = input.days ?? ACTIVITY_BAR_DAYS;
+  const todayStr = localDateStr(input.now, input.timezone);
+  const startStr = localDateStr(addDays(dateOnlyUtc(todayStr), -(days - 1)), "UTC");
+
+  // XP per day: xp_events.day is a date-only stamp already in the user's TZ (7.7).
+  const xpEvents = await db.xpEvent.findMany({
+    where: { userId: input.userId, day: { gte: dateOnlyUtc(startStr) } },
+    select: { day: true, amount: true },
+  });
+  const xpByDay = new Map<string, number>();
+  for (const event of xpEvents) {
+    const day = localDateStr(event.day, "UTC");
+    xpByDay.set(day, (xpByDay.get(day) ?? 0) + event.amount);
+  }
+
+  // Actions per day: activity events grouped by the user's local date.
+  const { start } = zonedDayUtcRange(startStr, input.timezone);
+  const events = await db.analyticsEvent.findMany({
+    where: { userId: input.userId, type: { in: HEATMAP_TYPES }, createdAt: { gte: start } },
+    select: { createdAt: true },
+  });
+  const actionsByDay = new Map<string, number>();
+  for (const event of events) {
+    const day = localDateStr(event.createdAt, input.timezone);
+    actionsByDay.set(day, (actionsByDay.get(day) ?? 0) + 1);
+  }
+
+  const cells: ActivityBarCell[] = [];
+  for (let i = 0; i < days; i += 1) {
+    const date = localDateStr(addDays(dateOnlyUtc(startStr), i), "UTC");
+    const xp = xpByDay.get(date) ?? 0;
+    cells.push({
+      date,
+      xp,
+      actions: actionsByDay.get(date) ?? 0,
+      level: activityLevel(xp),
+      isToday: date === todayStr,
+    });
+  }
+  return { days: cells, timezone: input.timezone };
+}
+
 /**
  * Активность по дням для Heatmap из analytics_events (spec 5.3/8.3). Группировка
  * по локальной дате пользователя; сетка выровнена по неделям (Пн–Вс), последняя

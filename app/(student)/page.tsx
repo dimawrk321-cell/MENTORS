@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
-import { BookMarked, ChevronRight, Layers, Play, Sparkles } from "lucide-react";
+import { BookMarked, ChevronRight, Layers, Play, Snowflake, Sparkles } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
-import { getContinueTarget, getHeatmapData } from "@/lib/services/dashboard";
+import { getActivityBarData, getContinueTarget } from "@/lib/services/dashboard";
 import { getSrsQueue, getNextReviewDate, getLaggingCategories } from "@/lib/services/srs";
 import { getActiveBooking } from "@/lib/services/mocks";
 import { listCoursesForStudent } from "@/lib/services/content";
@@ -22,20 +22,18 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { GoalRing } from "@/components/features/goal-ring";
 import { StreakBadge } from "@/components/features/streak-badge";
 import { LevelBadge } from "@/components/features/level-badge";
-import { Heatmap } from "@/components/features/heatmap";
+import { ActivityBar } from "@/components/features/activity-bar";
 import { MockBookingCard } from "@/components/features/mock-booking-card";
 
 export const metadata: Metadata = {
   title: "Главная",
 };
 
-const HEATMAP_WEEKS = 20; // desktop; мобильный показывает последние 12 (spec 5.3, 0.3)
-
-/** Heatmap кешируется 60с на пользователя в сутки (spec 12: агрегаты дашборда). */
-function loadHeatmap(userId: string, timezone: string, todayStr: string) {
+/** Полоса активности кешируется 60с на пользователя в сутки (spec 12: агрегаты). */
+function loadActivityBar(userId: string, timezone: string, todayStr: string) {
   return unstable_cache(
-    () => getHeatmapData(prisma, { userId, now: new Date(), timezone, weeks: HEATMAP_WEEKS }),
-    ["dashboard-heatmap", userId, todayStr],
+    () => getActivityBarData(prisma, { userId, now: new Date(), timezone }),
+    ["dashboard-activity-bar", userId, todayStr],
     { revalidate: 60 },
   )();
 }
@@ -49,7 +47,7 @@ export default async function DashboardPage() {
   // Ленивый «конец дня»: разрешаем пропущенные учебные дни до первого чтения серии.
   await processStreakDay(prisma, { userId: user.id, now });
 
-  const [streak, xp, todayXp, cont, queue, courses, lagging, heatmap, activeMock, levelTitles] =
+  const [streak, xp, todayXp, cont, queue, courses, lagging, activityBar, activeMock, levelTitles] =
     await Promise.all([
       getStreakState(prisma, {
         userId: user.id,
@@ -63,7 +61,7 @@ export default async function DashboardPage() {
       getSrsQueue(prisma, { userId: user.id, now }),
       listCoursesForStudent(prisma, user.id, user.track),
       getLaggingCategories(prisma, { userId: user.id, now }),
-      loadHeatmap(user.id, user.timezone, todayStr),
+      loadActivityBar(user.id, user.timezone, todayStr),
       getActiveBooking(prisma, user.id, now),
       getLevelTitles(prisma),
     ]);
@@ -243,12 +241,24 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* Heatmap активности (spec 5.3/8.3) */}
+      {/* Активность (spec 13.4 block 2): полоса последних 28 дней вместо heatmap-сетки.
+          Рядом с заголовком — серия и счётчик заморозок; интенсивность по XP дня. */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-[18px] font-semibold">Активность</h2>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <h2 className="text-[18px] font-semibold">Активность</h2>
+          <div className="text-text-2 flex items-center gap-3 text-[13px]">
+            <span>
+              Серия: {streak.current} {pluralRu(streak.current, "день", "дня", "дней")}
+            </span>
+            <span className="inline-flex items-center gap-1" title="Заморозки серии">
+              <Snowflake size={14} strokeWidth={1.75} className="text-text-3" aria-hidden="true" />
+              <span className="tabular-nums">{streak.freezes}</span>
+            </span>
+          </div>
+        </div>
         <Card>
           <CardContent className="p-4">
-            <Heatmap data={heatmap} />
+            <ActivityBar data={activityBar} />
           </CardContent>
         </Card>
       </section>
