@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { bookMock, cancelBooking, claimOffer, joinWaitlist } from "@/lib/services/mocks";
+import {
+  bookMock,
+  cancelBooking,
+  claimOffer,
+  joinWaitlist,
+  transferBooking,
+} from "@/lib/services/mocks";
 import {
   ActionError,
   assertActiveAccess,
@@ -17,6 +23,7 @@ import {
   bookingIdSchema,
   claimOfferSchema,
   joinWaitlistSchema,
+  transferBookingSchema,
 } from "@/lib/utils/validation";
 
 // Student mock actions (spec 9): book / cancel / joinWaitlist / claimOffer.
@@ -76,6 +83,41 @@ export async function cancelBookingAction(
     }
     revalidateMocks(parsed.bookingId);
     return { late: res.late, strikeIssued: res.strikeIssued };
+  });
+}
+
+const TRANSFER_ERROR: Record<string, string> = {
+  not_found: "Бронь для переноса не найдена",
+  not_transferable: "Эту бронь уже нельзя перенести",
+  same_slot: "Это твой текущий слот — выбери другое время",
+  slot_taken: "Слот только что заняли — выбери другой",
+  past: "Этот слот уже начался — выбери другой",
+  beyond_access: "Слот позже окончания твоего доступа — выбери более ранний",
+  already_booked: "У тебя уже есть другая активная бронь",
+  held: "Слот придержан для другого ученика — выбери другой",
+  no_room: "У интервьюера пока не настроена комната — выбери другого",
+  locked: "Перенос пока недоступен из-за страйков — открой /mocks, чтобы увидеть дату",
+};
+
+/** «Перенести» (changelog 13.4 block 3): атомарная замена брони на новый слот. */
+export async function transferBookingAction(
+  input: unknown,
+): Promise<ActionResult<{ bookingId: string; late: boolean; strikeIssued: boolean }>> {
+  return runAction(async () => {
+    const auth = await requireActionStudent();
+    assertNotImpersonating(auth);
+    assertActiveAccess(auth);
+    const parsed = parseInput(transferBookingSchema, input);
+    const res = await transferBooking(prisma, {
+      userId: auth.user.id,
+      bookingId: parsed.bookingId,
+      newSlotId: parsed.slotId,
+    });
+    if (!res.ok) {
+      throw new ActionError(res.code, TRANSFER_ERROR[res.code] ?? TRANSFER_ERROR.not_found!);
+    }
+    revalidateMocks(res.newBookingId);
+    return { bookingId: res.newBookingId, late: res.late, strikeIssued: res.strikeIssued };
   });
 }
 

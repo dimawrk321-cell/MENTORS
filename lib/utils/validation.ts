@@ -177,6 +177,12 @@ export const bookMockSchema = z.object({
 
 export const bookingIdSchema = z.object({ bookingId: z.string().min(1) });
 
+/** «Перенести» (changelog 13.4 block 3): старая бронь + новый слот того же типа. */
+export const transferBookingSchema = z.object({
+  bookingId: z.string().min(1),
+  slotId: z.string().min(1),
+});
+
 export const joinWaitlistSchema = z.object({
   type: mockTypeSchema,
   interviewerId: z.string().min(1).nullable().optional(),

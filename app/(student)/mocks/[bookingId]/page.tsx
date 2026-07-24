@@ -94,7 +94,7 @@ export default async function BookingDetailPage({
             startsAtMs={booking.startsAt.getTime()}
             endsAtMs={booking.startsAt.getTime() + MOCK_DURATION_MINUTES * MINUTE_MS}
           />
-          <CancelBookingControls bookingId={booking.id} type={booking.type} late={late} />
+          <CancelBookingControls bookingId={booking.id} late={late} />
         </section>
       ) : null}
 

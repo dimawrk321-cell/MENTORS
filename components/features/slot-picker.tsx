@@ -33,18 +33,33 @@ export function SlotPicker({ days, hrefForSlot, showInterviewer = false }: SlotP
             {day.heading}
           </h3>
           <div className="flex flex-wrap gap-2">
-            {day.chips.map((chip) => (
-              <Link
-                key={chip.slotId}
-                href={hrefForSlot(chip.slotId)}
-                className="rounded-control border-border ease-app hover:border-border-strong hover:bg-surface-2 flex min-h-11 flex-col items-start justify-center border px-3 py-1.5 text-left transition-colors duration-150"
-              >
-                <span className="text-[14px] font-medium tabular-nums">{chip.timeLabel}</span>
-                {showInterviewer ? (
-                  <span className="text-text-3 text-[12px]">{chip.interviewerName}</span>
-                ) : null}
-              </Link>
-            ))}
+            {day.chips.map((chip) =>
+              chip.current ? (
+                // Текущая бронь ученика (перенос, 13.4 block 3): подсвечена, недоступна.
+                <div
+                  key={chip.slotId}
+                  aria-disabled="true"
+                  title="Это твоя текущая бронь"
+                  className="rounded-control border-accent bg-accent/10 flex min-h-11 cursor-default flex-col items-start justify-center border px-3 py-1.5 text-left"
+                >
+                  <span className="text-text-2 text-[14px] font-medium tabular-nums">
+                    {chip.timeLabel}
+                  </span>
+                  <span className="text-accent text-[12px]">ваша бронь</span>
+                </div>
+              ) : (
+                <Link
+                  key={chip.slotId}
+                  href={hrefForSlot(chip.slotId)}
+                  className="rounded-control border-border ease-app hover:border-border-strong hover:bg-surface-2 flex min-h-11 flex-col items-start justify-center border px-3 py-1.5 text-left transition-colors duration-150"
+                >
+                  <span className="text-[14px] font-medium tabular-nums">{chip.timeLabel}</span>
+                  {showInterviewer ? (
+                    <span className="text-text-3 text-[12px]">{chip.interviewerName}</span>
+                  ) : null}
+                </Link>
+              ),
+            )}
           </div>
         </section>
       ))}

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,6 +18,7 @@ import {
   cancelBookingAction,
   claimOfferAction,
   joinWaitlistAction,
+  transferBookingAction,
 } from "@/lib/actions/mocks";
 
 // Клиентские кнопки моков (spec 8.3): подтверждение брони, клейм предложения,
@@ -106,18 +108,21 @@ export function JoinWaitlistButton({
 
 interface CancelControlsProps {
   bookingId: string;
-  type: string;
   /** До старта меньше 24 часов — отмена засчитает страйк (spec 7.8). */
   late: boolean;
 }
 
-/** «Отменить» и «Перенести» карточки брони (spec 7.8): одни правила, разный исход. */
-export function CancelBookingControls({ bookingId, type, late }: CancelControlsProps) {
-  const [mode, setMode] = useState<"cancel" | "reschedule" | null>(null);
+/**
+ * «Отменить» и «Перенести» карточки брони (spec 7.8 / changelog 13.4 block 3).
+ * «Перенести» больше НЕ отменяет бронь заранее — ведёт к мастеру выбора нового
+ * слота (атомарный перенос на шаге подтверждения). «Отменить» — по правилам 24ч.
+ */
+export function CancelBookingControls({ bookingId, late }: CancelControlsProps) {
+  const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
 
-  const run = (reschedule: boolean) =>
+  const runCancel = () =>
     start(async () => {
       const res = await cancelBookingAction({ bookingId });
       if (res.ok) {
@@ -125,50 +130,78 @@ export function CancelBookingControls({ bookingId, type, late }: CancelControlsP
           title: res.data.strikeIssued ? "Бронь отменена — засчитан страйк" : "Бронь отменена",
           variant: res.data.strikeIssued ? "danger" : "success",
         });
-        router.push(reschedule ? `/mocks/book?type=${type}` : "/mocks/mine");
+        router.push("/mocks/mine");
       } else {
         toast({ title: res.error.message, variant: "danger" });
-        setMode(null);
+        setOpen(false);
       }
     });
-
-  const description = late
-    ? "До мока меньше 24 часов — отмена засчитает страйк."
-    : "Отмена бесплатна: слот освободится для других учеников.";
 
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={() => setMode("reschedule")}>
-          Перенести
+        <Button asChild variant="secondary">
+          <Link href={`/mocks/book?reschedule=${bookingId}`}>Перенести</Link>
         </Button>
-        <Button variant="ghost" className="text-danger" onClick={() => setMode("cancel")}>
+        <Button variant="ghost" className="text-danger" onClick={() => setOpen(true)}>
           Отменить
         </Button>
       </div>
-      <Dialog open={mode !== null} onOpenChange={(open) => !open && setMode(null)}>
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{mode === "reschedule" ? "Перенести мок?" : "Отменить мок?"}</DialogTitle>
+            <DialogTitle>Отменить мок?</DialogTitle>
             <DialogDescription>
-              {description}
-              {mode === "reschedule" && " После отмены сразу перейдём к выбору нового слота."}
+              {late
+                ? "До мока меньше 24 часов — отмена засчитает страйк."
+                : "Отмена бесплатна: слот освободится для других учеников."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setMode(null)}>
+            <Button variant="secondary" onClick={() => setOpen(false)}>
               Назад
             </Button>
-            <Button
-              variant={late ? "primary" : "primary"}
-              loading={pending}
-              onClick={() => run(mode === "reschedule")}
-            >
-              {mode === "reschedule" ? "Перенести" : "Отменить"}
+            <Button variant="primary" loading={pending} onClick={runCancel}>
+              Отменить
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** «Перенести» — подтверждение атомарного переноса на новый слот (13.4 block 3). */
+export function TransferConfirmButton({
+  bookingId,
+  slotId,
+}: {
+  bookingId: string;
+  slotId: string;
+}) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  return (
+    <Button
+      loading={pending}
+      onClick={() =>
+        start(async () => {
+          const res = await transferBookingAction({ bookingId, slotId });
+          if (res.ok) {
+            toast({
+              title: res.data.strikeIssued
+                ? "Бронь перенесена — засчитан страйк"
+                : "Бронь перенесена",
+              variant: res.data.strikeIssued ? "danger" : "success",
+            });
+            router.push(`/mocks/${res.data.bookingId}`);
+          } else {
+            toast({ title: res.error.message, variant: "danger" });
+          }
+        })
+      }
+    >
+      Перенести
+    </Button>
   );
 }

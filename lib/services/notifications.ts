@@ -50,6 +50,9 @@ export const NOTIFICATION_TYPES = {
   mock_cancelled: { inapp: ALWAYS_ON, email: ALWAYS_ON },
   waitlist_offer: { inapp: ALWAYS_ON, email: ALWAYS_ON },
   mock_booked: { inapp: ALWAYS_ON, email: ALWAYS_ON },
+  // Перенос брони (changelog 13.4 block 3): одно уведомление, когда интервьюер тот
+  // же; ученику — подтверждение с новой датой. Always-on inapp+email (как mock_*).
+  mock_moved: { inapp: ALWAYS_ON, email: ALWAYS_ON },
   streak_risk: { inapp: OFF_OPT_IN, email: OFF },
   freeze_used: { inapp: ALWAYS_ON, email: OFF },
   // D7 (spec 13.1): «Новый титул» — celebratory in-app, always on, no email.
@@ -86,6 +89,15 @@ export interface NotifyPayloads {
     | { role: "interviewer"; whenText: string; mockType: string; studentName: string };
   mock_feedback: { bookingId: string };
   mock_cancelled: { audience: "interviewer"; by: "student" | "system" } | { audience: "student" };
+  mock_moved:
+    | { role: "student"; bookingId: string; mockType: string; toText: string }
+    | {
+        role: "interviewer";
+        studentName: string;
+        mockType: string;
+        fromText: string;
+        toText: string;
+      };
   waitlist_offer: Record<string, never>;
   streak_risk: { current: number };
   freeze_used: { freezesLeft: number };
@@ -182,6 +194,21 @@ export function renderNotification<T extends NotificationType>(
       return {
         title: "Ученик отменил мок",
         body: "Слот освобождён.",
+        url: "/interviewer/bookings",
+      };
+    }
+    case "mock_moved": {
+      const p = payload as NotifyPayloads["mock_moved"];
+      if (p.role === "student") {
+        return {
+          title: "Мок перенесён",
+          body: `${mockLabel(p.mockType)} · новое время: ${p.toText}`,
+          url: `/mocks/${p.bookingId}`,
+        };
+      }
+      return {
+        title: "Мок перенесён",
+        body: `${p.studentName} · ${mockLabel(p.mockType)} · ${p.fromText} → ${p.toText}`,
         url: "/interviewer/bookings",
       };
     }

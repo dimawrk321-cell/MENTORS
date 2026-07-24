@@ -25,6 +25,8 @@ export interface SlotChip {
   timeLabel: string;
   /** Для объединённого календаря «Первый свободный». */
   interviewerName: string;
+  /** Перенос (13.4 block 3): текущая бронь ученика — маркер «ваша бронь», недоступна. */
+  current?: boolean;
 }
 
 export interface SlotDay {

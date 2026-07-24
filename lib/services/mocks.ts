@@ -542,6 +542,255 @@ export async function cancelBooking(
   return { ok: true, late, strikeIssued: late };
 }
 
+// --- Перенос брони (spec 7.8 / changelog 13.4 block 3) ---
+
+export type TransferBookingResult =
+  | { ok: true; newBookingId: string; late: boolean; strikeIssued: boolean }
+  | {
+      ok: false;
+      code:
+        | "not_found"
+        | "not_transferable"
+        | "same_slot"
+        | "slot_taken"
+        | "past"
+        | "beyond_access"
+        | "already_booked"
+        | "held"
+        | "no_room"
+        | "locked";
+    };
+
+/**
+ * Атомарный перенос брони (changelog 13.4 block 3): старая бронь живёт до
+ * подтверждения новой — «Перенести» больше НЕ отменяет бронь заранее. Одна
+ * транзакция: лок пользователя → оба слота FOR UPDATE в детерминированном порядке
+ * (по возрастанию id, совместимо с bookMock user→slot; без дедлоков) →
+ * валидация нового слота → отмена старой (страйк late_cancel по правилу поздней
+ * отмены; освободившийся будущий слот → waitlist) → создание новой с копией
+ * room_url. Любой сбой (throw) откатывает всё — старая бронь нетронута.
+ *
+ * ВАЖНО: все проверки-возвраты `ok:false` идут ДО первой изменяющей операции
+ * (Prisma коммитит транзакцию при обычном return; откат — только при throw). После
+ * старта записей ранних `ok:false` нет — единственное исключение — статус-гейт
+ * отмены (updateMany count=0 = ничего не изменил ⇒ безопасно вернуть).
+ */
+export async function transferBooking(
+  db: PrismaClient,
+  input: { userId: string; bookingId: string; newSlotId: string; now?: Date },
+): Promise<TransferBookingResult> {
+  const now = input.now ?? new Date();
+  const user = await db.user.findUnique({
+    where: { id: input.userId },
+    select: { role: true, status: true, accessUntil: true, name: true, timezone: true },
+  });
+  if (!user || user.role !== "student" || user.status !== "active") {
+    return { ok: false, code: "not_found" };
+  }
+
+  const cancelFreeHours = await getNumericSetting(
+    db,
+    OPS_CANCEL_FREE_HOURS_KEY,
+    CANCEL_FREE_HOURS,
+    { min: 0, max: 168 },
+  );
+
+  return db.$transaction(async (tx) => {
+    // Порядок локов: БРОНЬ → пользователь → слоты. Строка старой брони — «шлюзовой»
+    // лок, берётся ПЕРВЫМ (adversarial-фикс захода 13.4), потому что:
+    //  (1) cancelBooking / cancelByInterviewerTx / closeDay лочат бронь раньше слота
+    //      (updateMany → slot.update) — перенос обязан согласоваться, иначе
+    //      перенос(держит слот, ждёт бронь) × отмена(держит бронь, ждёт слот) = дедлок;
+    //  (2) пользовательский лок брать РАНЬШЕ брони нельзя: перенос держал бы users
+    //      FOR UPDATE, ожидая строку брони, а параллельная отмена держит бронь и
+    //      вставляет analytics_events → просит FOR KEY SHARE на того же users →
+    //      FOR UPDATE конфликтует с key-share → второй дедлок. Держа бронь ПЕРВОЙ,
+    //      перенос, ожидая её, не держит users, поэтому отмена свободно берёт key-share.
+    // Пользовательский лок ниже всё ещё сериализует «одну активную бронь» с bookMock
+    // (обе транзакции лочат строку users).
+    await tx.$queryRaw`SELECT id FROM bookings WHERE id = ${input.bookingId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
+
+    // Старую бронь читаем свежей под локами.
+    const oldBooking = await tx.booking.findUnique({
+      where: { id: input.bookingId },
+      include: { slot: true },
+    });
+    if (!oldBooking || oldBooking.userId !== input.userId) return { ok: false, code: "not_found" };
+    if (oldBooking.status !== "booked") return { ok: false, code: "not_transferable" };
+    if (oldBooking.slotId === input.newSlotId) return { ok: false, code: "same_slot" };
+
+    // Активный booking-lock запрещает и перенос (spec 13.4 block 3.2).
+    if ((await getBookingLock(tx, input.userId, now)) !== null) {
+      return { ok: false, code: "locked" };
+    }
+
+    // Оба слота FOR UPDATE в порядке возрастания id (детерминированный порядок).
+    const orderedIds = [oldBooking.slotId, input.newSlotId].sort();
+    const rows = await tx.$queryRaw<SlotLockRow[]>`
+      SELECT id, status, starts_at, interviewer_id
+      FROM slots WHERE id IN (${orderedIds[0]}, ${orderedIds[1]}) ORDER BY id FOR UPDATE`;
+    const newRow = rows.find((r) => r.id === input.newSlotId);
+    if (!newRow || newRow.status !== "open") return { ok: false, code: "slot_taken" };
+    if (newRow.starts_at <= now) return { ok: false, code: "past" };
+    if (user.accessUntil && newRow.starts_at > user.accessUntil) {
+      return { ok: false, code: "beyond_access" };
+    }
+
+    const heldForOther = await tx.waitlist.count({
+      where: {
+        offeredSlotId: input.newSlotId,
+        status: "offered",
+        offerExpiresAt: { gt: now },
+        userId: { not: input.userId },
+      },
+    });
+    if (heldForOther > 0) return { ok: false, code: "held" };
+
+    const newProfile = await tx.interviewerProfile.findUnique({
+      where: { userId: newRow.interviewer_id },
+    });
+    if (!newProfile || !newProfile.active) return { ok: false, code: "no_room" };
+
+    // Инвариант «одна активная бронь» (spec 13.4 block 3.2): кроме старой брони,
+    // других активных будущих быть не должно (проверка ДО записей).
+    const otherActive = await tx.booking.count({
+      where: {
+        userId: input.userId,
+        status: "booked",
+        slot: { startsAt: { gt: now } },
+        id: { not: oldBooking.id },
+      },
+    });
+    if (otherActive > 0) return { ok: false, code: "already_booked" };
+
+    // Страйк и переоткрытие — по СТАРОЙ брони (правило поздней отмены, spec 13.4 3.1).
+    const late = oldBooking.slot.startsAt.getTime() - now.getTime() < cancelFreeHours * HOUR_MS;
+    const oldFreesSlot = oldBooking.slot.startsAt > now;
+
+    // --- Записи (после этой точки ранних ok:false нет, кроме безобидного гейта) ---
+
+    // 1) Отмена старой брони с атомарным статус-гейтом (гонка двойного переноса).
+    const cancelUpd = await tx.booking.updateMany({
+      where: { id: oldBooking.id, status: "booked" },
+      data: { status: "cancelled_student", cancelledAt: now },
+    });
+    if (cancelUpd.count === 0) return { ok: false, code: "not_transferable" }; // ничего не изменил
+
+    if (oldFreesSlot) {
+      await tx.slot.update({ where: { id: oldBooking.slotId }, data: { status: "open" } });
+    }
+    if (late) {
+      await tx.bookingStrike.create({
+        data: {
+          userId: input.userId,
+          bookingId: oldBooking.id,
+          reason: "late_cancel",
+          createdAt: now,
+        },
+      });
+    }
+    await emitEvent(
+      tx,
+      "mock.cancelled",
+      { bookingId: oldBooking.id, by: "student", late, transfer: true },
+      { userId: input.userId },
+    );
+
+    // 2) Создание новой брони на новом слоте с копией room_url нового интервьюера.
+    await tx.slot.update({ where: { id: input.newSlotId }, data: { status: "booked" } });
+    const newBooking = await tx.booking.create({
+      data: {
+        slotId: input.newSlotId,
+        userId: input.userId,
+        type: oldBooking.type,
+        status: "booked",
+        roomUrl: newProfile.roomUrl,
+        createdAt: now,
+      },
+    });
+    await emitEvent(
+      tx,
+      "mock.booked",
+      {
+        bookingId: newBooking.id,
+        type: oldBooking.type,
+        interviewerId: newRow.interviewer_id,
+        transfer: true,
+      },
+      { userId: input.userId },
+    );
+
+    // 3) Освободившийся старый слот → waitlist (после создания новой брони, чтобы
+    //    сам переносящий не получил свой же старый слот — у него уже активная бронь).
+    if (oldFreesSlot) {
+      await offerSlotToWaitlist(tx, { slotId: oldBooking.slotId, now });
+    }
+
+    // 4) Уведомления (spec 13.4 block 3.3). emailDeadline = старт нового мока.
+    const oldInterviewerId = oldBooking.slot.interviewerId;
+    const newInterviewerId = newRow.interviewer_id;
+    await notify(
+      tx,
+      input.userId,
+      "mock_moved",
+      {
+        role: "student",
+        bookingId: newBooking.id,
+        mockType: oldBooking.type,
+        toText: formatDateTimeRu(newRow.starts_at, user.timezone),
+      },
+      { emailDeadline: newRow.starts_at },
+    );
+    if (oldInterviewerId === newInterviewerId) {
+      // Тот же интервьюер — одно уведомление «перенос».
+      const interviewer = await tx.user.findUnique({
+        where: { id: newInterviewerId },
+        select: { timezone: true },
+      });
+      const itz = interviewer?.timezone ?? "Europe/Moscow";
+      await notify(
+        tx,
+        newInterviewerId,
+        "mock_moved",
+        {
+          role: "interviewer",
+          studentName: user.name,
+          mockType: oldBooking.type,
+          fromText: formatDateTimeRu(oldBooking.slot.startsAt, itz),
+          toText: formatDateTimeRu(newRow.starts_at, itz),
+        },
+        { emailDeadline: newRow.starts_at },
+      );
+    } else {
+      // Разные интервьюеры — отмена у старого, новая бронь у нового.
+      await notify(tx, oldInterviewerId, "mock_cancelled", {
+        audience: "interviewer",
+        by: "student",
+      });
+      const newInterviewer = await tx.user.findUnique({
+        where: { id: newInterviewerId },
+        select: { timezone: true },
+      });
+      const nitz = newInterviewer?.timezone ?? "Europe/Moscow";
+      await notify(
+        tx,
+        newInterviewerId,
+        "mock_booked",
+        {
+          role: "interviewer",
+          whenText: formatDateTimeRu(newRow.starts_at, nitz),
+          mockType: oldBooking.type,
+          studentName: user.name,
+        },
+        { emailDeadline: newRow.starts_at },
+      );
+    }
+
+    return { ok: true, newBookingId: newBooking.id, late, strikeIssued: late };
+  });
+}
+
 export type NoShowResult =
   { ok: true } | { ok: false; code: "not_found" | "too_early" | "not_bookable" };
 
