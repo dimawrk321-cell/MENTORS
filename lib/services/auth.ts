@@ -382,7 +382,12 @@ export type ChangePasswordResult = { ok: true } | { ok: false; code: "invalid_ol
 
 export async function changePassword(
   db: PrismaClient,
-  input: { user: User; currentSessionId: string; oldPassword: string; newPassword: string },
+  input: {
+    user: Omit<User, "adminLabel">;
+    currentSessionId: string;
+    oldPassword: string;
+    newPassword: string;
+  },
   now: Date = new Date(),
 ): Promise<ChangePasswordResult> {
   if (
@@ -413,7 +418,7 @@ export async function changePassword(
  */
 export async function setInitialPassword(
   db: PrismaClient,
-  input: { user: User; currentSessionId: string; newPassword: string },
+  input: { user: Omit<User, "adminLabel">; currentSessionId: string; newPassword: string },
   now: Date = new Date(),
 ): Promise<void> {
   const passwordHash = await hashPassword(input.newPassword);

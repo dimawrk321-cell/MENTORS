@@ -4,12 +4,15 @@ import { useState, useTransition } from "react";
 import { Eye } from "lucide-react";
 import { ActionButton } from "@/components/features/action-button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import {
   blockStudentAction,
   impersonateAction,
   resetStudentSessionsAction,
   setSectionAccessAction,
+  setStudentAdminLabelAction,
   unblockStudentAction,
 } from "@/lib/actions/students";
 
@@ -62,6 +65,93 @@ export function ResetSessionsButton({ userId }: { userId: string }) {
     >
       Сбросить сессии и устройства
     </ActionButton>
+  );
+}
+
+/**
+ * «Метка для админов» editor (13.4/4.1): shown under the name in the student card.
+ * students.manage → inline edit; students.view → read-only (only when a label is
+ * set). The student never sees this (admin_label is omitted from their session).
+ */
+export function AdminLabelEditor({
+  userId,
+  initialLabel,
+  canManage,
+}: {
+  userId: string;
+  initialLabel: string | null;
+  canManage: boolean;
+}) {
+  const [label, setLabel] = useState(initialLabel ?? "");
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+  const [pending, startTransition] = useTransition();
+
+  if (!canManage) {
+    return label ? (
+      <p className="text-text-3 mt-0.5 text-[13px]">
+        Метка: <span className="text-text-2 italic">{label}</span>
+      </p>
+    ) : null;
+  }
+
+  function save(): void {
+    startTransition(async () => {
+      const res = await setStudentAdminLabelAction({ userId, adminLabel: draft });
+      if (res.ok) {
+        setLabel(res.data.adminLabel ?? "");
+        setEditing(false);
+        toast({ title: "Метка сохранена", variant: "success" });
+      } else {
+        toast({ title: res.error.message, variant: "danger" });
+      }
+    });
+  }
+
+  if (editing) {
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Метка для админов"
+          aria-label="Метка для админов"
+          maxLength={80}
+          autoFocus
+          className="max-w-xs"
+        />
+        <Button size="sm" loading={pending} onClick={save}>
+          Сохранить
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setDraft(label);
+            setEditing(false);
+          }}
+        >
+          Отмена
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <p className="text-text-3 mt-0.5 text-[13px]">
+      <span>Метка для админов: </span>
+      {label ? <span className="text-text-2 italic">{label}</span> : "—"}
+      <button
+        type="button"
+        onClick={() => {
+          setDraft(label);
+          setEditing(true);
+        }}
+        className="text-accent ml-2 text-[12px] hover:underline"
+      >
+        {label ? "изменить" : "добавить"}
+      </button>
+    </p>
   );
 }
 

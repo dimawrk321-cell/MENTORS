@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import * as Popover from "@radix-ui/react-popover";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { markNotificationsReadAction } from "@/lib/actions/notifications";
+import {
+  dismissNotificationsAction,
+  markNotificationsReadAction,
+} from "@/lib/actions/notifications";
 
 // NotificationBell (spec 5.3/7.12): unread badge + popover of the last 20 in-app
 // notifications, «Прочитать все», click = mark read + navigate. Polls the API
@@ -45,6 +48,7 @@ export function NotificationBell({ className }: { className?: string }) {
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const [, startTransition] = useTransition();
   const mounted = useRef(true);
 
@@ -78,6 +82,7 @@ export function NotificationBell({ className }: { className?: string }) {
   // Refresh when the popover opens so the list is current on view.
   useEffect(() => {
     if (open) void load();
+    else setConfirmingClear(false);
   }, [open, load]);
 
   const markRead = useCallback(
@@ -105,6 +110,29 @@ export function NotificationBell({ className }: { className?: string }) {
     setUnread(0);
     startTransition(async () => {
       await markNotificationsReadAction({ all: true });
+    });
+  }, []);
+
+  // 13.4/4.4: «крестик» — hide one from the bell (optimistic).
+  const dismiss = useCallback(
+    (id: string) => {
+      const wasUnread = items.some((n) => n.id === id && !n.readAt);
+      setItems((prev) => prev.filter((n) => n.id !== id));
+      if (wasUnread) setUnread((prev) => Math.max(0, prev - 1));
+      startTransition(async () => {
+        await dismissNotificationsAction({ ids: [id] });
+      });
+    },
+    [items],
+  );
+
+  // «Очистить» — hide all (marks read + dismissed). Confirmed inline first.
+  const clearAll = useCallback(() => {
+    setItems([]);
+    setUnread(0);
+    setConfirmingClear(false);
+    startTransition(async () => {
+      await dismissNotificationsAction({ all: true });
     });
   }, []);
 
@@ -145,19 +173,52 @@ export function NotificationBell({ className }: { className?: string }) {
           sideOffset={8}
           className="border-border bg-surface-2 rounded-card z-50 w-[min(92vw,22rem)] border shadow-[0_1px_3px_rgb(0_0_0/.06)] focus:outline-none"
         >
-          <div className="border-border flex items-center justify-between border-b px-4 py-2.5">
+          <div className="border-border flex items-center justify-between gap-3 border-b px-4 py-2.5">
             <span className="text-[14px] font-semibold">Уведомления</span>
-            {unread > 0 && (
-              <button
-                type="button"
-                onClick={markAll}
-                className="text-text-2 ease-app hover:text-text-1 flex items-center gap-1.5 text-[13px] transition-colors duration-150"
-              >
-                <CheckCheck size={14} strokeWidth={1.75} aria-hidden="true" />
-                Прочитать все
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {unread > 0 && (
+                <button
+                  type="button"
+                  onClick={markAll}
+                  className="text-text-2 ease-app hover:text-text-1 flex items-center gap-1.5 text-[13px] transition-colors duration-150"
+                >
+                  <CheckCheck size={14} strokeWidth={1.75} aria-hidden="true" />
+                  Прочитать все
+                </button>
+              )}
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingClear(true)}
+                  className="text-text-2 ease-app hover:text-text-1 text-[13px] transition-colors duration-150"
+                >
+                  Очистить
+                </button>
+              )}
+            </div>
           </div>
+          {/* 13.4/4.4: «Очистить» requires an inline confirm before hiding everything. */}
+          {confirmingClear && (
+            <div className="border-border bg-surface-1 flex items-center justify-between gap-2 border-b px-4 py-2">
+              <span className="text-text-2 text-[13px]">Скрыть все уведомления?</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-danger text-[13px] font-medium hover:underline"
+                >
+                  Очистить
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingClear(false)}
+                  className="text-text-2 hover:text-text-1 text-[13px]"
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          )}
           <div className="max-h-[min(70vh,26rem)] overflow-y-auto">
             {!loaded ? (
               <p className="text-text-3 px-4 py-6 text-center text-[13px]">Загрузка…</p>
@@ -201,15 +262,24 @@ export function NotificationBell({ className }: { className?: string }) {
                     </>
                   );
                   return (
-                    <li key={item.id}>
-                      {/* Always a button (keyboard-navigable, spec 14): marks read,
-                          navigates when the notification has a url. */}
+                    <li key={item.id} className="relative">
+                      {/* Main area is a button (keyboard-navigable, spec 14): marks
+                          read, navigates when the notification has a url. */}
                       <button
                         type="button"
                         onClick={() => onItemClick(item)}
-                        className="hover:bg-surface-1 ease-app block w-full px-4 py-2.5 text-left transition-colors duration-150"
+                        className="hover:bg-surface-1 ease-app block w-full py-2.5 pr-11 pl-4 text-left transition-colors duration-150"
                       >
                         {content}
+                      </button>
+                      {/* 13.4/4.4: «крестик» hides this one from the bell. */}
+                      <button
+                        type="button"
+                        onClick={() => dismiss(item.id)}
+                        aria-label="Скрыть уведомление"
+                        className="text-text-3 ease-app hover:text-text-1 absolute top-1.5 right-1.5 flex size-8 items-center justify-center rounded transition-colors duration-150 md:size-7"
+                      >
+                        <X size={14} strokeWidth={1.75} aria-hidden="true" />
                       </button>
                     </li>
                   );

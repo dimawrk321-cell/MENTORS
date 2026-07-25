@@ -15,6 +15,8 @@ import { bulkExtendAccessAction, bulkGiftFreezeAction } from "@/lib/actions/stud
 export interface StudentRow {
   id: string;
   name: string;
+  /** Admin-only service label (13.4/4.1) — shown muted under the name. */
+  adminLabel: string | null;
   email: string;
   status: UserStatus;
   accessUntilText: string;
@@ -35,7 +37,13 @@ export function StudentsBulkTable({
   const pageIds = students.map((s) => s.id);
   const [pending, startTransition] = useTransition();
 
-  function run(action: () => Promise<{ ok: boolean; data?: { message: string }; error?: { message: string } } | null>) {
+  function run(
+    action: () => Promise<{
+      ok: boolean;
+      data?: { message: string };
+      error?: { message: string };
+    } | null>,
+  ) {
     startTransition(async () => {
       const result = await action();
       if (!result) return;
@@ -65,7 +73,9 @@ export function StudentsBulkTable({
             variant="secondary"
             size="sm"
             loading={pending}
-            onClick={() => run(() => bulkExtendAccessAction({ userIds: [...selection.selected], days: 30 }))}
+            onClick={() =>
+              run(() => bulkExtendAccessAction({ userIds: [...selection.selected], days: 30 }))
+            }
           >
             +30 дней
           </Button>
@@ -73,7 +83,9 @@ export function StudentsBulkTable({
             variant="secondary"
             size="sm"
             loading={pending}
-            onClick={() => run(() => bulkExtendAccessAction({ userIds: [...selection.selected], days: 90 }))}
+            onClick={() =>
+              run(() => bulkExtendAccessAction({ userIds: [...selection.selected], days: 90 }))
+            }
           >
             +90 дней
           </Button>
@@ -132,6 +144,11 @@ export function StudentsBulkTable({
                     <Link href={`/admin/students/${student.id}`} className="group block">
                       <span className="text-text-1 group-hover:text-accent block font-medium">
                         {student.name || "—"}
+                        {student.adminLabel && (
+                          <span className="text-text-3 ml-2 text-[12px] font-normal italic">
+                            {student.adminLabel}
+                          </span>
+                        )}
                       </span>
                       <span className="text-text-3 block text-[13px]">{student.email}</span>
                     </Link>

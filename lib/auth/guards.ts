@@ -8,6 +8,7 @@ import { SET_PASSWORD_PATH, type Permission } from "@/lib/constants";
 import { firstAllowedAdminPath, hasPermission, isStaff } from "@/lib/auth/permissions";
 import {
   validateSessionToken,
+  type SessionUser,
   type SessionValidation,
   type SessionWithUser,
 } from "@/lib/services/sessions";
@@ -32,7 +33,8 @@ export const getAuth = cache(async (): Promise<SessionValidation> => {
 });
 
 export interface ZoneAuth {
-  user: User;
+  // SessionUser: admin_label omitted so it can't leak to a student (13.4/4.1).
+  user: SessionUser;
   session: SessionWithUser;
   impersonated: boolean;
   /** Soft-lock state (spec 7.1.5): true for a student whose access window is over. */
@@ -40,7 +42,10 @@ export interface ZoneAuth {
 }
 
 /** Where a signed-in user belongs (spec 8.1: student → «/», mentor+ → /admin). */
-export function homePathFor(user: User, accessExpired: boolean): string {
+export function homePathFor(
+  user: Pick<User, "role" | "mustChangePassword">,
+  accessExpired: boolean,
+): string {
   // Walk 12.4/A2: an admin-issued credential forces the set-password screen first.
   if (user.mustChangePassword) return SET_PASSWORD_PATH;
   if (user.role !== "student") return "/admin";

@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { PASSWORD_RESET_SELF_SERVE_ENABLED } from "@/lib/constants";
 import { getRenewalContact } from "@/lib/services/settings";
 import {
   acceptInvite,
@@ -168,6 +169,10 @@ export async function requestResetAction(
   formData: FormData,
 ): Promise<AuthFormState> {
   return runAction<undefined>(async () => {
+    // Walk 13.4/4.2: self-serve reset is @dormant (no UI reaches this).
+    if (!PASSWORD_RESET_SELF_SERVE_ENABLED) {
+      throw new ActionError("dormant", "Сброс по почте отключён");
+    }
     const input = parseInput(requestResetSchema, { email: formData.get("email") });
     const ctx = await getRequestContext();
     const res = await requestPasswordReset(prisma, input, { ip: ctx.ip });
@@ -185,6 +190,10 @@ export async function resetPasswordAction(
   let done = false;
 
   const result = await runAction<undefined>(async () => {
+    // Walk 13.4/4.2: self-serve reset is @dormant.
+    if (!PASSWORD_RESET_SELF_SERVE_ENABLED) {
+      throw new ActionError("dormant", "Сброс по почте отключён");
+    }
     const input = parseInput(resetPasswordSchema, {
       token: formData.get("token"),
       password: formData.get("password"),

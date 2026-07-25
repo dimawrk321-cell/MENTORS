@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { redirectIfAuthenticated } from "@/lib/auth/guards";
+import { PASSWORD_RESET_SELF_SERVE_ENABLED } from "@/lib/constants";
 import { ForgotForm } from "./forgot-form";
 
 export const metadata: Metadata = {
@@ -8,6 +10,8 @@ export const metadata: Metadata = {
 };
 
 export default async function ForgotPage() {
+  // Walk 13.4/4.2: self-serve reset is @dormant — no email channel yet.
+  if (!PASSWORD_RESET_SELF_SERVE_ENABLED) notFound();
   await redirectIfAuthenticated();
 
   return (

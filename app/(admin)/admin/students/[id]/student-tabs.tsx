@@ -25,6 +25,7 @@ interface SentNotification {
   title: string;
   inApp: boolean;
   readAt: Date | null;
+  dismissedAt: Date | null;
   emailPending: boolean;
   emailSentAt: Date | null;
   createdAt: Date;
@@ -238,6 +239,10 @@ export function StudentTabs({
                   <div className="min-w-0">
                     <span className="text-[14px]">{n.title}</span>
                     <span className="text-text-3 ml-2 text-[12px]">{n.type}</span>
+                    {/* 13.4/4.4: student cleared it from their bell — still logged here. */}
+                    {n.dismissedAt && (
+                      <span className="text-text-3 ml-2 text-[12px] italic">скрыто учеником</span>
+                    )}
                     <span className="text-text-3 block text-[12px]">
                       {channels.join(" · ") || "нет активных каналов"}
                     </span>

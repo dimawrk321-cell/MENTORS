@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { MonitorSmartphone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { prisma } from "@/lib/db";
 import { redirectIfAuthenticated } from "@/lib/auth/guards";
+import { getRenewalContact } from "@/lib/services/settings";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
@@ -15,6 +17,8 @@ interface LoginPageProps {
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   await redirectIfAuthenticated();
   const params = await searchParams;
+  // Walk 13.4/4.2: «Забыл пароль» points here (app_settings override → env fallback).
+  const resetContact = await getRenewalContact(prisma);
 
   return (
     <div className="flex flex-col gap-4">
@@ -48,7 +52,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <Card>
         <CardContent className="p-6">
           <h1 className="mb-5 text-[24px] font-semibold">Вход</h1>
-          <LoginForm />
+          <LoginForm resetContact={resetContact} />
         </CardContent>
       </Card>
     </div>

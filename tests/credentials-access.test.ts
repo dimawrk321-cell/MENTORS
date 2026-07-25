@@ -26,7 +26,7 @@ describe("createStudentCredentials (12.4/A1)", () => {
     const res = await createStudentCredentials(testDb, {
       actorId: a.id,
       email: "s@example.com",
-      name: "",
+      adminLabel: "",
     });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -35,6 +35,7 @@ describe("createStudentCredentials (12.4/A1)", () => {
     expect(user.status).toBe("invited");
     expect(user.mustChangePassword).toBe(true);
     expect(user.name).toBe("");
+    expect(user.adminLabel).toBeNull();
     expect(user.libraryEnabled).toBe(false);
     expect(user.activatedAt).toBeNull();
     expect(user.accessUntil).toBeNull();
@@ -50,9 +51,13 @@ describe("createStudentCredentials (12.4/A1)", () => {
     const res = await createStudentCredentials(testDb, {
       actorId: a.id,
       email: "s@example.com",
-      name: "Алекс",
+      adminLabel: "с Авито, поток мая",
     });
     if (!res.ok) return;
+    // 13.4/4.1: the label writes admin_label, name stays empty (student sets it).
+    const user = await testDb.user.findUniqueOrThrow({ where: { id: res.userId } });
+    expect(user.adminLabel).toBe("с Авито, поток мая");
+    expect(user.name).toBe("");
     const audit = await testDb.auditLog.findFirst({
       where: { action: "student.created", entityId: res.userId },
     });
@@ -60,13 +65,40 @@ describe("createStudentCredentials (12.4/A1)", () => {
     expect(JSON.stringify(audit)).not.toContain(res.tempPassword);
   });
 
+  it("13.4/4.1: admin_label never leaks into the student session user", async () => {
+    const a = await admin();
+    const res = await createStudentCredentials(testDb, {
+      actorId: a.id,
+      email: "s@example.com",
+      adminLabel: "секретная метка",
+    });
+    if (!res.ok) return;
+    // Activate + sign in so we have a real student session.
+    const login1 = await login(testDb, { email: "s@example.com", password: res.tempPassword }, ctx);
+    expect(login1.ok).toBe(true);
+    if (!login1.ok) return;
+    const v = await validateSessionToken(testDb, login1.token, NOW);
+    expect(v.state).toBe("valid");
+    if (v.state !== "valid") return;
+    // The session user must NOT carry admin_label (structural omit — 4.1 leak guard).
+    expect("adminLabel" in v.user).toBe(false);
+    expect(JSON.stringify(v.user)).not.toContain("секретная метка");
+    // But the admin-facing read still sees it.
+    const adminView = await testDb.user.findUniqueOrThrow({ where: { id: res.userId } });
+    expect(adminView.adminLabel).toBe("секретная метка");
+  });
+
   it("rejects a duplicate email", async () => {
     const a = await admin();
-    await createStudentCredentials(testDb, { actorId: a.id, email: "s@example.com", name: "" });
+    await createStudentCredentials(testDb, {
+      actorId: a.id,
+      email: "s@example.com",
+      adminLabel: "",
+    });
     const dup = await createStudentCredentials(testDb, {
       actorId: a.id,
       email: "s@example.com",
-      name: "",
+      adminLabel: "",
     });
     expect(dup.ok).toBe(false);
     if (!dup.ok) expect(dup.code).toBe("exists");
@@ -87,7 +119,7 @@ describe("first-login activation (12.4/A3)", () => {
 
   async function issued(email = "s@example.com") {
     const a = await admin();
-    const res = await createStudentCredentials(testDb, { actorId: a.id, email, name: "" });
+    const res = await createStudentCredentials(testDb, { actorId: a.id, email, adminLabel: "" });
     if (!res.ok) throw new Error("issue failed");
     return { email, tempPassword: res.tempPassword, userId: res.userId };
   }

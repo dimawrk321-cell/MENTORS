@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { PasswordMeter } from "@/components/features/password-meter";
 import { setInitialPasswordAction, type AuthFormState } from "@/lib/actions/auth";
 
@@ -20,10 +20,9 @@ export function SetPasswordForm() {
         <label htmlFor="new-password" className="text-text-2 text-[13px]">
           Новый пароль
         </label>
-        <Input
+        <PasswordInput
           id="new-password"
           name="password"
-          type="password"
           autoComplete="new-password"
           required
           autoFocus

@@ -73,10 +73,17 @@ export function IssueCredentialsDialog() {
                 <Input id="cred-email" name="email" type="email" required autoFocus />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="cred-name" className="text-text-2 text-[13px]">
-                  Имя (необязательно)
+                <label htmlFor="cred-label" className="text-text-2 text-[13px]">
+                  Метка для админов (ученик не видит)
                 </label>
-                <Input id="cred-name" name="name" placeholder="Ученик задаст сам на онбординге" />
+                <Input
+                  id="cred-label"
+                  name="adminLabel"
+                  placeholder="Например: с Авито, поток мая"
+                />
+                <p className="text-text-3 text-[12px]">
+                  Служебная заметка в списке учеников. Имя ученик задаст сам на онбординге.
+                </p>
               </div>
               {error && (
                 <p role="alert" aria-live="polite" className="text-danger text-[13px]">

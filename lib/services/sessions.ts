@@ -19,12 +19,18 @@ export const IMPERSONATION_TTL_MS = 4 * 60 * 60 * 1000;
 
 const EVICTION_REASONS: SessionRevokeReason[] = ["evicted_login", "evicted_device"];
 
-export type SessionWithUser = Prisma.SessionGetPayload<{ include: { user: true } }>;
+// Walk 13.4 (block 4.1): admin_label is omitted from the session user so it can
+// NEVER reach a student prop/response — every zone reads its user through this type.
+export type SessionWithUser = Prisma.SessionGetPayload<{
+  include: { user: { omit: { adminLabel: true } } };
+}>;
+/** The session's user, structurally without admin_label (13.4/4.1 leak guard). */
+export type SessionUser = SessionWithUser["user"];
 
 export type SessionValidation =
   | { state: "none" }
   | { state: "evicted" }
-  | { state: "valid"; session: SessionWithUser; user: User; accessExpired: boolean };
+  | { state: "valid"; session: SessionWithUser; user: SessionUser; accessExpired: boolean };
 
 interface CreateSessionInput {
   userId: string;
@@ -208,7 +214,10 @@ export async function registerDevice(
 }
 
 /** Effective soft-lock check (spec 7.1.5): the status flip may lag behind the clock. */
-export function isAccessExpired(user: User, now: Date = new Date()): boolean {
+export function isAccessExpired(
+  user: Pick<User, "role" | "status" | "accessUntil">,
+  now: Date = new Date(),
+): boolean {
   if (user.role !== "student") return false;
   if (user.status === "expired") return true;
   return user.status === "active" && user.accessUntil !== null && user.accessUntil <= now;
@@ -226,7 +235,7 @@ export async function validateSessionToken(
 ): Promise<SessionValidation> {
   const session = await db.session.findUnique({
     where: { tokenHash: sha256Hex(token) },
-    include: { user: true },
+    include: { user: { omit: { adminLabel: true } } },
   });
   if (!session) return { state: "none" };
 
@@ -290,7 +299,7 @@ export async function validateSessionToken(
 
 export async function startImpersonation(
   db: Db,
-  input: { actor: User; targetUserId: string; ip: string; now?: Date },
+  input: { actor: Omit<User, "adminLabel">; targetUserId: string; ip: string; now?: Date },
 ): Promise<{ ok: true; token: string } | { ok: false; code: "not_found" | "not_impersonatable" }> {
   const now = input.now ?? new Date();
   const target = await db.user.findUnique({ where: { id: input.targetUserId } });

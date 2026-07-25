@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useActionState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { toast } from "@/components/ui/toast";
 import { PasswordMeter } from "@/components/features/password-meter";
 import { changePasswordAction, type ProfileFormState } from "@/lib/actions/profile";
@@ -30,10 +30,9 @@ export function ChangePasswordForm() {
         <label htmlFor="old-password" className="text-text-2 text-[13px]">
           Текущий пароль
         </label>
-        <Input
+        <PasswordInput
           id="old-password"
           name="oldPassword"
-          type="password"
           autoComplete="current-password"
           required
         />
@@ -42,10 +41,9 @@ export function ChangePasswordForm() {
         <label htmlFor="new-password" className="text-text-2 text-[13px]">
           Новый пароль
         </label>
-        <Input
+        <PasswordInput
           id="new-password"
           name="newPassword"
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}

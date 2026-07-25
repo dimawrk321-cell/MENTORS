@@ -73,6 +73,7 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
           students={students.map((s) => ({
             id: s.id,
             name: s.name,
+            adminLabel: s.adminLabel,
             email: s.email,
             status: s.status,
             accessUntilText: s.accessUntil ? formatDateRu(s.accessUntil, viewer.timezone) : "—",

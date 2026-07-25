@@ -13,6 +13,16 @@ export const EXTENSION_MONTH_DAYS = 30;
  */
 export const EMAIL_VERIFICATION_UI_ENABLED = false;
 
+/**
+ * Walk 13.4/4.2: self-serve password reset is @dormant. The owner starts without a
+ * live email channel, so «Забыл пароль» on /login points to RENEWAL_CONTACT and the
+ * admin-issued temporary password is the real reset path. The link-based mechanism
+ * stays fully in code (routes /forgot + /reset/[token], the request/reset services
+ * and PasswordReset table) — flip to `true` to re-enable every gated site when an
+ * email channel exists. Kept working for nothing else — no UI surfaces it.
+ */
+export const PASSWORD_RESET_SELF_SERVE_ENABLED = false;
+
 // --- Walk 12.4: team & granular permissions (spec 2/8.5) ---
 
 /**

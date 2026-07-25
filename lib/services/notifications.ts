@@ -418,14 +418,18 @@ export async function notify<T extends NotificationType>(
 
 export const BELL_RECENT_LIMIT = 20;
 
+// Walk 13.4/4.4: dismissed rows are hidden from the bell + unread count (but kept
+// for the admin «Уведомления» tab). Every bell query filters dismissedAt: null.
 export async function getUnreadCount(db: Db, userId: string): Promise<number> {
-  return db.notification.count({ where: { userId, inApp: true, readAt: null } });
+  return db.notification.count({
+    where: { userId, inApp: true, readAt: null, dismissedAt: null },
+  });
 }
 
 export async function getRecentNotifications(db: Db, userId: string) {
   const [items, unread] = await Promise.all([
     db.notification.findMany({
-      where: { userId, inApp: true },
+      where: { userId, inApp: true, dismissedAt: null },
       orderBy: { createdAt: "desc" },
       take: BELL_RECENT_LIMIT,
       select: {
@@ -458,6 +462,8 @@ export async function getRecentSentNotifications(db: Db, userId: string, take = 
       title: true,
       inApp: true,
       readAt: true,
+      // 13.4/4.4: surfaced as «скрыто учеником» in the admin tab.
+      dismissedAt: true,
       emailPending: true,
       emailSentAt: true,
       scheduledAt: true,
@@ -478,6 +484,29 @@ export async function markNotificationsRead(
       ? { userId, inApp: true, readAt: null }
       : { userId, inApp: true, readAt: null, id: { in: input.ids } };
   const res = await db.notification.updateMany({ where, data: { readAt: now } });
+  return res.count;
+}
+
+/**
+ * Dismisses in-app notifications from the bell (spec 13.4/4.4): «крестик» (ids) or
+ * «Очистить» (all). Dismiss = read + hidden — still-unread rows are marked read
+ * first (preserving existing readAt), then all matched rows get dismissedAt. Hidden
+ * rows drop out of the bell + unread count but stay visible in the admin tab.
+ * Idempotent: dismissedAt: null gate means a re-run touches nothing.
+ */
+export async function dismissNotifications(
+  db: Db,
+  userId: string,
+  input: { ids?: string[]; all?: boolean },
+): Promise<number> {
+  const now = new Date();
+  const base =
+    input.all || !input.ids
+      ? { userId, inApp: true, dismissedAt: null }
+      : { userId, inApp: true, dismissedAt: null, id: { in: input.ids } };
+  // A cleared notification is also read (keep the unread count honest).
+  await db.notification.updateMany({ where: { ...base, readAt: null }, data: { readAt: now } });
+  const res = await db.notification.updateMany({ where: base, data: { dismissedAt: now } });
   return res.count;
 }
 

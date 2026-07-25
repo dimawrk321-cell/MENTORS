@@ -100,7 +100,7 @@ export type IssueCredentialsResult =
  */
 export async function createStudentCredentials(
   db: PrismaClient,
-  input: { actorId: string; email: string; name: string },
+  input: { actorId: string; email: string; adminLabel: string },
 ): Promise<IssueCredentialsResult> {
   const existing = await db.user.findUnique({ where: { email: input.email } });
   if (existing) return { ok: false, code: "exists" };
@@ -108,11 +108,16 @@ export async function createStudentCredentials(
   const tempPassword = generateTempPassword();
   const passwordHash = await hashPassword(tempPassword);
   const digestTime = await getDefaultDigestTime(db);
+  // Walk 13.4/4.1: the «Имя» field became «Метка для админов» — it writes
+  // admin_label, NOT name. `name` starts empty so onboarding «Как тебя зовут?»
+  // is not prefilled — the student sets it themselves.
+  const adminLabel = input.adminLabel.trim() || null;
   const { user } = await db.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         email: input.email,
-        name: input.name,
+        name: "",
+        adminLabel,
         role: "student",
         status: "invited",
         passwordHash,
@@ -128,12 +133,47 @@ export async function createStudentCredentials(
       entityType: "user",
       entityId: user.id,
       // Never the password — plaintext is not written anywhere (A1).
-      after: { email: input.email, name: input.name },
+      after: { email: input.email, adminLabel },
     });
     return { user };
   });
 
   return { ok: true, userId: user.id, tempPassword };
+}
+
+// --- Admin service label (spec 13.4/4.1): «Метка для админов» ---
+
+export type SetAdminLabelResult =
+  { ok: true; adminLabel: string | null } | { ok: false; code: "not_found" };
+
+/**
+ * Sets a student's admin-only service label (spec 13.4/4.1). Students only — staff
+ * labels are not editable through the students path (owner-managed team is a
+ * separate zone). Empty trims to null. Audited before/after.
+ */
+export async function setStudentAdminLabel(
+  db: PrismaClient,
+  input: { actorId: string; userId: string; adminLabel: string },
+): Promise<SetAdminLabelResult> {
+  const user = await db.user.findUnique({
+    where: { id: input.userId },
+    select: { role: true, adminLabel: true },
+  });
+  if (!user || user.role !== "student") return { ok: false, code: "not_found" };
+  const next = input.adminLabel.trim() || null;
+
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: input.userId }, data: { adminLabel: next } });
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "student.admin_label_set",
+      entityType: "user",
+      entityId: input.userId,
+      before: { adminLabel: user.adminLabel },
+      after: { adminLabel: next },
+    });
+  });
+  return { ok: true, adminLabel: next };
 }
 
 export async function inviteStudent(
@@ -753,6 +793,8 @@ export async function listStudents(db: Db, query?: string) {
             OR: [
               { name: { contains: query, mode: "insensitive" } },
               { email: { contains: query, mode: "insensitive" } },
+              // Admin label is admin-facing (13.4/4.1) — searchable in the register.
+              { adminLabel: { contains: query, mode: "insensitive" } },
             ],
           }
         : {}),

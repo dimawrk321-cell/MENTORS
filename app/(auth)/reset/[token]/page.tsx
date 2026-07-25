@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Clock } from "lucide-react";
 import { prisma } from "@/lib/db";
+import { PASSWORD_RESET_SELF_SERVE_ENABLED } from "@/lib/constants";
 import { isResetTokenValid } from "@/lib/services/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +19,8 @@ interface ResetPageProps {
 }
 
 export default async function ResetPage({ params }: ResetPageProps) {
+  // Walk 13.4/4.2: self-serve reset is @dormant.
+  if (!PASSWORD_RESET_SELF_SERVE_ENABLED) notFound();
   const { token } = await params;
   const valid = await isResetTokenValid(prisma, token);
 

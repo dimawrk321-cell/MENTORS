@@ -24,6 +24,7 @@ import { UserStatusBadge } from "@/components/features/user-status-badge";
 import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 import { ExtendAccessControls } from "./extend-access-controls";
 import {
+  AdminLabelEditor,
   BlockButton,
   ImpersonateButton,
   ResetSessionsButton,
@@ -103,6 +104,12 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
                 )}
             </h1>
             <p className="text-text-3 text-[13px]">{user.email}</p>
+            {/* Служебная метка для админов (13.4/4.1) — ученик её не видит. */}
+            <AdminLabelEditor
+              userId={user.id}
+              initialLabel={user.adminLabel}
+              canManage={canManage}
+            />
           </div>
         </div>
         {canManage && user.status !== "invited" && user.status !== "blocked" && (

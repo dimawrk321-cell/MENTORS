@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Brand favicon (spec 13.2 block 1): "M" monogram on the accent indigo
-       gradient (tokens --gradient-accent). Rounded corners match --radius-card
-       proportions; the flat full-bleed variant for apple/maskable icons is
-       generated from this same shape at build-asset time. -->
+  <!-- Brand favicon (spec 13.2 block 1, monogram updated to «P» in 13.4/4.5): the
+       PRIME «P» monogram on the accent indigo gradient (tokens --gradient-accent).
+       Rounded corners match --radius-card proportions; the flat full-bleed variant
+       for apple/maskable icons is app/apple-icon.tsx (same «P» shape, via next/og). -->
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#5e6ad2"/>
@@ -10,5 +10,5 @@
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#g)"/>
-  <path fill="#ffffff" d="M16 46 L16 18 L23.5 18 L32 31 L40.5 18 L48 18 L48 46 L41 46 L41 29.5 L32 43 L23 29.5 L23 46 Z"/>
+  <path fill="#ffffff" fill-rule="evenodd" d="M17 17 L47 17 L47 37 L25 37 L25 47 L17 47 Z M25 24 L40 24 L40 30 L25 30 Z"/>
 </svg>

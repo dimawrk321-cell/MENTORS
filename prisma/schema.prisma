@@ -125,6 +125,12 @@ model User {
   avatarColor         Int             @map("avatar_color")
   lastSeenAt          DateTime?       @map("last_seen_at")
   mentorNote          String?         @map("mentor_note")
+  // Walk 13.4 (block 4.1): admin-only service label for a student — shown next to
+  // the name in the students list/card (right students.manage). Distinct from
+  // `name` (the student sets that on onboarding) and from `mentor_note` (a longer
+  // note in the card). NEVER exposed to the student: validateSessionToken omits it,
+  // so it can't leak into any student prop/response.
+  adminLabel          String?         @map("admin_label")
   libraryEnabled      Boolean         @default(true) @map("library_enabled")
   // Stage 12.1 (spec 7.9/7.10/8.3): per-student section access, mirroring
   // library_enabled. New students get all three off (set at invite creation);
@@ -1356,6 +1362,12 @@ model Notification {
    */
   inApp         Boolean   @default(true) @map("in_app")
   readAt        DateTime? @map("read_at")
+  /**
+   * Walk 13.4 (block 4.4): student cleared this from the bell («крестик» / «Очистить»).
+   * Dismissed rows are hidden from the bell + unread count but retained; the admin
+   * student-card «Уведомления» tab still shows them marked «скрыто учеником».
+   */
+  dismissedAt   DateTime? @map("dismissed_at")
   /**
    * Email queued but not yet sent (outbox).
    */

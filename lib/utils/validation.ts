@@ -62,10 +62,27 @@ export const inviteMentorSchema = z.object({
  */
 const createNameSchema = z.string().trim().max(50, "Имя слишком длинное").optional().default("");
 
-/** «Выдать доступ» (walk 12.4/A1): email = login, name optional. */
+/**
+ * «Выдать доступ» (walk 12.4/A1, updated 13.4/4.1): email = login. The former
+ * «Имя» field became «Метка для админов» — it writes `admin_label`, never `name`
+ * (the student sets their own name on onboarding). Optional, ≤80 chars.
+ */
+export const adminLabelSchema = z
+  .string()
+  .trim()
+  .max(80, "Метка не длиннее 80 символов")
+  .optional()
+  .default("");
+
 export const issueCredentialsSchema = z.object({
   email: emailSchema,
-  name: createNameSchema,
+  adminLabel: adminLabelSchema,
+});
+
+/** Edit a student's admin label from the list/card (13.4/4.1, students.manage). */
+export const setAdminLabelSchema = z.object({
+  userId: z.string().min(1),
+  adminLabel: z.string().trim().max(80, "Метка не длиннее 80 символов"),
 });
 
 /** «Добавить участника» (walk 12.4/B4): staff role + optional interviewer flag. */

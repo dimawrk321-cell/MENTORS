@@ -15,6 +15,7 @@ import {
   createStudentCredentials,
   extendAccess,
   grantFreeze,
+  setStudentAdminLabel,
   unblockStudent,
 } from "@/lib/services/access";
 import { adminResetPasswordToTemp } from "@/lib/services/auth";
@@ -47,6 +48,7 @@ import {
   extendAccessSchema,
   issueCredentialsSchema,
   sectionAccessSchema,
+  setAdminLabelSchema,
 } from "@/lib/utils/validation";
 import { formatDateRu } from "@/lib/utils/dates";
 
@@ -80,12 +82,12 @@ export async function issueStudentCredentialsAction(
     const auth = await requireActionPermission("students.manage");
     const input = parseInput(issueCredentialsSchema, {
       email: formData.get("email"),
-      name: formData.get("name"),
+      adminLabel: formData.get("adminLabel"),
     });
     const res = await createStudentCredentials(prisma, {
       actorId: auth.user.id,
       email: input.email,
-      name: input.name,
+      adminLabel: input.adminLabel,
     });
     if (!res.ok) {
       throw new ActionError(res.code, "Пользователь с таким email уже существует");
@@ -97,6 +99,24 @@ export async function issueStudentCredentialsAction(
       tempPassword: res.tempPassword,
       message: buildCredentialMessage(input.email, res.tempPassword),
     };
+  });
+}
+
+/** «Метка для админов» (13.4/4.1): set/clear a student's admin_label (students.manage). */
+export async function setStudentAdminLabelAction(
+  input: unknown,
+): Promise<ActionResult<{ adminLabel: string | null }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("students.manage");
+    const parsed = parseInput(setAdminLabelSchema, input);
+    const res = await setStudentAdminLabel(prisma, {
+      actorId: auth.user.id,
+      userId: parsed.userId,
+      adminLabel: parsed.adminLabel,
+    });
+    if (!res.ok) throw new ActionError(res.code, "Ученик не найден");
+    revalidateStudent(parsed.userId);
+    return { adminLabel: res.adminLabel };
   });
 }
 
