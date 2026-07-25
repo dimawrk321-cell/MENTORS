@@ -402,3 +402,23 @@ export const IMPORT_ANOMALY_LABEL: Record<string, string> = {
   skippedSections: "Пропущенные разделы",
   createdNonSeedRootCategories: "Новые корневые категории",
 };
+
+// --- Walk 13.3: owner Telegram signals (spec block 4) ---
+
+/** Critical Pulse events pushed to the owner's personal chat (spec block 4). */
+export const OWNER_SIGNAL_KINDS = [
+  "security_flag",
+  "no_show",
+  "access_expired",
+  "job_error",
+] as const;
+
+export type OwnerSignalKind = (typeof OWNER_SIGNAL_KINDS)[number];
+
+/** Russian labels for the /admin/settings «Сигналы владельцу» toggles. */
+export const OWNER_SIGNAL_LABELS: Record<OwnerSignalKind, string> = {
+  security_flag: "Открыт security-флаг",
+  no_show: "Ученик не пришёл на мок (no-show)",
+  access_expired: "Ежедневная свёртка «доступ истёк у N»",
+  job_error: "Падение фоновой задачи воркера",
+};

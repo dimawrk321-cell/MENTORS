@@ -6,6 +6,7 @@ import { emitEvent } from "@/lib/services/events";
 import { writeAudit } from "@/lib/services/audit";
 import { revokeSessions } from "@/lib/services/sessions";
 import { sendAdminSecurityAlertEmail, sendSuspiciousBlockEmail } from "@/lib/services/mail";
+import { signalOwner } from "@/lib/services/telegram/owner-signals";
 
 // Anti-sharing flags (spec 7.2). Geo flag: logins from cities > 300 km apart
 // within 24h; a repeat flag within 7 days auto-blocks the account.
@@ -61,6 +62,12 @@ async function raiseConcurrentGeoFlag(
     data: { userId: user.id, type: "concurrent_geo", details, createdAt: now },
   });
   await emitEvent(db, "security.flag", { type: "concurrent_geo", ...details }, { userId: user.id });
+  // Owner signal (walk 13.3 block 4) — best-effort, must not break the login path.
+  await signalOwner(
+    db,
+    { kind: "security_flag", flagType: "concurrent_geo", studentName: user.name },
+    { now },
+  ).catch((err) => logger.warn({ err }, "owner signal failed"));
 
   if (priorFlags >= 1) {
     await autoBlockUser(db, user, now);
@@ -153,6 +160,12 @@ export async function checkRapidContentFlag(
     data: { userId, type: "rapid_content", details, createdAt: now },
   });
   await emitEvent(db, "security.flag", { type: "rapid_content", ...details }, { userId });
+  const student = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+  await signalOwner(
+    db,
+    { kind: "security_flag", flagType: "rapid_content", studentName: student?.name ?? userId },
+    { now },
+  ).catch((err) => logger.warn({ err }, "owner signal failed"));
   return { flagged: true };
 }
 

@@ -10,6 +10,7 @@ import { runSessionCleanupJob } from "@/worker/jobs/session-cleanup";
 import { runLinkRotationReminderJob } from "@/worker/jobs/link-rotation-reminder";
 import { runMockRemindersJob } from "@/worker/jobs/mock-reminders";
 import { runEmailDispatchJob } from "@/worker/jobs/email-dispatch";
+import { runTelegramDispatchJob } from "@/worker/jobs/telegram-dispatch";
 
 // Job registry (spec 7.15). Schedules are cron expressions in UTC (spec task:
 // «Кроны — в UTC, пер-пользовательская логика — в TZ пользователя»); each job
@@ -62,6 +63,12 @@ export const JOBS: JobDef[] = [
     name: "emailDispatch",
     schedule: "*/2 * * * *",
     run: (db, now) => runEmailDispatchJob(db, now),
+  },
+  {
+    // Telegram outbox flush (walk 13.3 block 2.3): every minute, idempotent.
+    name: "telegramDispatch",
+    schedule: "* * * * *",
+    run: (db, now) => runTelegramDispatchJob(db, now),
   },
 ];
 

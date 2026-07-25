@@ -5,7 +5,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.{ts,tsx}"],
-    exclude: ["node_modules/**", ".next/**", "pgsql/**"],
+    // `.claude/**` holds the CLI's transient git worktrees (their own repo copy,
+    // no generated Prisma client) — the project test runner must not scan them.
+    exclude: ["node_modules/**", ".next/**", "pgsql/**", ".claude/**"],
     // Stage-1 suites share one test database — files run sequentially.
     fileParallelism: false,
     globalSetup: "./tests/global-setup.ts",

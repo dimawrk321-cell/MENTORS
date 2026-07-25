@@ -401,7 +401,12 @@ export const notificationSettingsSchema = z.object({
   // server-side; extra keys are ignored (updateNotificationPrefs clamps).
   prefs: z.record(
     z.string(),
-    z.object({ inapp: z.boolean().optional(), email: z.boolean().optional() }),
+    z.object({
+      inapp: z.boolean().optional(),
+      email: z.boolean().optional(),
+      // Walk 13.3: telegram channel (only submitted when the user is linked).
+      telegram: z.boolean().optional(),
+    }),
   ),
 });
 
@@ -490,4 +495,9 @@ export const xpMapSchema = z.object({
 export const operationalSettingsSchema = z.object({
   values: z.record(z.string(), z.number("Укажи число").int("Только целое число")),
   digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Укажи время в формате ЧЧ:ММ"),
+});
+
+/** Owner Telegram signals editor (spec 13.3 block 4): per-kind boolean toggles. */
+export const ownerSignalsSchema = z.object({
+  signals: z.record(z.string(), z.boolean()),
 });

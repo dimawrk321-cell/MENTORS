@@ -33,6 +33,9 @@ interface ChannelPolicy {
 interface NotificationTypeConfig {
   inapp: ChannelPolicy;
   email: ChannelPolicy;
+  // Walk 13.3 (spec 7.12/V1): Telegram push channel. Only delivered to a linked
+  // chat; otherwise identical semantics to email (quiet hours, deadline drop).
+  telegram: ChannelPolicy;
 }
 
 const OFF: ChannelPolicy = { available: false, default: false, toggleable: false };
@@ -42,30 +45,37 @@ const OFF_OPT_IN: ChannelPolicy = { available: true, default: false, toggleable:
 
 // Table 7.12 (+ mock_booked changelog). new_device is email-only and delivered
 // directly (transactional security email in auth.ts) — not routed through notify.
+//
+// DECISION (walk 13.3): the `telegram` column MIRRORS `email` for every type. Email
+// is log-only by owner decision (walk 13.2), so Telegram is the real external
+// channel and carries exactly the email set — which cleanly enforces the channel
+// rule «редко и по делу, без мотивационных пингов»: the motivational/gamification/
+// broadcast types (streak_risk, freeze_used, level_title, lesson_*, announcement,
+// link_rotation) are email-OFF and therefore telegram-OFF too.
 export const NOTIFICATION_TYPES = {
-  digest: { inapp: ON_TOGGLEABLE, email: ON_TOGGLEABLE },
-  mock_24h: { inapp: ON_TOGGLEABLE, email: ON_TOGGLEABLE },
-  mock_1h: { inapp: ON_TOGGLEABLE, email: ON_TOGGLEABLE },
-  mock_feedback: { inapp: ALWAYS_ON, email: ALWAYS_ON },
-  mock_cancelled: { inapp: ALWAYS_ON, email: ALWAYS_ON },
-  waitlist_offer: { inapp: ALWAYS_ON, email: ALWAYS_ON },
-  mock_booked: { inapp: ALWAYS_ON, email: ALWAYS_ON },
+  digest: { inapp: ON_TOGGLEABLE, email: ON_TOGGLEABLE, telegram: ON_TOGGLEABLE },
+  mock_24h: { inapp: ON_TOGGLEABLE, email: ON_TOGGLEABLE, telegram: ON_TOGGLEABLE },
+  mock_1h: { inapp: ON_TOGGLEABLE, email: ON_TOGGLEABLE, telegram: ON_TOGGLEABLE },
+  mock_feedback: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
+  mock_cancelled: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
+  waitlist_offer: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
+  mock_booked: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
   // Перенос брони (changelog 13.4 block 3): одно уведомление, когда интервьюер тот
   // же; ученику — подтверждение с новой датой. Always-on inapp+email (как mock_*).
-  mock_moved: { inapp: ALWAYS_ON, email: ALWAYS_ON },
-  streak_risk: { inapp: OFF_OPT_IN, email: OFF },
-  freeze_used: { inapp: ALWAYS_ON, email: OFF },
+  mock_moved: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
+  streak_risk: { inapp: OFF_OPT_IN, email: OFF, telegram: OFF },
+  freeze_used: { inapp: ALWAYS_ON, email: OFF, telegram: OFF },
   // D7 (spec 13.1): «Новый титул» — celebratory in-app, always on, no email.
-  level_title: { inapp: ALWAYS_ON, email: OFF },
-  lesson_new: { inapp: ON_TOGGLEABLE, email: OFF },
-  lesson_updated: { inapp: ON_TOGGLEABLE, email: OFF },
-  access_14d: { inapp: ALWAYS_ON, email: ALWAYS_ON },
-  access_3d: { inapp: ALWAYS_ON, email: ALWAYS_ON },
-  access_0d: { inapp: ALWAYS_ON, email: ALWAYS_ON },
-  announcement: { inapp: ALWAYS_ON, email: OFF },
+  level_title: { inapp: ALWAYS_ON, email: OFF, telegram: OFF },
+  lesson_new: { inapp: ON_TOGGLEABLE, email: OFF, telegram: OFF },
+  lesson_updated: { inapp: ON_TOGGLEABLE, email: OFF, telegram: OFF },
+  access_14d: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
+  access_3d: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
+  access_0d: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
+  announcement: { inapp: ALWAYS_ON, email: OFF, telegram: OFF },
   // Admin-facing (spec 7.15 linkRotationReminder): in-app to admin+, always on;
   // not in the student profile matrix.
-  link_rotation: { inapp: ALWAYS_ON, email: OFF },
+  link_rotation: { inapp: ALWAYS_ON, email: OFF, telegram: OFF },
 } satisfies Record<string, NotificationTypeConfig>;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;
@@ -77,6 +87,18 @@ export type NotificationType = keyof typeof NOTIFICATION_TYPES;
  * All other types defer their email to the end of quiet hours as usual.
  */
 export const EMAIL_NON_DEFERRABLE: ReadonlySet<NotificationType> = new Set(["mock_1h", "mock_24h"]);
+
+/**
+ * Telegram fuse exemption (spec 13.3 block 5): the hourly «не более 1 незапрошенного
+ * сообщения» cap skips mock_1h and always-on telegram types (they always send).
+ * Unknown types (owner-signal rows) are exempt too — they are not student pushes.
+ */
+export function isTelegramFuseExempt(type: string): boolean {
+  if (type === "mock_1h") return true;
+  const config = (NOTIFICATION_TYPES as Record<string, NotificationTypeConfig>)[type];
+  if (!config) return true;
+  return config.telegram.available && !config.telegram.toggleable;
+}
 
 // --- Per-type payloads (data needed to render Russian title/body/url) ---
 
@@ -310,12 +332,13 @@ export function renderNotification<T extends NotificationType>(
 export interface EffectivePref {
   inapp: boolean;
   email: boolean;
+  telegram: boolean;
 }
 
-function channelState(policy: ChannelPolicy, stored: boolean | undefined): boolean {
+function channelState(policy: ChannelPolicy, stored: boolean | null | undefined): boolean {
   if (!policy.available) return false;
   if (!policy.toggleable) return policy.default; // «всегда» — stored row ignored
-  return stored ?? policy.default;
+  return stored ?? policy.default; // null (walk 13.3 telegram) or missing ⇒ code default
 }
 
 /** Resolves a user's effective channels for a type (spec 7.12). */
@@ -327,11 +350,12 @@ export async function resolveEffectivePref(
   const config = NOTIFICATION_TYPES[type];
   const row = await db.notificationPref.findUnique({
     where: { userId_type: { userId, type } },
-    select: { inapp: true, email: true },
+    select: { inapp: true, email: true, telegram: true },
   });
   return {
     inapp: channelState(config.inapp, row?.inapp),
     email: channelState(config.email, row?.email),
+    telegram: channelState(config.telegram, row?.telegram),
   };
 }
 
@@ -356,38 +380,37 @@ export async function notify<T extends NotificationType>(
 ): Promise<void> {
   const now = opts.now ?? new Date();
   const pref = await resolveEffectivePref(db, userId, type);
-  if (!pref.inapp && !pref.email) return;
+  if (!pref.inapp && !pref.email && !pref.telegram) return;
 
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { timezone: true, quietHoursStart: true, quietHoursEnd: true },
+    select: {
+      timezone: true,
+      quietHoursStart: true,
+      quietHoursEnd: true,
+      // Telegram delivers only to a linked chat (spec 13.3: «ноль сообщений
+      // неподключившимся») — the link presence gates the channel here.
+      telegramLink: { select: { chatId: true } },
+    },
   });
   if (!user) return;
 
   const { title, body, url } = renderNotification(type, payload);
 
-  // In-app is created immediately; email scheduling (spec 7.12 + §9 acceptance fix).
-  let emailPending = false;
-  let scheduledAt: Date | null = null;
-  if (pref.email) {
-    const inQuiet = isWithinQuietHours(
-      now,
-      user.timezone,
-      user.quietHoursStart,
-      user.quietHoursEnd,
-    );
-    if (inQuiet && EMAIL_NON_DEFERRABLE.has(type)) {
-      // Time-sensitive: deferring past quiet hours would arrive after the mock —
-      // drop the email entirely (the in-app copy still notifies immediately).
-      emailPending = false;
-    } else {
-      emailPending = true;
-      scheduledAt = inQuiet ? nextLocalTimeUtc(now, user.timezone, user.quietHoursEnd) : now;
-    }
-  }
+  // Quiet hours gate the two push channels (email + telegram); in-app is always
+  // immediate. Time-sensitive types (EMAIL_NON_DEFERRABLE — mock_*) are dropped in
+  // quiet hours rather than deferred (arrival after the mock is worse than none).
+  const inQuiet = isWithinQuietHours(now, user.timezone, user.quietHoursStart, user.quietHoursEnd);
+  const dropInQuiet = inQuiet && EMAIL_NON_DEFERRABLE.has(type);
+  const deferredAt = inQuiet ? nextLocalTimeUtc(now, user.timezone, user.quietHoursEnd) : now;
 
-  // Nothing to deliver (e.g. in-app off + email dropped in quiet hours) → no row.
-  if (!pref.inapp && !emailPending) return;
+  const emailPending = pref.email && !dropInQuiet;
+  // Telegram mirrors the email push semantics, but only when the user is linked.
+  const telegramPending = pref.telegram && Boolean(user.telegramLink) && !dropInQuiet;
+  const pushPending = emailPending || telegramPending;
+
+  // Nothing to deliver (e.g. in-app off + both pushes dropped in quiet hours) → no row.
+  if (!pref.inapp && !pushPending) return;
 
   await db.notification.create({
     data: {
@@ -398,15 +421,19 @@ export async function notify<T extends NotificationType>(
       url,
       inApp: pref.inapp,
       emailPending,
-      scheduledAt,
-      emailDeadline: emailPending ? (opts.emailDeadline ?? null) : null,
+      telegramPending,
+      // scheduled_at is shared by both push channels (identical deferral).
+      scheduledAt: pushPending ? deferredAt : null,
+      // email_deadline is the shared relevance horizon (mock_* → booking start).
+      emailDeadline: pushPending ? (opts.emailDeadline ?? null) : null,
     },
   });
 
   // notification.sent per channel — без текста (spec 7.13/task «События»).
-  const channels: ("inapp" | "email")[] = [];
+  const channels: ("inapp" | "email" | "telegram")[] = [];
   if (pref.inapp) channels.push("inapp");
   if (emailPending) channels.push("email");
+  if (telegramPending) channels.push("telegram");
   for (const channel of channels) {
     await db.analyticsEvent.create({
       data: { type: "notification.sent", payload: { notifType: type, channel }, userId },
@@ -525,6 +552,9 @@ export interface MatrixRow {
   description: string;
   inapp: MatrixChannel;
   email: MatrixChannel;
+  // Walk 13.3: Telegram column. `shown` follows the same available+toggleable rule
+  // as the others; the profile hides the whole column when the user isn't linked.
+  telegram: MatrixChannel;
 }
 
 const MATRIX_META: Record<string, { label: string; description: string }> = {
@@ -561,7 +591,7 @@ export const MATRIX_ORDER: NotificationType[] = [
 export async function getNotificationMatrix(db: Db, userId: string): Promise<MatrixRow[]> {
   const rows = await db.notificationPref.findMany({
     where: { userId, type: { in: MATRIX_ORDER } },
-    select: { type: true, inapp: true, email: true },
+    select: { type: true, inapp: true, email: true, telegram: true },
   });
   const byType = new Map(rows.map((r) => [r.type, r]));
   return MATRIX_ORDER.map((type) => {
@@ -580,6 +610,10 @@ export async function getNotificationMatrix(db: Db, userId: string): Promise<Mat
         shown: config.email.available && config.email.toggleable,
         value: channelState(config.email, stored?.email),
       },
+      telegram: {
+        shown: config.telegram.available && config.telegram.toggleable,
+        value: channelState(config.telegram, stored?.telegram),
+      },
     };
   });
 }
@@ -592,22 +626,38 @@ export async function getNotificationMatrix(db: Db, userId: string): Promise<Mat
 export async function updateNotificationPrefs(
   db: Db,
   userId: string,
-  submitted: Partial<Record<NotificationType, { inapp?: boolean; email?: boolean }>>,
+  submitted: Partial<
+    Record<NotificationType, { inapp?: boolean; email?: boolean; telegram?: boolean }>
+  >,
 ): Promise<void> {
   for (const type of MATRIX_ORDER) {
     const config = NOTIFICATION_TYPES[type];
     const input = submitted[type];
     if (!input) continue;
-    const inapp = config.inapp.toggleable
-      ? Boolean(input.inapp)
-      : config.inapp.available && config.inapp.default;
-    const email = config.email.toggleable
-      ? Boolean(input.email)
-      : config.email.available && config.email.default;
+    // A channel absent from the submission keeps its stored value — the profile
+    // hides the telegram column when the user isn't linked, so saving other
+    // channels must not silently reset the telegram override (walk 13.3).
+    const existing = await db.notificationPref.findUnique({
+      where: { userId_type: { userId, type } },
+      select: { inapp: true, email: true, telegram: true },
+    });
+    const resolve = (
+      policy: ChannelPolicy,
+      value: boolean | undefined,
+      stored: boolean | null | undefined,
+    ): boolean =>
+      policy.toggleable
+        ? value !== undefined
+          ? Boolean(value)
+          : (stored ?? policy.default)
+        : policy.available && policy.default;
+    const inapp = resolve(config.inapp, input.inapp, existing?.inapp);
+    const email = resolve(config.email, input.email, existing?.email);
+    const telegram = resolve(config.telegram, input.telegram, existing?.telegram);
     await db.notificationPref.upsert({
       where: { userId_type: { userId, type } },
-      create: { userId, type, inapp, email },
-      update: { inapp, email },
+      create: { userId, type, inapp, email, telegram },
+      update: { inapp, email, telegram },
     });
   }
 }

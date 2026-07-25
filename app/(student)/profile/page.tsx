@@ -5,6 +5,7 @@ import { requireStudentZone } from "@/lib/auth/guards";
 import { formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
 import { getUserAchievements } from "@/lib/services/achievements";
 import { getNotificationMatrix } from "@/lib/services/notifications";
+import { getTelegramLinkStatus } from "@/lib/services/telegram/linking";
 import { getXpSummary } from "@/lib/services/xp";
 import { getLevelTitles } from "@/lib/services/settings";
 import { titleForLevel } from "@/lib/services/level-titles";
@@ -19,6 +20,7 @@ import { ChangePasswordForm } from "./change-password-form";
 import { NameForm } from "./name-form";
 import { EmailVerifyForm } from "./email-verify-form";
 import { NotificationSettings } from "./notification-settings";
+import { TelegramSection } from "@/components/features/telegram-section";
 import { RevokeOtherSessionsButton } from "./revoke-others-button";
 
 export const metadata: Metadata = {
@@ -30,12 +32,13 @@ export const metadata: Metadata = {
 // stages 2/5/9 per plan.
 export default async function ProfilePage() {
   const { user, session } = await requireStudentZone();
-  const [devices, achievements, notificationMatrix, xp, levelTitles] = await Promise.all([
+  const [devices, achievements, notificationMatrix, xp, levelTitles, telegram] = await Promise.all([
     prisma.device.findMany({ where: { userId: user.id }, orderBy: { lastSeenAt: "desc" } }),
     getUserAchievements(prisma, user.id),
     getNotificationMatrix(prisma, user.id),
     getXpSummary(prisma, user.id),
     getLevelTitles(prisma),
+    getTelegramLinkStatus(prisma, user.id),
   ]);
   // D7 (spec 13.1): level + editable title in the profile header.
   const levelTitle = titleForLevel(xp.level.level, levelTitles);
@@ -117,7 +120,22 @@ export default async function ProfilePage() {
             digestTime={user.digestTime}
             quietHoursStart={user.quietHoursStart}
             quietHoursEnd={user.quietHoursEnd}
+            telegramLinked={telegram.linked}
           />
+        </CardContent>
+      </Card>
+
+      {/* Telegram (spec 13.3): подключить/отключить внешний канал уведомлений. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Telegram</CardTitle>
+          <CardDescription>
+            Внешний канал уведомлений: напоминания о моках, дайджест, доступ. Бот показывает
+            прогресс командами — действовать и учиться по-прежнему на платформе.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TelegramSection linked={telegram.linked} />
         </CardContent>
       </Card>
 

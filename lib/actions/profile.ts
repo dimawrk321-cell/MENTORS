@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { changePassword } from "@/lib/services/auth";
 import { revokeSessions } from "@/lib/services/sessions";
 import { updateNotificationPrefs } from "@/lib/services/notifications";
+import { createLinkCode, unlinkTelegram, LINK_CODE_TTL_MS } from "@/lib/services/telegram/linking";
 import {
   ActionError,
   assertActiveAccess,
@@ -121,6 +122,41 @@ export async function updateNotificationSettingsAction(
     });
     await updateNotificationPrefs(prisma, auth.user.id, parsed.prefs);
     revalidatePath("/profile");
+    return undefined;
+  });
+}
+
+/**
+ * Telegram «Подключить» (spec 13.3 block 1.3): issues a one-time linking code and
+ * returns the t.me deep link for a one-time reveal. Any authenticated user links
+ * their OWN chat — students from /profile, the owner from /admin/settings (needed
+ * for owner signals, block 4). assertActiveAccess is a no-op for non-students.
+ */
+export async function connectTelegramAction(): Promise<
+  ActionResult<{ deepLink: string; code: string; expiresMinutes: number }>
+> {
+  return runAction(async () => {
+    const auth = await requireActionAuth();
+    assertNotImpersonating(auth);
+    assertActiveAccess(auth);
+    const link = await createLinkCode(prisma, auth.user.id);
+    return {
+      deepLink: link.deepLink,
+      code: link.code,
+      expiresMinutes: Math.round(LINK_CODE_TTL_MS / 60000),
+    };
+  });
+}
+
+/** Telegram «Отключить» (spec 13.3 block 1.3): removes the caller's own link. Idempotent. */
+export async function disconnectTelegramAction(): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionAuth();
+    assertNotImpersonating(auth);
+    assertActiveAccess(auth);
+    await unlinkTelegram(prisma, auth.user.id, { actorId: auth.user.id });
+    revalidatePath("/profile");
+    revalidatePath("/admin/settings");
     return undefined;
   });
 }

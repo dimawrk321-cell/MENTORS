@@ -19,6 +19,7 @@ import {
 } from "@/lib/constants";
 import { emitEvent } from "@/lib/services/events";
 import { notify } from "@/lib/services/notifications";
+import { signalOwner } from "@/lib/services/telegram/owner-signals";
 import { addSrsCardForFailure } from "@/lib/services/srs";
 import { completeLesson } from "@/lib/services/content";
 import { writeAudit } from "@/lib/services/audit";
@@ -830,6 +831,20 @@ export async function markNoShow(
     await emitEvent(tx, "mock.no_show", { bookingId: booking.id }, { userId: booking.userId });
   });
   if (!applied) return { ok: false, code: "not_bookable" };
+  // Owner signal (walk 13.3 block 4): a real no_show landed.
+  const student = await db.user.findUnique({
+    where: { id: booking.userId },
+    select: { name: true, timezone: true },
+  });
+  await signalOwner(
+    db,
+    {
+      kind: "no_show",
+      studentName: student?.name ?? booking.userId,
+      whenText: formatDateTimeRu(booking.slot.startsAt, student?.timezone ?? "Europe/Moscow"),
+    },
+    { now },
+  ).catch(() => {});
   return { ok: true };
 }
 

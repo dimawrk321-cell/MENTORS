@@ -13,6 +13,9 @@ export async function resetDb(): Promise<void> {
   await testDb.announcement.deleteMany();
   await testDb.notificationPref.deleteMany();
   await testDb.notification.deleteMany();
+  // Walk 13.3 (telegram) — reference users.
+  await testDb.telegramLinkCode.deleteMany();
+  await testDb.telegramLink.deleteMany();
   // Stage 8 (search) — recency index references users/entities.
   await testDb.recentItem.deleteMany();
   // Stage 7 (library & guides) — views/bookmarks reference recordings/guides/users.

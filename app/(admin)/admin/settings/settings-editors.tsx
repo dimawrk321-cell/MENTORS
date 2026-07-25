@@ -3,13 +3,16 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import {
   updateLevelTitlesAction,
   updateOperationalSettingsAction,
+  updateOwnerSignalsAction,
   updateXpMapAction,
 } from "@/lib/actions/settings";
 import { serializeLevelTitles, DEFAULT_LEVEL_TITLES } from "@/lib/services/level-titles";
+import { OWNER_SIGNAL_KINDS, OWNER_SIGNAL_LABELS, type OwnerSignalKind } from "@/lib/constants";
 
 // Editable XP map (spec 12.1/C1) + operational rules (C2). Both persist to
 // app_settings; services read them live. «Сбросить к умолчанию» fills the code
@@ -255,5 +258,61 @@ export function OperationalSettingsForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Owner Telegram signals editor (spec 13.3 block 4). Owner-only card. Toggles which
+ * critical Pulse events reach the owner's personal chat. Delivered only if the owner
+ * linked Telegram (a note reminds when not linked).
+ */
+export function OwnerSignalsForm({
+  initial,
+  ownerLinked,
+}: {
+  initial: Record<OwnerSignalKind, boolean>;
+  ownerLinked: boolean;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [signals, setSignals] = useState<Record<OwnerSignalKind, boolean>>(initial);
+
+  const submit = () => {
+    start(async () => {
+      const res = await updateOwnerSignalsAction({ signals });
+      if (res.ok) {
+        toast({ title: "Сигналы сохранены", variant: "success" });
+        router.refresh();
+      } else {
+        toast({ title: res.error.message, variant: "danger" });
+      }
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {!ownerLinked && (
+        <p className="text-text-3 text-[13px]">
+          Чтобы получать сигналы, подключи Telegram кнопкой выше. Сейчас они никуда не уходят.
+        </p>
+      )}
+      <ul className="divide-border divide-y">
+        {OWNER_SIGNAL_KINDS.map((kind) => (
+          <li key={kind} className="flex items-center justify-between gap-4 py-3">
+            <span className="text-[14px]">{OWNER_SIGNAL_LABELS[kind]}</span>
+            <Switch
+              aria-label={OWNER_SIGNAL_LABELS[kind]}
+              checked={signals[kind]}
+              onCheckedChange={(v) => setSignals((s) => ({ ...s, [kind]: v }))}
+            />
+          </li>
+        ))}
+      </ul>
+      <div>
+        <Button onClick={submit} loading={pending}>
+          Сохранить
+        </Button>
+      </div>
+    </div>
   );
 }

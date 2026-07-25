@@ -1,6 +1,7 @@
 import type { CourseGating, Prisma } from "@prisma/client";
 import { prisma, type Db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { OWNER_SIGNAL_KINDS, type OwnerSignalKind } from "@/lib/constants";
 import { writeAudit } from "@/lib/services/audit";
 import {
   DEFAULT_XP_MAP,
@@ -164,6 +165,29 @@ export const LEVEL_TITLES_SETTING_KEY = "level_titles";
 export async function getLevelTitles(db: Db = prisma): Promise<LevelTitle[]> {
   const raw = await readRawSetting(db, LEVEL_TITLES_SETTING_KEY);
   return parseStoredLevelTitles(raw) ?? DEFAULT_LEVEL_TITLES;
+}
+
+// --- Walk 13.3: owner Telegram signals (spec block 4) ---
+
+export const OWNER_SIGNALS_SETTING_KEY = "owner_signals";
+
+/** All owner signals on by default; a stored JSON object overrides per kind. */
+export const DEFAULT_OWNER_SIGNALS: Record<OwnerSignalKind, boolean> = {
+  security_flag: true,
+  no_show: true,
+  access_expired: true,
+  job_error: true,
+};
+
+/** Editable owner-signal toggles (spec block 4): app_settings-first, code default true. */
+export async function getOwnerSignals(db: Db = prisma): Promise<Record<OwnerSignalKind, boolean>> {
+  const raw = await readRawSetting(db, OWNER_SIGNALS_SETTING_KEY);
+  const stored = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const result = { ...DEFAULT_OWNER_SIGNALS };
+  for (const kind of OWNER_SIGNAL_KINDS) {
+    if (typeof stored[kind] === "boolean") result[kind] = stored[kind];
+  }
+  return result;
 }
 
 /**

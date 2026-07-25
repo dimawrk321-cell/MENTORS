@@ -193,6 +193,11 @@ model User {
   announcementsCreated Announcement[]     @relation("AnnouncementCreator")
   announcementReads    AnnouncementRead[]
 
+  // Walk 13.3 (spec 7.12/V1): Telegram-bot channel. A user links exactly one chat
+  // (telegram_links) via a one-time code (telegram_link_codes).
+  telegramLink      TelegramLink?
+  telegramLinkCodes TelegramLinkCode[]
+
   // Stage 11: /admin/import run history (spec 8.5) — actor of an import.
   importRuns ImportRun[] @relation("ImportActor")
 
@@ -1383,6 +1388,15 @@ model Notification {
    */
   emailDeadline DateTime? @map("email_deadline")
   emailSentAt   DateTime? @map("email_sent_at")
+  /**
+   * Walk 13.3 (spec 7.12/V1): Telegram outbox flag, mirroring email_pending. Set
+   * when the user is linked and the type's telegram channel is enabled; flushed by
+   * the worker telegramDispatch job. scheduled_at (shared with email) defers past
+   * quiet hours; email_deadline is the shared relevance horizon (a mock reminder
+   * past it is skipped on both channels). null-safe: a non-linked user never gets it.
+   */
+  telegramPending Boolean   @default(false) @map("telegram_pending")
+  telegramSentAt  DateTime? @map("telegram_sent_at")
   createdAt     DateTime  @default(now()) @map("created_at")
 
   // Bell: unread count + recent 20 in-app (spec 7.12).
@@ -1390,6 +1404,10 @@ model Notification {
   @@index([userId, createdAt])
   // emailDispatch job: pending emails whose schedule is due.
   @@index([emailPending, scheduledAt])
+  // telegramDispatch job: pending telegram messages whose schedule is due.
+  @@index([telegramPending, scheduledAt])
+  // Telegram hourly fuse (spec 13.3 block 5): count recent sends per user.
+  @@index([userId, telegramSentAt])
   @@map("notifications")
 }
 
@@ -1403,6 +1421,11 @@ model NotificationPref {
   type      String
   email     Boolean
   inapp     Boolean
+  // Walk 13.3 (spec 7.12/V1): Telegram channel override. Nullable so pre-existing
+  // rows (created before this walk) and unset channels fall back to the code
+  // default (NOTIFICATION_TYPES[type].telegram) — consistent for every user,
+  // linked or not; a save writes the explicit boolean.
+  telegram  Boolean?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -1498,4 +1521,36 @@ model ImportRun {
 
   @@index([createdAt])
   @@map("import_runs")
+}
+
+// --- Walk 13.3: Telegram bot (spec 7.12/V1 external channel) ---
+
+// One user ↔ one Telegram chat. Created when a /start deep-link with a valid,
+// unused, unexpired code arrives (linking.consumeLinkCode). Both sides unique: a
+// user has at most one chat, a chat serves at most one user. chat_id is the raw
+// Telegram numeric id (as string) — audited only hashed (sha256), never in logs.
+model TelegramLink {
+  id       String   @id @default(cuid())
+  userId   String   @unique @map("user_id")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId   String   @unique @map("chat_id")
+  linkedAt DateTime @default(now()) @map("linked_at")
+
+  @@map("telegram_links")
+}
+
+// One-time linking code issued from the profile «Подключить» (spec 13.3 block 1.3).
+// TTL 10 min, single-use (used_at set atomically on consume). The code travels in
+// the t.me deep link (?start=<code>); it only links a chat to the issuing account.
+model TelegramLinkCode {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("telegram_link_codes")
 }

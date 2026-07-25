@@ -15,6 +15,19 @@ export const env = {
     return process.env.GEOIP_DB_PATH || null;
   },
   /**
+   * Telegram bot (walk 13.3, spec 7.12/V1). The token gates the whole channel:
+   * unset ⇒ the worker logs «telegram disabled» and never starts the poller, and
+   * telegramDispatch is a no-op — the channel is silently off (mirrors SMTP-null).
+   * Never printed to logs/chat; lives only in env (.env.prod on the server).
+   */
+  get telegramBotToken(): string | null {
+    return process.env.TELEGRAM_BOT_TOKEN || null;
+  },
+  /** Bot @username for the t.me/<username>?start=<code> deep link (default baked in). */
+  get telegramBotUsername(): string {
+    return process.env.TELEGRAM_BOT_USERNAME ?? "GeniusPRIMEE_BOT";
+  },
+  /**
    * SMTP config (spec 18). When `host` is unset the mailer falls back to
    * Nodemailer's jsonTransport (logs the message) — a working dev mode without
    * SMTP (stage-9 changelog to section 18).

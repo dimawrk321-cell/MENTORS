@@ -7,7 +7,10 @@ import { PrismaClient } from "@prisma/client";
 // separate process (the other trigger path) is a distinct session that the lock
 // correctly arbitrates against.
 
-const globalForLock = globalThis as unknown as { lockClient?: PrismaClient };
+const globalForLock = globalThis as unknown as {
+  lockClient?: PrismaClient;
+  telegramLockClient?: PrismaClient;
+};
 
 function lockClientUrl(): string {
   const raw = process.env.DATABASE_URL;
@@ -22,4 +25,24 @@ export function getLockClient(): PrismaClient {
     globalForLock.lockClient = new PrismaClient({ datasourceUrl: lockClientUrl() });
   }
   return globalForLock.lockClient;
+}
+
+/**
+ * Dedicated single-connection client for the Telegram poller's lifetime lock (walk
+ * 13.3 block 1.1). Separate from the per-job lock client: the poll lock is HELD for
+ * the whole process (single-poller guard across worker replicas), so it must not
+ * share the connection that every cron tick serializes try/unlock pairs on.
+ */
+export function getTelegramLockClient(): PrismaClient {
+  if (!globalForLock.telegramLockClient) {
+    globalForLock.telegramLockClient = new PrismaClient({ datasourceUrl: lockClientUrl() });
+  }
+  return globalForLock.telegramLockClient;
+}
+
+/** Disconnects the telegram lock client only if it was ever created (token set). */
+export async function disconnectTelegramLockClient(): Promise<void> {
+  if (globalForLock.telegramLockClient) {
+    await globalForLock.telegramLockClient.$disconnect();
+  }
 }

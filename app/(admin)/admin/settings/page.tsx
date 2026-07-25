@@ -17,16 +17,24 @@ import {
   getDefaultDigestTime,
   getLevelTitles,
   getNumericSetting,
+  getOwnerSignals,
   getXpMap,
 } from "@/lib/services/settings";
+import { getTelegramLinkStatus } from "@/lib/services/telegram/linking";
 import { serializeLevelTitles } from "@/lib/services/level-titles";
 import { DEFAULT_XP_MAP, XP_MAP_KEYS, XP_MAP_LABEL } from "@/lib/services/xp";
 import { STREAK_FREEZE_CAP, STREAK_FREEZE_EVERY, STREAK_MILESTONES } from "@/lib/services/streak";
 import { SRS_NEW_PER_DAY } from "@/lib/services/srs";
 import { CANCEL_FREE_HOURS, SLOT_HORIZON_DAYS, STRIKE_LOCK_DAYS } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TelegramSection } from "@/components/features/telegram-section";
 import { SettingsForm } from "./settings-form";
-import { LevelTitlesForm, OperationalSettingsForm, XpMapForm } from "./settings-editors";
+import {
+  LevelTitlesForm,
+  OperationalSettingsForm,
+  OwnerSignalsForm,
+  XpMapForm,
+} from "./settings-editors";
 
 export const metadata: Metadata = { title: "Настройки" };
 
@@ -65,7 +73,8 @@ const OPS_META: { key: string; label: string; unit: string; default: number }[] 
 
 /** /admin/settings (spec 8.5, 12.1/C1-C2): editable контакт/правила/гейтинг + XP-карта + операционные правила. admin+. */
 export default async function SettingsPage() {
-  await requirePermission("settings.manage");
+  const auth = await requirePermission("settings.manage");
+  const isOwnerViewer = auth.user.role === "owner";
 
   const rows = await prisma.appSetting.findMany({
     where: {
@@ -100,6 +109,12 @@ export default async function SettingsPage() {
   );
   const digestValue = await getDefaultDigestTime(prisma);
   const levelTitlesText = serializeLevelTitles(await getLevelTitles(prisma));
+
+  // Сигналы владельцу (spec 13.3 block 4) — owner-only section.
+  const ownerSignals = isOwnerViewer ? await getOwnerSignals(prisma) : null;
+  const ownerLinked = isOwnerViewer
+    ? (await getTelegramLinkStatus(prisma, auth.user.id)).linked
+    : false;
 
   return (
     <div className="flex flex-col gap-6">
@@ -169,6 +184,26 @@ export default async function SettingsPage() {
           <LevelTitlesForm initialText={levelTitlesText} />
         </CardContent>
       </Card>
+
+      {/* Сигналы владельцу (spec 13.3 block 4) — owner-only */}
+      {isOwnerViewer && ownerSignals && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Сигналы владельцу</CardTitle>
+            <CardDescription>
+              Критичное из Пульта — в личный чат Telegram владельца. Приходят, только если Telegram
+              подключён (кнопка ниже).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5">
+            <TelegramSection
+              linked={ownerLinked}
+              description="Подключи Telegram, чтобы получать сигналы владельцу в личный чат."
+            />
+            <OwnerSignalsForm initial={ownerSignals} ownerLinked={ownerLinked} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Read-only: правила стрика (spec 7.7) */}
       <Card>

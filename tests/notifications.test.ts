@@ -31,6 +31,7 @@ describe("prefs-гейтинг (spec 7.12)", () => {
     expect(await resolveEffectivePref(testDb, u.id, "mock_feedback")).toEqual({
       inapp: true,
       email: true,
+      telegram: true,
     });
     await notify(
       testDb,
@@ -96,6 +97,7 @@ describe("prefs-гейтинг (spec 7.12)", () => {
     expect(await resolveEffectivePref(testDb, u.id, "lesson_new")).toEqual({
       inapp: true,
       email: false,
+      telegram: false,
     });
   });
 });
@@ -195,12 +197,14 @@ describe("матрица профиля (spec 8.3/7.12)", () => {
     expect(await resolveEffectivePref(testDb, u.id, "digest")).toEqual({
       inapp: false,
       email: true,
+      telegram: true,
     });
     // email недоступен для lesson_new — зажимается в false несмотря на ввод.
     await updateNotificationPrefs(testDb, u.id, { lesson_new: { inapp: true, email: true } });
     expect(await resolveEffectivePref(testDb, u.id, "lesson_new")).toEqual({
       inapp: true,
       email: false,
+      telegram: false,
     });
     // «всегда»-тип не в матрице → игнорируется (строка не пишется, доставка сохраняется).
     await updateNotificationPrefs(testDb, u.id, { mock_feedback: { inapp: false, email: false } });
@@ -211,6 +215,7 @@ describe("матрица профиля (spec 8.3/7.12)", () => {
     expect(await resolveEffectivePref(testDb, u.id, "mock_feedback")).toEqual({
       inapp: true,
       email: true,
+      telegram: true,
     });
   });
 });

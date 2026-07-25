@@ -7,23 +7,28 @@ import {
   ACCESS_RULES_SETTING_KEY,
   DEFAULT_COURSE_GATING_SETTING_KEY,
   DEFAULT_DIGEST_TIME_KEY,
+  DEFAULT_OWNER_SIGNALS,
   LEVEL_TITLES_SETTING_KEY,
   OPS_BOUNDS,
+  OWNER_SIGNALS_SETTING_KEY,
   RENEWAL_CONTACT_SETTING_KEY,
   XP_MAP_SETTING_KEY,
   upsertAppSetting,
 } from "@/lib/services/settings";
 import { DEFAULT_XP_MAP, XP_MAP_KEYS, type XpMapKey } from "@/lib/services/xp";
 import { parseLevelTitles } from "@/lib/services/level-titles";
+import { OWNER_SIGNAL_KINDS } from "@/lib/constants";
 import {
   ActionError,
   parseInput,
+  requireActionOwner,
   requireActionPermission,
   runAction,
   type ActionResult,
 } from "@/lib/auth/action-helpers";
 import {
   operationalSettingsSchema,
+  ownerSignalsSchema,
   updateSettingsSchema,
   xpMapSchema,
 } from "@/lib/utils/validation";
@@ -146,6 +151,30 @@ export async function updateLevelTitlesAction(input: unknown): Promise<ActionRes
     revalidatePath("/admin/settings");
     // Dashboard/profile titles refresh.
     revalidatePath("/", "layout");
+    return undefined;
+  });
+}
+
+/**
+ * Сигналы владельцу (spec 13.3 block 4): per-kind toggles for the owner's Telegram
+ * signals. Owner-only (requireActionOwner). Only known kinds persist; a missing one
+ * falls back to the code default (on). Audit + cache invalidation via upsertAppSetting.
+ */
+export async function updateOwnerSignalsAction(input: unknown): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionOwner();
+    const parsed = parseInput(ownerSignalsSchema, input);
+    const clean: Record<string, boolean> = {};
+    for (const kind of OWNER_SIGNAL_KINDS) {
+      const v = parsed.signals[kind];
+      clean[kind] = typeof v === "boolean" ? v : DEFAULT_OWNER_SIGNALS[kind];
+    }
+    await upsertAppSetting(prisma, {
+      actorId: auth.user.id,
+      key: OWNER_SIGNALS_SETTING_KEY,
+      value: clean,
+    });
+    revalidatePath("/admin/settings");
     return undefined;
   });
 }

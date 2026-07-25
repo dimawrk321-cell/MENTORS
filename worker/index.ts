@@ -2,8 +2,9 @@ import { schedule } from "node-cron";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { runJob } from "@/worker/lib/run-job";
-import { getLockClient } from "@/worker/lib/lock-client";
+import { getLockClient, disconnectTelegramLockClient } from "@/worker/lib/lock-client";
 import { startHeartbeat } from "@/worker/lib/heartbeat";
+import { startTelegramPoller } from "@/worker/lib/telegram-poll";
 import { JOBS } from "@/worker/registry";
 
 // Worker process (spec 3/7.15): a long-lived node-cron scheduler for background
@@ -14,6 +15,7 @@ import { JOBS } from "@/worker/registry";
 
 const lockClient = getLockClient();
 let stopHeartbeat: (() => void) | null = null;
+let stopTelegram: (() => void) | null = null;
 
 function startWorker(): void {
   logger.info(
@@ -30,13 +32,22 @@ function startWorker(): void {
       noOverlap: true,
     });
   }
+  // Persistent Telegram long-poll (walk 13.3): lifetime loop alongside the crons,
+  // no-op when TELEGRAM_BOT_TOKEN is unset. Not a JOBS entry (getUpdates is
+  // lifetime-persistent, cron jobs are one-shot per tick).
+  stopTelegram = startTelegramPoller(prisma);
   logger.info({ count: JOBS.length }, "worker ready");
 }
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "worker shutting down");
   stopHeartbeat?.();
-  await Promise.allSettled([prisma.$disconnect(), lockClient.$disconnect()]);
+  stopTelegram?.();
+  await Promise.allSettled([
+    prisma.$disconnect(),
+    lockClient.$disconnect(),
+    disconnectTelegramLockClient(),
+  ]);
   process.exit(0);
 }
 
