@@ -2,8 +2,15 @@ import type { Question } from "@prisma/client";
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
 import { parseOptions } from "@/lib/utils/answers";
 
+// Only the answer-shaping fields are read, so the prop is a structural subset of
+// Question — a `select`ed catalog row (walk 13.5 block 1) satisfies it too.
+type AnswerQuestion = Pick<
+  Question,
+  "type" | "answerMd" | "options" | "acceptedAnswers" | "explanationMd"
+>;
+
 /** Строка правильного ответа закрытого вопроса: варианты либо принятые ответы. */
-function correctAnswerText(question: Question): string | null {
+function correctAnswerText(question: AnswerQuestion): string | null {
   if (question.type === "short_text") {
     const accepted = Array.isArray(question.acceptedAnswers)
       ? (question.acceptedAnswers as unknown[]).filter(
@@ -22,7 +29,7 @@ function correctAnswerText(question: Question): string | null {
  * закрытые типы (в SRS попадают через quiz_fail/test_fail) показывают верные
  * варианты (single/multi/tf) или принятые ответы (short_text).
  */
-export function QuestionAnswerBody({ question }: { question: Question }) {
+export function QuestionAnswerBody({ question }: { question: AnswerQuestion }) {
   if (question.answerMd?.trim()) {
     return <LessonRenderer markdown={question.answerMd} />;
   }

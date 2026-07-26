@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
-import { BookMarked, ChevronRight, Layers, Play, Snowflake, Sparkles } from "lucide-react";
+import { BookMarked, ChevronRight, Layers, Play, Sparkles } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getActivityBarData, getContinueTarget } from "@/lib/services/dashboard";
@@ -13,8 +13,7 @@ import { getTodayXp, getXpSummary } from "@/lib/services/xp";
 import { getLevelTitles } from "@/lib/services/settings";
 import { titleForLevel } from "@/lib/services/level-titles";
 import { formatDateOnlyRu, formatDateTimeRu, localDateStr, pluralRu } from "@/lib/utils/dates";
-import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
-import { Badge } from "@/components/ui/badge";
+import { CategoryChip } from "@/components/features/category-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -22,8 +21,13 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { GoalRing } from "@/components/features/goal-ring";
 import { StreakBadge } from "@/components/features/streak-badge";
 import { LevelBadge } from "@/components/features/level-badge";
-import { ActivityBar } from "@/components/features/activity-bar";
+import { ActivityBar, type ActivityVariant } from "@/components/features/activity-bar";
 import { MockBookingCard } from "@/components/features/mock-booking-card";
+
+// Activity block variant (walk 13.5 block 2): A «Лента-градиент» (default) or
+// B «Крупные точки». Flip this single constant to switch; the owner picks one
+// after review and the other is removed.
+const ACTIVITY_VARIANT: ActivityVariant = "A";
 
 export const metadata: Metadata = {
   title: "Главная",
@@ -222,14 +226,7 @@ export default async function DashboardPage() {
             <ul className="divide-border divide-y">
               {lagging.map((entry) => (
                 <li key={entry.categoryId} className="flex items-center gap-3 px-5 py-3.5">
-                  <Badge
-                    style={{
-                      color: categoryTextColor(entry.colorIndex),
-                      background: `color-mix(in srgb, ${categoryColorVar(entry.colorIndex)} 12%, transparent)`,
-                    }}
-                  >
-                    {entry.title}
-                  </Badge>
+                  <CategoryChip title={entry.title} colorIndex={entry.colorIndex} />
                   <span className="text-text-2 ml-auto text-[13px]">
                     {Math.round(entry.againShare * 100)}% «не знаю» · {entry.answers}{" "}
                     {pluralRu(entry.answers, "ответ", "ответа", "ответов")}
@@ -241,24 +238,17 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* Активность (spec 13.4 block 2): полоса последних 28 дней вместо heatmap-сетки.
-          Рядом с заголовком — серия и счётчик заморозок; интенсивность по XP дня. */}
+      {/* Активность (spec 13.5 block 2): переоформленная лента серии, вариант за
+          флагом (A «Лента-градиент» / B «Крупные точки»). Серия — внутри блока. */}
       <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <h2 className="text-[18px] font-semibold">Активность</h2>
-          <div className="text-text-2 flex items-center gap-3 text-[13px]">
-            <span>
-              Серия: {streak.current} {pluralRu(streak.current, "день", "дня", "дней")}
-            </span>
-            <span className="inline-flex items-center gap-1" title="Заморозки серии">
-              <Snowflake size={14} strokeWidth={1.75} className="text-text-3" aria-hidden="true" />
-              <span className="tabular-nums">{streak.freezes}</span>
-            </span>
-          </div>
-        </div>
+        <h2 className="text-[18px] font-semibold">Активность</h2>
         <Card>
           <CardContent className="p-4">
-            <ActivityBar data={activityBar} />
+            <ActivityBar
+              data={activityBar}
+              streak={{ current: streak.current, freezes: streak.freezes, atRisk: streak.atRisk }}
+              variant={ACTIVITY_VARIANT}
+            />
           </CardContent>
         </Card>
       </section>

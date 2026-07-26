@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { type MouseEvent, useState, useTransition } from "react";
 import { Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -13,16 +13,21 @@ export function AddToSrsButton({
   questionId,
   initialInSrs,
   size = "md",
+  iconOnly = false,
 }: {
   questionId: string;
   initialInSrs: boolean;
   size?: "sm" | "md";
+  /** Иконка-кнопка без подписи (каталог-строка, walk 13.5 block 1.2). */
+  iconOnly?: boolean;
 }) {
   const [inSrs, setInSrs] = useState(initialInSrs);
   const [pending, startTransition] = useTransition();
   const iconSize = size === "sm" ? 13 : 15;
 
-  function add(): void {
+  function add(event: MouseEvent): void {
+    // Stop a <summary>-nested add (catalog row, walk 13.5) from toggling the row.
+    event.stopPropagation();
     startTransition(async () => {
       const result = await addToSrsAction(questionId);
       if (!result.ok) {
@@ -36,6 +41,34 @@ export function AddToSrsButton({
         toast({ title: "Уже в повторениях" });
       }
     });
+  }
+
+  if (iconOnly) {
+    // Square icon button; ≥44px thumb target on mobile via Button's max-md:min-h-11.
+    if (inSrs) {
+      return (
+        <span
+          className="text-success inline-flex size-8 items-center justify-center max-md:size-11"
+          aria-label="Вопрос уже в повторениях"
+          title="Уже в повторениях"
+        >
+          <Check size={16} strokeWidth={1.75} aria-hidden="true" />
+        </span>
+      );
+    }
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        loading={pending}
+        onClick={add}
+        aria-label="В повторения"
+        title="В повторения"
+        className="w-8 px-0 max-md:w-11"
+      >
+        {!pending && <Plus size={16} strokeWidth={1.75} aria-hidden="true" />}
+      </Button>
+    );
   }
 
   if (inSrs) {

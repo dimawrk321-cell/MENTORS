@@ -11,7 +11,6 @@ import { writeAudit } from "@/lib/services/audit";
 // Question bank (spec 7.4): student catalog + lesson quiz/key questions +
 // admin CRUD with bulk operations (spec 8.5).
 
-export const CATALOG_PAGE_SIZE = 24;
 export const ADMIN_PAGE_SIZE = 50;
 export const QUIZ_MAX_QUESTIONS = 7;
 
@@ -86,11 +85,42 @@ export interface CatalogFilters {
   difficulty?: 1 | 2 | 3;
   /** «Мои западающие» (этап 4): ограничение выборки по id карточек SRS. */
   ids?: string[];
-  page?: number;
 }
 
-export async function listQuestionsCatalog(db: Db, filters: CatalogFilters) {
-  const page = Math.max(1, filters.page ?? 1);
+// --- Grouped catalog (walk 13.5 block 1): categories → collapsible sections ---
+// (The paginated flat catalog listQuestionsCatalog was retired this walk — the
+// grouped accordion below is the only student catalog surface.)
+
+export interface CatalogGroupQuestion {
+  id: string;
+  textMd: string;
+  type: QuestionType;
+  difficulty: number;
+  answerMd: string | null;
+  explanationMd: string | null;
+  options: Prisma.JsonValue;
+  acceptedAnswers: Prisma.JsonValue;
+  /** Первый опубликованный привязанный урок — «Открыть урок» (spec 13.5 1.2). */
+  lessonId: string | null;
+}
+
+export interface CatalogGroup {
+  categoryId: string;
+  title: string;
+  colorIndex: number;
+  questions: CatalogGroupQuestion[];
+}
+
+/**
+ * Grouped catalog (walk 13.5 block 1.1): all matching published questions grouped
+ * under their ROOT category, in category `order`. No pagination — the accordion
+ * (collapsed sections) is what keeps the full bank navigable; filters narrow the set.
+ * A subcategory's questions fold into its parent (root) section.
+ */
+export async function listQuestionsCatalogGrouped(
+  db: Db,
+  filters: CatalogFilters,
+): Promise<{ groups: CatalogGroup[]; total: number }> {
   const where: Prisma.QuestionWhereInput = {
     status: "published",
     ...(filters.ids ? { id: { in: filters.ids } } : {}),
@@ -99,20 +129,85 @@ export async function listQuestionsCatalog(db: Db, filters: CatalogFilters) {
     ...(filters.categoryId
       ? { categoryId: { in: await categoryFamilyIds(db, filters.categoryId) } }
       : {}),
-    // DECISION: substring match over the question text until stage-8 FTS.
     ...(filters.q ? { textMd: { contains: filters.q, mode: "insensitive" } } : {}),
   };
-  const [items, total] = await Promise.all([
+  const publishedLesson = {
+    status: "published" as const,
+    module: { status: "published" as const, course: { status: "published" as const } },
+  };
+  const [questions, roots] = await Promise.all([
     db.question.findMany({
       where,
-      include: { category: { include: { parent: { select: { colorIndex: true } } } } },
+      select: {
+        id: true,
+        textMd: true,
+        type: true,
+        difficulty: true,
+        answerMd: true,
+        explanationMd: true,
+        options: true,
+        acceptedAnswers: true,
+        category: { select: { id: true, parentId: true, title: true, colorIndex: true } },
+        lessonLinks: {
+          where: { lesson: publishedLesson },
+          select: { lessonId: true },
+          orderBy: { createdAt: "asc" },
+          take: 1,
+        },
+      },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      skip: (page - 1) * CATALOG_PAGE_SIZE,
-      take: CATALOG_PAGE_SIZE,
     }),
-    db.question.count({ where }),
+    db.questionCategory.findMany({
+      where: { parentId: null },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { id: true, title: true, colorIndex: true },
+    }),
   ]);
-  return { items, total, page, pageSize: CATALOG_PAGE_SIZE };
+
+  const rootMap = new Map(roots.map((root) => [root.id, root]));
+  const byGroup = new Map<string, CatalogGroup>();
+  for (const q of questions) {
+    // Root = the question's category or, for a subcategory, its parent.
+    const rootId = q.category.parentId ?? q.category.id;
+    const header = rootMap.get(rootId) ?? {
+      id: q.category.id,
+      title: q.category.title,
+      colorIndex: q.category.colorIndex,
+    };
+    let group = byGroup.get(header.id);
+    if (!group) {
+      group = {
+        categoryId: header.id,
+        title: header.title,
+        colorIndex: header.colorIndex,
+        questions: [],
+      };
+      byGroup.set(header.id, group);
+    }
+    group.questions.push({
+      id: q.id,
+      textMd: q.textMd,
+      type: q.type,
+      difficulty: q.difficulty,
+      answerMd: q.answerMd,
+      explanationMd: q.explanationMd,
+      options: q.options,
+      acceptedAnswers: q.acceptedAnswers,
+      lessonId: q.lessonLinks[0]?.lessonId ?? null,
+    });
+  }
+
+  // Ordered by category order; any orphan groups (missing root) trail after.
+  const groups: CatalogGroup[] = [];
+  for (const root of roots) {
+    const group = byGroup.get(root.id);
+    if (group) {
+      groups.push(group);
+      byGroup.delete(root.id);
+    }
+  }
+  groups.push(...byGroup.values());
+  return { groups, total: questions.length };
 }
 
 export async function getQuestionPublic(db: Db, id: string) {

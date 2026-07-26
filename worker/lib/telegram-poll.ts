@@ -6,11 +6,18 @@ import { jobLockKey, tryAdvisoryLock, advisoryUnlock } from "@/worker/lib/adviso
 import {
   getTelegramUpdates,
   sendTelegramMessage,
+  editMessageText,
   answerCallbackQuery,
   deleteTelegramWebhook,
   type TelegramUpdate,
 } from "@/lib/services/telegram/api";
-import { handleTelegramUpdate, handleTelegramCallback } from "@/lib/services/telegram/commands";
+import {
+  handleTelegramUpdate,
+  handleTelegramCallback,
+  TG_CALLBACK_REFRESH_TODAY,
+  TELEGRAM_REPLY_KEYBOARD,
+  type OutgoingMessage,
+} from "@/lib/services/telegram/commands";
 
 // Telegram long-poll loop (walk 13.3 block 1.1). Runs for the worker's lifetime,
 // started only when TELEGRAM_BOT_TOKEN is set (else the channel is silently off).
@@ -35,6 +42,23 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+/** Sends each reply, re-affirming the persistent tiles on inline-free ones (13.5 3.1). */
+async function sendReplies(
+  token: string,
+  chatId: string,
+  replies: OutgoingMessage[],
+): Promise<void> {
+  for (const reply of replies) {
+    await sendTelegramMessage(
+      token,
+      chatId,
+      reply.text,
+      reply.buttons ?? [],
+      reply.replyKeyboard ? TELEGRAM_REPLY_KEYBOARD : undefined,
+    );
+  }
+}
+
 async function dispatchUpdate(
   db: PrismaClient,
   token: string,
@@ -43,23 +67,35 @@ async function dispatchUpdate(
   const message = update.message;
   if (message?.text) {
     const chatId = String(message.chat.id);
-    const replies = await handleTelegramUpdate(db, { chatId, text: message.text });
-    for (const reply of replies) {
-      await sendTelegramMessage(token, chatId, reply.text, reply.buttons ?? []);
-    }
+    await sendReplies(
+      token,
+      chatId,
+      await handleTelegramUpdate(db, { chatId, text: message.text }),
+    );
     return;
   }
   const callback = update.callback_query;
   if (callback) {
     const chatId = String(callback.message?.chat.id ?? callback.from.id);
-    // Clear the button's spinner first (best-effort).
-    await answerCallbackQuery(token, callback.id).catch(() => {});
-    if (callback.data) {
-      const replies = await handleTelegramCallback(db, { chatId, data: callback.data });
-      for (const reply of replies) {
-        await sendTelegramMessage(token, chatId, reply.text, reply.buttons ?? []);
-      }
+    const isRefresh = callback.data === TG_CALLBACK_REFRESH_TODAY;
+    // Clear the button's spinner first (best-effort); «Обновлено» toast on refresh.
+    await answerCallbackQuery(token, callback.id, isRefresh ? "Обновлено" : undefined).catch(
+      () => {},
+    );
+    if (!callback.data) return;
+    const replies = await handleTelegramCallback(db, { chatId, data: callback.data });
+    // «Обновить» redraws the card in place (block 3.3); else send fresh message(s).
+    if (isRefresh && callback.message && replies[0]) {
+      await editMessageText(
+        token,
+        chatId,
+        callback.message.message_id,
+        replies[0].text,
+        replies[0].buttons ?? [],
+      ).catch((err) => logger.warn({ err }, "telegram: refresh edit failed"));
+      return;
     }
+    await sendReplies(token, chatId, replies);
   }
 }
 

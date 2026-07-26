@@ -109,15 +109,31 @@ function toKeyboardButton(button: InlineButton): Record<string, string> {
 }
 
 /**
+ * Persistent reply-keyboard markup (walk 13.5 block 3.1) from label rows. Telegram
+ * shows these tiles docked under the input; `is_persistent` keeps them across
+ * messages, so we only re-affirm them on inline-free replies.
+ */
+function replyKeyboardMarkup(rows: string[][]): Record<string, unknown> {
+  return {
+    keyboard: rows.map((row) => row.map((label) => ({ text: label }))),
+    resize_keyboard: true,
+    is_persistent: true,
+  };
+}
+
+/**
  * Sends an HTML message with an optional single row of inline buttons (spec 13.3
- * block 2.2: 1–2 max). Dynamic text must already be HTML-escaped by the caller
- * (see telegram/format.ts). Throws TelegramApiError (403 ⇒ unreachable).
+ * block 2.2: 1–2 max) OR a persistent reply keyboard (walk 13.5 block 3.1) — never
+ * both (Telegram allows one `reply_markup`); inline wins when both are passed.
+ * Dynamic text must already be HTML-escaped by the caller (see telegram/format.ts).
+ * Throws TelegramApiError (403 ⇒ unreachable).
  */
 export async function sendTelegramMessage(
   token: string,
   chatId: string,
   text: string,
   buttons: InlineButton[] = [],
+  replyKeyboard?: string[][],
 ): Promise<void> {
   const params: Record<string, unknown> = {
     chat_id: chatId,
@@ -127,8 +143,35 @@ export async function sendTelegramMessage(
   };
   if (buttons.length > 0) {
     params.reply_markup = { inline_keyboard: [buttons.map(toKeyboardButton)] };
+  } else if (replyKeyboard) {
+    params.reply_markup = replyKeyboardMarkup(replyKeyboard);
   }
   await callTelegram(token, "sendMessage", params);
+}
+
+/**
+ * Edits a sent message's text + inline buttons in place (walk 13.5 block 3.3:
+ * «Обновить перерисовывает карточку»). Best-effort — the caller swallows the
+ * «message is not modified» 400 when nothing changed.
+ */
+export async function editMessageText(
+  token: string,
+  chatId: string,
+  messageId: number,
+  text: string,
+  buttons: InlineButton[] = [],
+): Promise<void> {
+  const params: Record<string, unknown> = {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  };
+  if (buttons.length > 0) {
+    params.reply_markup = { inline_keyboard: [buttons.map(toKeyboardButton)] };
+  }
+  await callTelegram(token, "editMessageText", params);
 }
 
 /** Acknowledges a callback query (clears the button's loading spinner). Best-effort. */

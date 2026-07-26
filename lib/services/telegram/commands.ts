@@ -26,10 +26,57 @@ const WITHIN_HOUR_MS = 60 * 60 * 1000;
 
 export const TG_CALLBACK_UNLINK = "tg:unlink";
 export const TG_CALLBACK_CANCEL = "tg:cancel";
+export const TG_CALLBACK_REFRESH_TODAY = "tg:refresh:today";
+
+// Persistent reply-keyboard tiles (walk 13.5 block 3.1): 4 главные плашки в 2 ряда.
+// Тап шлёт текст плашки как обычное сообщение → мапится на тот же хендлер, что
+// одноимённая команда (block 3.2). Мок/Помощь остаются командами (block 3.4).
+export const TELEGRAM_TILES = {
+  today: "📊 Сегодня",
+  queue: "🎯 Очередь",
+  streak: "🔥 Серия",
+  progress: "📈 Прогресс",
+} as const;
+
+/** Label rows for the persistent reply keyboard (sent by the poller). */
+export const TELEGRAM_REPLY_KEYBOARD: string[][] = [
+  [TELEGRAM_TILES.today, TELEGRAM_TILES.queue],
+  [TELEGRAM_TILES.streak, TELEGRAM_TILES.progress],
+];
+
+/** Tile label → the command whose handler it mirrors (block 3.2). */
+const TILE_TO_COMMAND: Record<string, string> = {
+  [TELEGRAM_TILES.today]: "/today",
+  [TELEGRAM_TILES.queue]: "/queue",
+  [TELEGRAM_TILES.streak]: "/streak",
+  [TELEGRAM_TILES.progress]: "/progress",
+};
 
 export interface OutgoingMessage {
   text: string;
   buttons?: InlineButton[];
+  /**
+   * Attach the persistent reply keyboard to this message (block 3.1). Set only on
+   * an inline-free reply — Telegram forbids inline + reply keyboard on one message;
+   * `is_persistent` keeps the tiles docked for the inline-only replies.
+   */
+  replyKeyboard?: boolean;
+}
+
+/**
+ * Marks the first inline-free reply of a linked-user batch to carry the tiles.
+ * DECISION: Telegram allows one reply_markup per message, so the persistent tiles
+ * can't ride a reply that already has inline buttons; `is_persistent` keeps them
+ * docked once any inline-free reply has seeded them. New links are seeded on the
+ * spot (linkedConfirmation is inline-free). A user linked BEFORE this walk whose
+ * chat never received the markup sees the tiles on their first inline-free reply
+ * (/streak, an empty /queue, or an unknown command) — a one-time transitional gap,
+ * not per-message noise; an all-inline command like /today alone won't seed them.
+ */
+function withKeyboard(replies: OutgoingMessage[]): OutgoingMessage[] {
+  const target = replies.find((reply) => !reply.buttons || reply.buttons.length === 0);
+  if (target) target.replyKeyboard = true;
+  return replies;
 }
 
 interface CommandUser {
@@ -120,7 +167,11 @@ export async function buildTodayCard(
   } else {
     button = { text: "Открыть PRIME", url: platformUrl("/") };
   }
-  return { text, buttons: [button] };
+  // [Начать] + [🔄 Обновить] (walk 13.5 block 3.3): 2 max in a row.
+  return {
+    text,
+    buttons: [button, { text: "🔄 Обновить", callbackData: TG_CALLBACK_REFRESH_TODAY }],
+  };
 }
 
 async function buildQueue(
@@ -285,47 +336,59 @@ export async function handleTelegramUpdate(
     if (arg) {
       const res = await consumeLinkCode(db, { code: arg, chatId: input.chatId, now });
       if (res.ok && res.userId) {
-        return [linkedConfirmation(), await buildTodayCard(db, res.userId, now)];
+        return withKeyboard([linkedConfirmation(), await buildTodayCard(db, res.userId, now)]);
       }
       // Invalid code — but the chat may already be linked (stale deep link).
       const linked = await resolveLinkedUserId(db, input.chatId);
-      return linked ? [await buildTodayCard(db, linked, now)] : [badCode()];
+      return linked ? withKeyboard([await buildTodayCard(db, linked, now)]) : [badCode()];
     }
     const linked = await resolveLinkedUserId(db, input.chatId);
-    return linked ? [await buildTodayCard(db, linked, now)] : [connectPrompt()];
+    return linked ? withKeyboard([await buildTodayCard(db, linked, now)]) : [connectPrompt()];
   }
 
   const userId = await resolveLinkedUserId(db, input.chatId);
   if (!userId) return [connectPrompt()];
 
-  if (command === "/stop") return [stopConfirm()];
+  if (command === "/stop") return withKeyboard([stopConfirm()]);
 
   const user = await loadCommandUser(db, userId);
   if (!user) return [connectPrompt()];
 
-  switch (command) {
+  // A tile tap arrives as its plain label (no «/») — route it to the same handler
+  // as the matching command (block 3.2); the «/…» commands keep working in parallel.
+  const effective = command || TILE_TO_COMMAND[input.text.trim()] || "";
+
+  switch (effective) {
     case "/today":
-      return [await buildTodayCard(db, userId, now)];
+      return withKeyboard([await buildTodayCard(db, userId, now)]);
     case "/queue":
-      return [await buildQueue(db, user, now)];
+      return withKeyboard([await buildQueue(db, user, now)]);
     case "/streak":
-      return [await buildStreak(db, user, now)];
+      return withKeyboard([await buildStreak(db, user, now)]);
     case "/mock":
-      return [await buildMock(db, user, now)];
+      return withKeyboard([await buildMock(db, user, now)]);
     case "/progress":
-      return [await buildProgress(db, user)];
+      return withKeyboard([await buildProgress(db, user)]);
     case "/help":
-      return [buildHelp()];
+      return withKeyboard([buildHelp()]);
     default:
-      return [unknownCommand()];
+      return withKeyboard([unknownCommand()]);
   }
 }
 
-/** Routes an inline-button callback (the /stop confirm). Returns reply message(s). */
+/**
+ * Routes an inline-button callback: «Обновить» (rebuild the day card — the poller
+ * edits it in place, block 3.3) and the /stop confirm. Returns reply message(s).
+ */
 export async function handleTelegramCallback(
   db: PrismaClient,
-  input: { chatId: string; data: string },
+  input: { chatId: string; data: string; now?: Date },
 ): Promise<OutgoingMessage[]> {
+  if (input.data === TG_CALLBACK_REFRESH_TODAY) {
+    const userId = await resolveLinkedUserId(db, input.chatId);
+    if (!userId) return [connectPrompt()];
+    return [await buildTodayCard(db, userId, input.now ?? new Date())];
+  }
   if (input.data === TG_CALLBACK_UNLINK) {
     const userId = await resolveLinkedUserId(db, input.chatId);
     if (!userId) return [{ text: "Уже отключено." }];

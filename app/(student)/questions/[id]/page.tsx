@@ -9,11 +9,11 @@ import { parseOptions } from "@/lib/utils/answers";
 import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants";
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
 import { AddToSrsButton } from "@/components/features/add-to-srs-button";
+import { CategoryChip } from "@/components/features/category-chip";
 import { FlipCard } from "@/components/features/flip-card";
 import { QuestionOpenLogger } from "@/components/features/question-open-logger";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 
 export const metadata: Metadata = {
   title: "Вопрос",
@@ -36,15 +36,11 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
 
   const chips = (
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
-      <Badge
-        style={{
-          color: categoryTextColor(colorIndex),
-          background: `color-mix(in srgb, ${categoryColorVar(colorIndex)} 12%, transparent)`,
-        }}
-      >
-        {question.category.parent ? `${question.category.parent.title} · ` : ""}
-        {question.category.title}
-      </Badge>
+      <CategoryChip
+        title={question.category.title}
+        colorIndex={colorIndex}
+        prefix={question.category.parent?.title}
+      />
       <Badge>{QUESTION_TYPE_LABEL[question.type]}</Badge>
       <Badge>{QUESTION_DIFFICULTY_LABEL[question.difficulty]}</Badge>
     </div>

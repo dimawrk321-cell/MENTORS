@@ -10,6 +10,8 @@ import {
   handleTelegramUpdate,
   handleTelegramCallback,
   TG_CALLBACK_UNLINK,
+  TG_CALLBACK_REFRESH_TODAY,
+  TELEGRAM_TILES,
 } from "@/lib/services/telegram/commands";
 import { signalOwner } from "@/lib/services/telegram/owner-signals";
 import { runTelegramDispatchJob, type TelegramSend } from "@/worker/jobs/telegram-dispatch";
@@ -312,6 +314,72 @@ describe("команды бота (block 3)", () => {
     expect(hasUnlinkButton).toBe(true);
     await handleTelegramCallback(testDb, { chatId: "603", data: TG_CALLBACK_UNLINK });
     expect(await testDb.telegramLink.findUnique({ where: { userId: u.id } })).toBeNull();
+  });
+});
+
+describe("reply-клавиатура и навигация (walk 13.5 block 3)", () => {
+  it("тап плашки шлётся текстом и мапится на тот же хендлер, что команда", async () => {
+    await link("k1@test.local", "800");
+    const streak = await handleTelegramUpdate(testDb, {
+      chatId: "800",
+      text: TELEGRAM_TILES.streak,
+    });
+    expect(streak[0]!.text).toContain("Текущая"); // buildStreak
+    const today = await handleTelegramUpdate(testDb, {
+      chatId: "800",
+      text: TELEGRAM_TILES.today,
+    });
+    expect(today[0]!.text).toContain("Сегодня"); // buildTodayCard
+  });
+
+  it("команды продолжают работать параллельно плашкам", async () => {
+    await link("k2@test.local", "801");
+    const streak = await handleTelegramUpdate(testDb, { chatId: "801", text: "/streak" });
+    expect(streak[0]!.text).toContain("Текущая");
+  });
+
+  it("клавиатура прикладывается к ответу /start (первое сообщение без inline-кнопок)", async () => {
+    const u = await createTestUser({ email: "k3@test.local", timezone: MSK });
+    const { code } = await createLinkCode(testDb, u.id);
+    const replies = await handleTelegramUpdate(testDb, { chatId: "802", text: `/start ${code}` });
+    expect(replies.some((r) => r.replyKeyboard)).toBe(true);
+    // Клавиатура — на подтверждении (без inline), не на карточке дня (с inline).
+    expect(replies[0]!.replyKeyboard).toBe(true);
+    expect(replies[0]!.buttons ?? []).toHaveLength(0);
+  });
+
+  it("клавиатура прикладывается к inline-free ответу (/streak)", async () => {
+    await link("k4@test.local", "803");
+    const streak = await handleTelegramUpdate(testDb, { chatId: "803", text: "/streak" });
+    expect(streak[0]!.replyKeyboard).toBe(true);
+  });
+
+  it("непривязанный чат не получает плашек", async () => {
+    const replies = await handleTelegramUpdate(testDb, { chatId: "804", text: "/today" });
+    expect(replies.every((r) => !r.replyKeyboard)).toBe(true);
+  });
+
+  it("карточка дня несёт кнопку «Обновить»", async () => {
+    await link("k5@test.local", "805");
+    const today = await handleTelegramUpdate(testDb, { chatId: "805", text: "/today" });
+    const hasRefresh = today[0]!.buttons?.some(
+      (b) => "callbackData" in b && b.callbackData === TG_CALLBACK_REFRESH_TODAY,
+    );
+    expect(hasRefresh).toBe(true);
+  });
+
+  it("«Обновить» перерисовывает карточку дня", async () => {
+    await link("k6@test.local", "806");
+    const replies = await handleTelegramCallback(testDb, {
+      chatId: "806",
+      data: TG_CALLBACK_REFRESH_TODAY,
+    });
+    expect(replies).toHaveLength(1);
+    expect(replies[0]!.text).toContain("Сегодня");
+    const hasRefresh = replies[0]!.buttons?.some(
+      (b) => "callbackData" in b && b.callbackData === TG_CALLBACK_REFRESH_TODAY,
+    );
+    expect(hasRefresh).toBe(true);
   });
 });
 
