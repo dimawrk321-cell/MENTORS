@@ -69,5 +69,19 @@ export function checkAnswer(question: CheckableQuestion, answer: unknown): boole
   }
 }
 
+/**
+ * Правильный ответ закрытого вопроса строкой: варианты (single/multi/tf) либо
+ * принятые ответы (short_text). Общая для `QuestionAnswerBody` и ленивого рендера
+ * эталона каталога (walk 13.5). Для open — null (эталон в answer_md).
+ */
+export function correctAnswerText(question: CheckableQuestion): string | null {
+  if (question.type === "short_text") {
+    const accepted = parseAcceptedAnswers(question.acceptedAnswers);
+    return accepted.length > 0 ? accepted.join("; ") : null;
+  }
+  const correct = parseOptions(question.options).filter((option) => option.correct);
+  return correct.length > 0 ? correct.map((option) => option.text).join("; ") : null;
+}
+
 /** Закрытые (автопроверяемые) типы — пул квизов и тестов (spec 7.4). */
 export const CLOSED_QUESTION_TYPES = ["single", "multi", "tf", "short_text"] as const;

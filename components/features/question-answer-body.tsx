@@ -1,6 +1,6 @@
 import type { Question } from "@prisma/client";
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
-import { parseOptions } from "@/lib/utils/answers";
+import { correctAnswerText } from "@/lib/utils/answers";
 
 // Only the answer-shaping fields are read, so the prop is a structural subset of
 // Question — a `select`ed catalog row (walk 13.5 block 1) satisfies it too.
@@ -8,20 +8,6 @@ type AnswerQuestion = Pick<
   Question,
   "type" | "answerMd" | "options" | "acceptedAnswers" | "explanationMd"
 >;
-
-/** Строка правильного ответа закрытого вопроса: варианты либо принятые ответы. */
-function correctAnswerText(question: AnswerQuestion): string | null {
-  if (question.type === "short_text") {
-    const accepted = Array.isArray(question.acceptedAnswers)
-      ? (question.acceptedAnswers as unknown[]).filter(
-          (value): value is string => typeof value === "string",
-        )
-      : [];
-    return accepted.length > 0 ? accepted.join("; ") : null;
-  }
-  const correct = parseOptions(question.options).filter((option) => option.correct);
-  return correct.length > 0 ? correct.map((option) => option.text).join("; ") : null;
-}
 
 /**
  * Обратная сторона вопроса: эталон открытого либо правильный ответ + разбор

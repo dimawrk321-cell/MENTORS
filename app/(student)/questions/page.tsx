@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { QuestionType } from "@prisma/client";
-import { BookOpen, ChevronDown, ChevronRight, MessageCircleQuestion, Search } from "lucide-react";
+import { MessageCircleQuestion, Search } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { listQuestionsCatalogGrouped } from "@/lib/services/questions";
 import { getLaggingQuestionIds, getUserCardQuestionIds } from "@/lib/services/srs";
-import { stripMarkdown } from "@/lib/utils/text";
 import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants";
-import { AddToSrsButton } from "@/components/features/add-to-srs-button";
-import { CategoryChip } from "@/components/features/category-chip";
-import { LessonRenderer } from "@/components/blocks/lesson-renderer";
-import { QuestionAnswerBody } from "@/components/features/question-answer-body";
+import { CatalogAccordion } from "@/components/features/catalog-accordion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -23,9 +19,6 @@ export const metadata: Metadata = {
 };
 
 const TYPES: QuestionType[] = ["open", "single", "multi", "tf", "short_text"];
-
-/** Row teaser: whole stripped text for short questions, else ~80 chars at a word break. */
-const TEASER_MAX = 80;
 
 interface QuestionsPageProps {
   searchParams: Promise<{
@@ -46,15 +39,6 @@ function filterHref(
   }
   const qs = next.toString();
   return qs ? `/questions?${qs}` : "/questions";
-}
-
-function teaserFor(textMd: string): { teaser: string; isShort: boolean } {
-  const full = stripMarkdown(textMd, 100_000) || "Без текста";
-  if (full.length <= TEASER_MAX) return { teaser: full, isShort: true };
-  const slice = full.slice(0, TEASER_MAX);
-  const lastSpace = slice.lastIndexOf(" ");
-  const cut = lastSpace > TEASER_MAX * 0.6 ? slice.slice(0, lastSpace) : slice;
-  return { teaser: `${cut.trimEnd()}…`, isShort: false };
 }
 
 /**
@@ -205,93 +189,8 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
             </p>
           )}
 
-          <div className="flex flex-col gap-2">
-            {groups.map((group, index) => {
-              // По умолчанию открыта первая секция; при активном фильтре — все (spec 1.1).
-              const open = anyFilter || index === 0;
-              return (
-                <details
-                  key={group.categoryId}
-                  open={open}
-                  className="rounded-card border-border bg-surface-1 group/cat overflow-hidden border"
-                >
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 select-none [&::-webkit-details-marker]:hidden">
-                    <ChevronDown
-                      size={16}
-                      strokeWidth={1.75}
-                      className="text-text-3 ease-app shrink-0 transition-transform duration-200 group-open/cat:rotate-180"
-                      aria-hidden="true"
-                    />
-                    <CategoryChip title={group.title} colorIndex={group.colorIndex} />
-                    <span className="text-text-3 shrink-0 text-[13px] tabular-nums">
-                      {group.questions.length}
-                    </span>
-                  </summary>
-
-                  <ul className="border-border border-t px-3 sm:px-4">
-                    {group.questions.map((question) => {
-                      const { teaser, isShort } = teaserFor(question.textMd);
-                      return (
-                        <li key={question.id}>
-                          <details className="group/row border-border/70 border-b last:border-b-0">
-                            {/* Кнопка-иконка «В повторения» — в summary (видна на свёрнутой
-                                строке); её клик не тогглит строку (stopPropagation). */}
-                            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-1.5 select-none [&::-webkit-details-marker]:hidden">
-                              <ChevronRight
-                                size={15}
-                                strokeWidth={1.75}
-                                className="text-text-3 ease-app shrink-0 transition-transform duration-150 group-open/row:rotate-90"
-                                aria-hidden="true"
-                              />
-                              <span
-                                className={cn(
-                                  "text-text-1 min-w-0 flex-1 text-[14px] leading-snug",
-                                  !isShort && "truncate",
-                                )}
-                              >
-                                {teaser}
-                              </span>
-                              <span className="text-text-3 shrink-0 text-[12px] whitespace-nowrap">
-                                <span className="hidden sm:inline">
-                                  {QUESTION_TYPE_LABEL[question.type]} ·{" "}
-                                </span>
-                                {QUESTION_DIFFICULTY_LABEL[question.difficulty]}
-                              </span>
-                              <span className="shrink-0">
-                                <AddToSrsButton
-                                  questionId={question.id}
-                                  initialInSrs={inSrs.has(question.id)}
-                                  iconOnly
-                                />
-                              </span>
-                            </summary>
-
-                            <div className="lesson-prose text-text-2 mb-3 pl-[26px] text-[14px]">
-                              {!isShort && (
-                                <div className="lesson-prose text-text-1 mb-3 text-[14px] font-medium">
-                                  <LessonRenderer markdown={question.textMd} />
-                                </div>
-                              )}
-                              <QuestionAnswerBody question={question} />
-                              {question.lessonId && (
-                                <Link
-                                  href={`/lessons/${question.lessonId}`}
-                                  className="text-accent hover:text-accent-hover mt-3 inline-flex items-center gap-1 text-[13px] font-medium"
-                                >
-                                  <BookOpen size={14} strokeWidth={1.75} aria-hidden="true" />
-                                  Открыть урок
-                                </Link>
-                              )}
-                            </div>
-                          </details>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </details>
-              );
-            })}
-          </div>
+          {/* Аккордеон + ленивая подгрузка эталона при раскрытии (walk 13.5). */}
+          <CatalogAccordion groups={groups} inSrsIds={[...inSrs]} anyFilter={anyFilter} />
         </>
       )}
     </div>

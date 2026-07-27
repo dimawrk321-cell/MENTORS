@@ -1,7 +1,14 @@
 import type { ContentStatus, PrismaClient, QuestionType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import type { Db } from "@/lib/db";
-import { checkAnswer, parseOptions, CLOSED_QUESTION_TYPES } from "@/lib/utils/answers";
+import {
+  checkAnswer,
+  correctAnswerText,
+  parseOptions,
+  CLOSED_QUESTION_TYPES,
+} from "@/lib/utils/answers";
+import { catalogTeaser } from "@/lib/utils/text";
+import { renderMarkdownHtml } from "@/lib/utils/markdown";
 import { seededShuffle } from "@/lib/utils/shuffle";
 import { slugify, uniqueSlug } from "@/lib/utils/slug";
 import { emitEvent, type EarnedAchievement } from "@/lib/services/events";
@@ -93,13 +100,12 @@ export interface CatalogFilters {
 
 export interface CatalogGroupQuestion {
   id: string;
-  textMd: string;
+  /** Строка-тема: полный текст короткого вопроса либо ~80 символов с «…». */
+  teaser: string;
+  /** Короткий вопрос (текст ≤ 80): строка = полный текст, раскрытие даёт только эталон. */
+  isShort: boolean;
   type: QuestionType;
   difficulty: number;
-  answerMd: string | null;
-  explanationMd: string | null;
-  options: Prisma.JsonValue;
-  acceptedAnswers: Prisma.JsonValue;
   /** Первый опубликованный привязанный урок — «Открыть урок» (spec 13.5 1.2). */
   lessonId: string | null;
 }
@@ -116,6 +122,10 @@ export interface CatalogGroup {
  * under their ROOT category, in category `order`. No pagination — the accordion
  * (collapsed sections) is what keeps the full bank navigable; filters narrow the set.
  * A subcategory's questions fold into its parent (root) section.
+ *
+ * The эталон (answer_md) is NOT loaded here — only a cheap teaser per row. The full
+ * question + answer are rendered on demand when a row is expanded (renderCatalogAnswer
+ * via the /api/questions/[id]/answer route), so the catalog SSR stays light.
  */
 export async function listQuestionsCatalogGrouped(
   db: Db,
@@ -143,10 +153,6 @@ export async function listQuestionsCatalogGrouped(
         textMd: true,
         type: true,
         difficulty: true,
-        answerMd: true,
-        explanationMd: true,
-        options: true,
-        acceptedAnswers: true,
         category: { select: { id: true, parentId: true, title: true, colorIndex: true } },
         lessonLinks: {
           where: { lesson: publishedLesson },
@@ -184,15 +190,13 @@ export async function listQuestionsCatalogGrouped(
       };
       byGroup.set(header.id, group);
     }
+    const { teaser, isShort } = catalogTeaser(q.textMd);
     group.questions.push({
       id: q.id,
-      textMd: q.textMd,
+      teaser,
+      isShort,
       type: q.type,
       difficulty: q.difficulty,
-      answerMd: q.answerMd,
-      explanationMd: q.explanationMd,
-      options: q.options,
-      acceptedAnswers: q.acceptedAnswers,
       lessonId: q.lessonLinks[0]?.lessonId ?? null,
     });
   }
@@ -208,6 +212,64 @@ export async function listQuestionsCatalogGrouped(
   }
   groups.push(...byGroup.values());
   return { groups, total: questions.length };
+}
+
+export interface CatalogAnswer {
+  /** Full question HTML — only for a LONG question (a short one shows it in the row). */
+  questionHtml: string | null;
+  /** Эталон HTML: answer_md (KaTeX/Shiki), else closed-question correct answer + разбор. */
+  answerHtml: string;
+}
+
+/** Escapes the 3 HTML specials for plain-text embedded in the answer markup. */
+function escapeHtmlText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Lazy answer for a catalog row (walk 13.5): rendered on first expand via the
+ * /api/questions/[id]/answer route — never in the catalog SSR (keeps the first
+ * catalog load light). Mirrors QuestionAnswerBody: answer_md → rendered HTML, else
+ * the closed-question correct answer + разбор. Returns the full question HTML only
+ * for a LONG question. null when the question is not published.
+ */
+export async function renderCatalogAnswer(db: Db, id: string): Promise<CatalogAnswer | null> {
+  const q = await db.question.findUnique({
+    where: { id },
+    select: {
+      status: true,
+      textMd: true,
+      type: true,
+      answerMd: true,
+      explanationMd: true,
+      options: true,
+      acceptedAnswers: true,
+    },
+  });
+  if (!q || q.status !== "published") return null;
+
+  const { isShort } = catalogTeaser(q.textMd);
+  const questionHtml = isShort ? null : await renderMarkdownHtml(q.textMd);
+
+  let answerHtml: string;
+  if (q.answerMd?.trim()) {
+    answerHtml = await renderMarkdownHtml(q.answerMd);
+  } else {
+    const parts: string[] = [];
+    const correct = correctAnswerText(q);
+    if (correct) {
+      parts.push(
+        `<p><span class="text-text-2">Правильный ответ: </span>${escapeHtmlText(correct)}</p>`,
+      );
+    }
+    if (q.explanationMd?.trim()) {
+      parts.push(await renderMarkdownHtml(q.explanationMd));
+    } else if (!correct) {
+      parts.push('<p class="text-text-2">Разбор появится позже.</p>');
+    }
+    answerHtml = parts.join("");
+  }
+  return { questionHtml, answerHtml };
 }
 
 export async function getQuestionPublic(db: Db, id: string) {
