@@ -40,6 +40,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
         title={question.category.title}
         colorIndex={colorIndex}
         prefix={question.category.parent?.title}
+        variant="tinted"
       />
       <Badge>{QUESTION_TYPE_LABEL[question.type]}</Badge>
       <Badge>{QUESTION_DIFFICULTY_LABEL[question.difficulty]}</Badge>

@@ -15,14 +15,20 @@ export function StreakBadge({ current, atRisk, freezes }: StreakBadgeProps) {
     <span
       title={atRisk ? "Серия под угрозой — позанимайся сегодня" : undefined}
       className={cn(
-        "rounded-pill inline-flex items-center gap-1.5 border px-2.5 py-1 text-[13px] font-medium",
+        "rounded-pill inline-flex items-center gap-1.5 border px-3 py-[5px] text-[13px] font-medium",
+        // Design handoff: non-atRisk is accent-tinted with an accent flame; atRisk stays warning.
         atRisk
           ? "border-warning/40 bg-warning/10 text-warning"
-          : "border-border bg-surface-2 text-text-1",
+          : "border-accent/30 bg-accent/10 text-text-1",
       )}
     >
-      <Flame size={15} strokeWidth={1.75} aria-hidden="true" />
-      {current} {pluralRu(current, "день", "дня", "дней")}
+      <Flame
+        size={15}
+        strokeWidth={1.75}
+        className={atRisk ? "text-warning" : "text-accent"}
+        aria-hidden="true"
+      />
+      {current} {pluralRu(current, "день", "дня", "дней")} подряд
       {freezes > 0 && (
         <span
           className="text-text-3 ml-0.5 inline-flex items-center gap-0.5"

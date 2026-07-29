@@ -1,21 +1,12 @@
 import { Flame, Snowflake } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { dateOnlyUtc, formatDateOnlyRu, pluralRu } from "@/lib/utils/dates";
+import { dateOnlyUtc, formatDateOnlyRu, isoWeekday, pluralRu } from "@/lib/utils/dates";
 import type { ActivityBarCell, ActivityBarData } from "@/lib/services/dashboard";
 
-// Activity block (walk 13.5 block 2): a reworked streak strip replacing the retired
-// heatmap grid. TWO variants live behind a prop (owner picks one after review; the
-// other is then removed). Default A. Both themes, 390px, native «дата · XP» tooltip.
-//
-//  A «Лента-градиент» — the last 28 days merge into a single rounded track, green
-//    intensity a smooth gradient by the day's XP, today accented; a big streak number
-//    (flame + «N дней подряд») is the focal point on the left, the strip is backdrop.
-//  B «Крупные точки» — 14 large dots (filled = active day, empty = thin outline),
-//    caption «2 недели», streak + freezes to the side. Minimal, lots of air.
-//
-// Spec 5.6 «без эмодзи в интерфейсе»: the streak flame is a Lucide icon, not 🔥.
-
-export type ActivityVariant = "A" | "B";
+// Activity block (design handoff «Главная v2»): a header with a flame + gradient
+// streak number + freezes, then the last 14 days as a discrete weekday grid — each
+// day a rounded bar whose green intensity tracks the day's XP («темнее = больше XP»),
+// today ringed in accent. Supersedes the walk-13.5 A/B lane variants.
 
 export interface ActivityStreak {
   current: number;
@@ -23,8 +14,10 @@ export interface ActivityStreak {
   atRisk: boolean;
 }
 
-/** XP → full intensity around a heavy day (~120 XP); any active day floors at 22%. */
-function laneBackground(cell: ActivityBarCell): string {
+const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+/** XP → green intensity: any active day floors at 22%, a heavy (~120 XP) day is full. */
+function cellBackground(cell: ActivityBarCell): string {
   if (cell.xp <= 0 && cell.actions <= 0) return "var(--heat-empty)";
   const t = cell.xp > 0 ? Math.min(1, cell.xp / 120) : 0;
   const pct = Math.round(22 + 78 * t);
@@ -37,119 +30,66 @@ function cellTitle(cell: ActivityBarCell): string {
   return `${date} · ${cell.xp} XP · ${actions}`;
 }
 
-const daysWord = (n: number) => pluralRu(n, "день", "дня", "дней");
-
-function StreakFocal({ streak, size = "lg" }: { streak: ActivityStreak; size?: "lg" | "sm" }) {
-  const big = size === "lg";
+export function ActivityBar({ data, streak }: { data: ActivityBarData; streak: ActivityStreak }) {
+  const cells = data.days.slice(-14);
   return (
-    <div className="flex shrink-0 items-center gap-2.5">
-      <Flame
-        size={big ? 24 : 18}
-        strokeWidth={1.75}
-        className={streak.atRisk ? "text-warning" : "text-accent"}
-        aria-hidden="true"
-      />
-      <div className="leading-none">
-        <div className={cn("font-semibold tabular-nums", big ? "text-[26px]" : "text-[18px]")}>
-          {streak.current}
+    <div className="flex flex-col gap-3.5">
+      {/* Заголовок: пламя + градиентная цифра серии + заморозки. */}
+      <div className="flex items-center gap-3">
+        <Flame
+          size={26}
+          strokeWidth={1.75}
+          className={streak.atRisk ? "text-warning" : "text-accent"}
+          aria-hidden="true"
+        />
+        <div className="flex items-baseline gap-1.5">
+          <span
+            className="bg-clip-text text-[26px] font-bold text-transparent tabular-nums"
+            style={{ backgroundImage: "var(--gradient-accent)" }}
+          >
+            {streak.current}
+          </span>
+          <span className="text-text-3 text-[13px]">
+            {pluralRu(streak.current, "день", "дня", "дней")} подряд
+          </span>
         </div>
-        <div className="text-text-3 mt-1 text-[12px]">{daysWord(streak.current)} подряд</div>
-      </div>
-      {streak.freezes > 0 && (
         <span
-          className="text-text-3 ml-1 inline-flex items-center gap-0.5 self-start text-[12px]"
+          className="text-text-3 ml-auto inline-flex items-center gap-1 text-[12px]"
           title="Заморозки серии"
         >
           <Snowflake size={13} strokeWidth={1.75} aria-hidden="true" />
-          {streak.freezes}
+          {streak.freezes} {pluralRu(streak.freezes, "заморозка", "заморозки", "заморозок")}
         </span>
-      )}
-    </div>
-  );
-}
-
-/** Variant A: focal streak + merged gradient lane of the last 28 days. */
-function LaneVariant({ data, streak }: { data: ActivityBarData; streak: ActivityStreak }) {
-  const spanDays = data.days.length - 1;
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
-      <StreakFocal streak={streak} />
-      <div className="min-w-0 flex-1">
-        <div className="rounded-pill flex h-8 overflow-hidden">
-          {data.days.map((cell) => (
-            <div
-              key={cell.date}
-              title={cellTitle(cell)}
-              className={cn("h-full flex-1", cell.isToday && "ring-accent z-10 ring-2 ring-inset")}
-              style={{ background: laneBackground(cell) }}
-            />
-          ))}
-        </div>
-        <div className="text-text-3 mt-1.5 flex items-center justify-between text-[11px]">
-          <span>−{spanDays} дней</span>
-          <span>сегодня</span>
-        </div>
       </div>
-    </div>
-  );
-}
 
-/** Variant B: 14 large dots (filled = active), streak + freezes to the side. */
-function DotsVariant({ data, streak }: { data: ActivityBarData; streak: ActivityStreak }) {
-  const dots = data.days.slice(-14);
-  return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-      <div className="flex flex-col gap-2.5">
-        <div className="flex flex-wrap gap-2">
-          {dots.map((cell) => {
-            const active = cell.xp > 0 || cell.actions > 0;
+      {/* Дискретная сетка 14 дней с подписями дней недели. */}
+      <div>
+        <div className="grid grid-cols-[repeat(14,minmax(0,1fr))] gap-1.5">
+          {cells.map((cell) => {
+            const weekday = WEEKDAYS[isoWeekday(cell.date) - 1];
             return (
-              <span
-                key={cell.date}
-                title={cellTitle(cell)}
-                aria-hidden="true"
-                className={cn(
-                  "size-4 rounded-full",
-                  active ? "bg-success" : "border-border-strong border",
-                  cell.isToday && "ring-accent ring-offset-surface-1 ring-2 ring-offset-2",
-                )}
-              />
+              <div key={cell.date} title={cellTitle(cell)} className="flex min-w-0 flex-col gap-1">
+                <div
+                  className={cn(
+                    "h-[30px] rounded-[7px]",
+                    cell.isToday && "ring-accent ring-1 ring-inset",
+                  )}
+                  style={{ background: cellBackground(cell) }}
+                />
+                <span
+                  className={cn(
+                    "text-center text-[10px] leading-none",
+                    cell.isToday ? "text-text-1 font-semibold" : "text-text-3",
+                  )}
+                >
+                  {weekday}
+                </span>
+              </div>
             );
           })}
         </div>
-        <span className="text-text-3 text-[12px]">2 недели</span>
-      </div>
-      <div className="text-text-2 flex shrink-0 items-center gap-4 text-[13px]">
-        <span className="inline-flex items-center gap-1.5">
-          <Flame
-            size={15}
-            strokeWidth={1.75}
-            className={streak.atRisk ? "text-warning" : "text-accent"}
-            aria-hidden="true"
-          />
-          {streak.current} {daysWord(streak.current)}
-        </span>
-        <span className="inline-flex items-center gap-1" title="Заморозки серии">
-          <Snowflake size={14} strokeWidth={1.75} className="text-text-3" aria-hidden="true" />
-          <span className="tabular-nums">{streak.freezes}</span>
-        </span>
+        <p className="text-text-3 mt-2 text-[11px]">последние 2 недели · темнее = больше XP</p>
       </div>
     </div>
-  );
-}
-
-export function ActivityBar({
-  data,
-  streak,
-  variant = "A",
-}: {
-  data: ActivityBarData;
-  streak: ActivityStreak;
-  variant?: ActivityVariant;
-}) {
-  return variant === "B" ? (
-    <DotsVariant data={data} streak={streak} />
-  ) : (
-    <LaneVariant data={data} streak={streak} />
   );
 }

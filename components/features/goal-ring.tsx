@@ -39,7 +39,7 @@ export function GoalRing({ value, goal, dayKey, size = 76 }: GoalRingProps) {
     return () => clearTimeout(timer);
   }, [closed, dayKey]);
 
-  const stroke = 7;
+  const stroke = size >= 88 ? 8 : 7;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const dash = circumference * progress;
@@ -56,6 +56,10 @@ export function GoalRing({ value, goal, dayKey, size = 76 }: GoalRingProps) {
         viewBox={`0 0 ${size} ${size}`}
         role="img"
         aria-label={`Дневная цель: ${value} из ${goal} XP`}
+        // Persistent violet glow (design handoff) — the ritual glow class layers on top.
+        style={{
+          filter: "drop-shadow(0 0 14px color-mix(in srgb, var(--violet) 30%, transparent))",
+        }}
       >
         <defs>
           <linearGradient id="goalRingGradient" x1="0" y1="0" x2="1" y2="1">
@@ -85,8 +89,10 @@ export function GoalRing({ value, goal, dayKey, size = 76 }: GoalRingProps) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[15px] font-semibold">{Math.round(progress * 100)}%</span>
-        <span className="text-text-3 text-[11px]">цель</span>
+        <span className={cn("leading-tight font-bold", size >= 88 ? "text-[17px]" : "text-[15px]")}>
+          {Math.round(progress * 100)}%
+        </span>
+        <span className="text-text-3 text-[11px] leading-tight">цель</span>
       </div>
     </div>
   );

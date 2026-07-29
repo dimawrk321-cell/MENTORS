@@ -5,11 +5,12 @@ import Link from "next/link";
 import { Video } from "lucide-react";
 import { isRoomUrlReady, MOCK_TYPE_LABEL } from "@/lib/constants";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { IconTile } from "@/components/features/icon-tile";
 
-// Карточка ближайшего/активного мока (spec 8.3): обратный отсчёт + «Подключиться»
-// (активна за 15 мин до старта, ведёт на room_url). Клиентская — таймер живой.
+// Карточка ближайшего/активного мока (spec 8.3, design «Главная v2»): вертикальная
+// карточка — плитка-иконка + тип/интервьюер/дата с инлайн-отсчётом сверху, кнопки
+// «Подключиться»/«Подробнее» прижаты вниз. Клиентская — таймер живой.
 
 const CONNECT_LEAD_MS = 15 * 60 * 1000;
 
@@ -24,15 +25,15 @@ interface MockBookingCardProps {
 }
 
 function countdownLabel(startsAtMs: number, endsAtMs: number, nowMs: number): string {
-  if (nowMs >= endsAtMs) return "Мок завершён";
-  if (nowMs >= startsAtMs) return "Идёт сейчас";
+  if (nowMs >= endsAtMs) return "завершён";
+  if (nowMs >= startsAtMs) return "идёт сейчас";
   const diffMin = Math.ceil((startsAtMs - nowMs) / 60000);
-  if (diffMin < 60) return `Начнётся через ${diffMin} мин`;
+  if (diffMin < 60) return `через ${diffMin} мин`;
   const hours = Math.floor(diffMin / 60);
   const mins = diffMin % 60;
-  if (hours < 24) return `Начнётся через ${hours} ч ${mins} мин`;
+  if (hours < 24) return `через ${hours} ч ${mins} мин`;
   const days = Math.floor(hours / 24);
-  return `Начнётся через ${days} дн ${hours % 24} ч`;
+  return `через ${days} дн ${hours % 24} ч`;
 }
 
 export function MockBookingCard(props: MockBookingCardProps) {
@@ -54,33 +55,38 @@ export function MockBookingCard(props: MockBookingCardProps) {
   const countdown = nowMs === null ? "" : countdownLabel(props.startsAtMs, props.endsAtMs, nowMs);
 
   return (
-    <Card>
-      <CardContent className="flex flex-wrap items-center gap-4">
-        <div className="rounded-pill border-border bg-surface-2 flex size-10 shrink-0 items-center justify-center border">
-          <Video size={20} strokeWidth={1.75} className="text-accent" aria-hidden="true" />
+    <Card className="h-full">
+      <CardContent className="flex h-full flex-col gap-3.5">
+        <div className="flex items-center gap-3">
+          <IconTile icon={Video} colorVar="var(--violet)" />
+          <div className="min-w-0 flex-1">
+            <p className="text-text-3 truncate text-[13px]">
+              Мок · {MOCK_TYPE_LABEL[props.type] ?? props.type} · {props.interviewerName}
+            </p>
+            <p className="text-[17px] font-semibold" aria-live="polite">
+              {props.whenLabel}
+              {countdown && (
+                <span className="text-text-2 text-[13px] font-normal"> · {countdown}</span>
+              )}
+            </p>
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-text-3 text-[13px]">
-            Мок · {MOCK_TYPE_LABEL[props.type] ?? props.type} · {props.interviewerName}
-          </p>
-          <p className="text-[16px] font-semibold">{props.whenLabel}</p>
-          <p className="text-text-2 text-[13px]" aria-live="polite">
-            {countdown || " "}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {!roomReady ? (
-            <Badge variant="warning" title="Интервьюер ещё не указал ссылку на комнату">
-              Комната не указана
-            </Badge>
-          ) : canConnect ? (
+        <div className="mt-auto flex items-center gap-2">
+          {canConnect ? (
             <Button asChild>
               <a href={props.roomUrl} target="_blank" rel="noopener noreferrer">
                 Подключиться
               </a>
             </Button>
           ) : (
-            <Button disabled title="Станет активной за 15 минут до старта">
+            <Button
+              disabled
+              title={
+                roomReady
+                  ? "Станет активной за 15 минут до старта"
+                  : "Интервьюер ещё не указал ссылку на комнату"
+              }
+            >
               Подключиться
             </Button>
           )}
