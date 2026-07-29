@@ -85,7 +85,7 @@ export default async function CoursePage({ params }: CoursePageProps) {
         {/* D4 (spec 13.1): hierarchical back, unified onto BackButton (44px touch target). */}
         <BackButton href="/courses" label="Обучение" className="mb-3" />
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-[24px] font-semibold">{course.title}</h1>
+          <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">{course.title}</h1>
           <Badge>{GATING_LABEL[course.gating]}</Badge>
         </div>
         {course.description && (
@@ -94,8 +94,14 @@ export default async function CoursePage({ params }: CoursePageProps) {
           </p>
         )}
         <div className="mt-4 flex max-w-sm items-center gap-3">
-          <ProgressBar value={progressPct} aria-label={`Прогресс курса: ${progressPct}%`} />
-          <span className="text-text-3 shrink-0 text-[12px] tabular-nums">{progressPct}%</span>
+          <ProgressBar
+            value={progressPct}
+            gradient
+            aria-label={`Прогресс курса: ${progressPct}%`}
+          />
+          <span className="text-text-3 shrink-0 text-[12px] tabular-nums">
+            {progressPct}% · {state.completedRequired} из {state.totalRequired}
+          </span>
         </div>
       </div>
 

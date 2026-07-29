@@ -83,7 +83,7 @@ function LessonRow({ lesson }: { lesson: ModuleTreeLesson }) {
       <div
         aria-disabled="true"
         title="Урок откроется после завершения предыдущих"
-        className="rounded-control flex items-center gap-2.5 px-2.5 py-2"
+        className="rounded-control flex items-center gap-2.5 px-2.5 py-2 opacity-60"
       >
         {inner}
       </div>
@@ -183,7 +183,7 @@ function TestRow({ moduleId, test }: { moduleId: string; test: ModuleTreeTest })
     <div
       aria-disabled="true"
       title="Откроется после завершения уроков модуля"
-      className="rounded-control flex items-center gap-2.5 px-2.5 py-2"
+      className="rounded-control flex items-center gap-2.5 px-2.5 py-2 opacity-60"
     >
       {inner}
     </div>

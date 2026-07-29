@@ -10,12 +10,13 @@ import {
   getTrainerStats,
 } from "@/lib/services/srs";
 import { formatDateOnlyRu, pluralRu } from "@/lib/utils/dates";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
+import { CategoryChip } from "@/components/features/category-chip";
+import { IconTile } from "@/components/features/icon-tile";
+import { cn } from "@/lib/utils/cn";
 
 export const metadata: Metadata = {
   title: "Тренажёр",
@@ -40,9 +41,7 @@ export default async function TrainerPage() {
       {queue.total > 0 ? (
         <Card>
           <CardContent className="flex flex-wrap items-center gap-4">
-            <div className="rounded-pill border-border bg-surface-2 flex size-10 shrink-0 items-center justify-center border">
-              <Layers size={20} strokeWidth={1.75} className="text-accent" aria-hidden="true" />
-            </div>
+            <IconTile icon={Layers} colorVar="var(--accent)" size={44} />
             <div className="min-w-0 flex-1">
               <p className="text-text-3 text-[13px]">Очередь на сегодня</p>
               <p className="text-[18px] font-semibold">
@@ -98,7 +97,12 @@ export default async function TrainerPage() {
         <Card>
           <CardContent className="p-4">
             <p className="text-text-3 text-[13px]">Точность за 30 дней</p>
-            <p className="text-[24px] font-semibold">
+            <p
+              className={cn(
+                "text-[24px] font-semibold",
+                stats.accuracy30 !== null && "text-success",
+              )}
+            >
               {stats.accuracy30 === null ? "—" : `${Math.round(stats.accuracy30 * 100)}%`}
             </p>
           </CardContent>
@@ -113,14 +117,7 @@ export default async function TrainerPage() {
             <ul className="divide-border divide-y">
               {lagging.map((entry) => (
                 <li key={entry.categoryId} className="flex items-center gap-3 px-5 py-3.5">
-                  <Badge
-                    style={{
-                      color: categoryTextColor(entry.colorIndex),
-                      background: `color-mix(in srgb, ${categoryColorVar(entry.colorIndex)} 12%, transparent)`,
-                    }}
-                  >
-                    {entry.title}
-                  </Badge>
+                  <CategoryChip title={entry.title} colorIndex={entry.colorIndex} />
                   <span className="text-text-2 ml-auto text-[13px]">
                     {Math.round(entry.againShare * 100)}% «не знаю» · {entry.answers}{" "}
                     {pluralRu(entry.answers, "ответ", "ответа", "ответов")}
@@ -136,14 +133,7 @@ export default async function TrainerPage() {
       <Link href="/questions" className="group">
         <Card interactive>
           <CardContent className="flex items-center gap-4">
-            <div className="rounded-pill border-border bg-surface-2 flex size-10 shrink-0 items-center justify-center border">
-              <MessageCircleQuestion
-                size={20}
-                strokeWidth={1.75}
-                className="text-text-3"
-                aria-hidden="true"
-              />
-            </div>
+            <IconTile icon={MessageCircleQuestion} colorVar="var(--cat-0)" />
             <div className="min-w-0 flex-1">
               <p className="group-hover:text-accent text-[15px] font-medium">Каталог вопросов</p>
               <p className="text-text-2 text-[13px]">
