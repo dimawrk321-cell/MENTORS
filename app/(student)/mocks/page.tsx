@@ -7,6 +7,7 @@ import { getMocksPageData } from "@/lib/services/mock-queries";
 import { MOCK_DURATION_MINUTES, MOCK_TYPE_DESCRIPTION, MOCK_TYPE_LABEL } from "@/lib/constants";
 import { formatDateRu, formatDateTimeRu, MINUTE_MS, pluralRu } from "@/lib/utils/dates";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { MockBookingCard } from "@/components/features/mock-booking-card";
 import { ClaimOfferButton } from "@/components/features/mock-actions";
 
@@ -24,7 +25,10 @@ export default async function MocksPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-[24px] font-semibold">Мок-интервью</h1>
+      <PageHeader
+        title="Мок-интервью"
+        subtitle="Тренировочные собеседования с живыми интервьюерами"
+      />
 
       {/* Плашка лока при страйках (spec 7.8/8.3) */}
       {data.lock && (

@@ -56,10 +56,17 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
       aria-label={item.label}
       className={cn(
         "rounded-control ease-app flex h-9 items-center gap-3 px-3 text-[14px] transition-colors duration-150",
-        active ? "bg-surface-2 text-text-1" : "text-text-2 hover:text-text-1",
+        // Active (design handoff): surface-2 fill + inset accent bar + accent icon.
+        active
+          ? "bg-surface-2 text-text-1 shadow-[inset_2px_0_0_var(--accent)]"
+          : "text-text-2 hover:text-text-1",
       )}
     >
-      <Icon size={18} strokeWidth={1.75} className="shrink-0" />
+      <Icon
+        size={18}
+        strokeWidth={1.75}
+        className={cn("shrink-0", active && "text-accent")}
+      />
       {/* Tablet (md) shows an icon-only rail; labels return on lg. */}
       <span className="truncate md:hidden lg:inline">{item.label}</span>
     </Link>

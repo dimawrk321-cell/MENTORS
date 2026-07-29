@@ -12,6 +12,7 @@ import {
 import { formatDateOnlyRu, pluralRu } from "@/lib/utils/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
@@ -33,7 +34,7 @@ export default async function TrainerPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-[24px] font-semibold">Тренажёр</h1>
+      <PageHeader title="Тренажёр" subtitle="Интервальные повторения ключевых вопросов" />
 
       {/* Очередь на сегодня (spec 7.6) */}
       {queue.total > 0 ? (

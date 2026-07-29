@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils/cn";
 
 export const metadata: Metadata = {
@@ -84,7 +85,10 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-[24px] font-semibold">Вопросы</h1>
+      <PageHeader
+        title="Вопросы"
+        subtitle="Банк вопросов с реальных собеседований — фильтруй по теме или отмечай в повторения."
+      />
 
       {/* Облегчённая шапка фильтров (spec 13.5 1.4): поиск + один ряд чипов.
           Ряд категорий убран — его роль выполняет группировка ниже. */}
@@ -181,14 +185,6 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
         </Card>
       ) : (
         <>
-          {/* Подсказка новичку (spec 13.5 1.6): показывается без активного фильтра. */}
-          {!anyFilter && (
-            <p className="text-text-3 text-[13px]">
-              Это банк вопросов с реальных собеседований — фильтруй по теме или отмечай в
-              повторения.
-            </p>
-          )}
-
           {/* Аккордеон + ленивая подгрузка эталона при раскрытии (walk 13.5). */}
           <CatalogAccordion groups={groups} inSrsIds={[...inSrs]} anyFilter={anyFilter} />
         </>
