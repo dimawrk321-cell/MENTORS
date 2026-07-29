@@ -40,3 +40,13 @@ coverage
 # database dumps / backups — contain real user + content data, never commit
 /backups/
 *.dump
+
+# design handoff — unzipped prototypes + assets (reference only, not app code)
+/PRIME - *.dc.html
+/support.js
+/ios-frame.jsx
+/github.md
+/design_handoff_mentors/
+/fonts/
+/uploads/
+/Дизайн платформы MENTORS.zip

@@ -25,10 +25,14 @@
   --warning: #c9973f;
   /* danger lightened #d25353→#dd6363 for ≥4.5 as text on surface-1/2 (was 4.15–4.48). */
   --danger: #dd6363;
+  /* violet: second gradient stop + «занятые» слоты моков (design handoff). */
+  --violet: #8b5cf6;
   --gradient-accent: linear-gradient(135deg, #5e6ad2, #8b5cf6);
   /* DECISION: light surface-2 carries a shadow per 5.1 — expressed as a token so
      components can apply it uniformly in both themes ("none" in dark). */
   --shadow-surface-2: none;
+  /* Card elevation (design handoff): a subtle shadow on cards in BOTH themes. */
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
 
   /* B2 (spec 13.1): heatmap empty-cell fill — a faint tile distinct from the page
      background so «no activity» reads as a cell, not a gap. Light override below. */
@@ -88,8 +92,10 @@
   --success: #2a8150;
   --warning: #8f6a15;
   --danger: #c03e3e;
+  --violet: #7c4fe0;
   --gradient-accent: linear-gradient(135deg, #5e6ad2, #8b5cf6);
   --shadow-surface-2: 0 1px 3px rgb(0 0 0 / 0.06);
+  --card-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
 
   /* B2 (spec 13.1): light heatmap empty cell — a warm light gray above the #fafaf9
      page so empty days are visibly a tile (GitHub-style). */

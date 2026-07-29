@@ -22,6 +22,8 @@ const darkTokens: Record<string, string> = {
   "--success": "#45a26f",
   "--warning": "#c9973f",
   "--danger": "#dd6363",
+  "--violet": "#8b5cf6",
+  "--card-shadow": "0 1px 2px rgb(0 0 0 / 0.2)",
   "--gradient-accent": "linear-gradient(135deg, #5e6ad2, #8b5cf6)",
   "--radius-card": "14px",
   "--radius-control": "10px",
@@ -47,7 +49,9 @@ const lightTokens: Record<string, string> = {
   "--success": "#2a8150",
   "--warning": "#8f6a15",
   "--danger": "#c03e3e",
+  "--violet": "#7c4fe0",
   "--shadow-surface-2": "0 1px 3px rgb(0 0 0 / 0.06)",
+  "--card-shadow": "0 1px 3px rgb(0 0 0 / 0.06)",
 };
 
 const categoryColors = [

@@ -10,7 +10,7 @@ export function Card({ interactive = false, className, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        "bg-surface-1 border-border rounded-card border",
+        "bg-surface-1 border-border rounded-card shadow-card border",
         interactive &&
           "ease-app hover:border-border-strong transition-[transform,border-color] duration-150 hover:-translate-y-px",
         className,

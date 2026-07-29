@@ -11,7 +11,19 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   {
-    ignores: ["node_modules/**", ".next/**", "next-env.d.ts", "coverage/**", "pgsql/**"],
+    ignores: [
+      "node_modules/**",
+      ".next/**",
+      "next-env.d.ts",
+      "coverage/**",
+      "pgsql/**",
+      // Design handoff — unzipped prototypes/reference, not app code (see .gitignore).
+      "PRIME - *.dc.html",
+      "support.js",
+      "ios-frame.jsx",
+      "github.md",
+      "design_handoff_mentors/**",
+    ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   ...compat.extends("prettier"),

@@ -4,13 +4,15 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils/cn";
 
-type ButtonVariant = "primary" | "secondary" | "ghost";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: "bg-accent text-white hover:bg-accent-hover",
   secondary: "border border-border bg-transparent hover:border-border-strong hover:bg-surface-2",
   ghost: "bg-transparent text-text-2 hover:text-text-1 hover:bg-surface-2",
+  // Ghost-danger (design handoff): transparent, danger text, faint danger hover fill.
+  danger: "bg-transparent text-danger hover:bg-danger/8",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

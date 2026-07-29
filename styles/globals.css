@@ -17,6 +17,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-violet: var(--violet);
   --color-cat-0: var(--cat-0);
   --color-cat-1: var(--cat-1);
   --color-cat-2: var(--cat-2);
@@ -31,6 +32,7 @@
   --radius-pill: var(--radius-pill);
 
   --shadow-surface-2: var(--shadow-surface-2);
+  --shadow-card: var(--card-shadow);
 
   --ease-app: var(--ease);
 
