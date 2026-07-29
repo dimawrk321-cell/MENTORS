@@ -3,15 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { BookOpen, Check } from "lucide-react";
+import { BookOpen, Check, Layers, RotateCw } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { CategoryChip } from "@/components/features/category-chip";
 import { toast } from "@/components/ui/toast";
 import { pluralRu } from "@/lib/utils/dates";
 import { cn } from "@/lib/utils/cn";
-import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 import { reviewCardAction } from "@/lib/actions/srs";
 import { celebrateGamification } from "@/components/features/gamification-celebrate";
 
@@ -111,11 +110,19 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
   if (phase === "break") {
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-4 py-10 text-center">
-        <p className="text-[18px] font-semibold">Порция закрыта</p>
-        <p className="text-text-2 text-[14px]">
-          Осталось ещё {remaining} {pluralRu(remaining, "карточка", "карточки", "карточек")} —
-          продолжить?
-        </p>
+        <div
+          className="flex size-14 items-center justify-center rounded-full"
+          style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)" }}
+        >
+          <Layers size={26} strokeWidth={1.75} className="text-accent" aria-hidden="true" />
+        </div>
+        <div>
+          <p className="text-[18px] font-semibold">Порция закрыта</p>
+          <p className="text-text-2 mt-1.5 text-[14px]">
+            Осталось ещё {remaining} {pluralRu(remaining, "карточка", "карточки", "карточек")} —
+            продолжить?
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button loading={refreshing} onClick={() => startRefresh(() => router.refresh())}>
             Продолжить
@@ -133,13 +140,21 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
     // диспетчером; достижения/уровень уже показаны тостами.
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-4 py-10 text-center">
-        <div className="rounded-pill border-border bg-surface-2 flex size-12 items-center justify-center border">
-          <Check size={22} strokeWidth={1.75} className="text-success" aria-hidden="true" />
+        <div
+          className="flex size-18 items-center justify-center rounded-full"
+          style={{
+            backgroundImage: "var(--gradient-accent)",
+            boxShadow: "0 0 32px color-mix(in srgb, var(--violet) 40%, transparent)",
+          }}
+        >
+          <Check size={30} strokeWidth={2.25} className="text-white" aria-hidden="true" />
         </div>
-        <p className="text-[18px] font-semibold">Готово</p>
-        <p className="text-text-2 text-[14px]">
-          Очередь на сегодня закрыта. Следующие карточки придут по расписанию.
-        </p>
+        <div>
+          <p className="text-[20px] font-bold tracking-[-0.01em]">Готово!</p>
+          <p className="text-text-2 mt-1.5 text-[14px]">
+            Очередь на сегодня закрыта. Следующие карточки придут по расписанию.
+          </p>
+        </div>
         <Button asChild variant="secondary">
           <Link href="/trainer">В тренажёр</Link>
         </Button>
@@ -164,15 +179,25 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
         />
       </div>
 
-      <div>
-        <Badge
+      <div
+        className="rounded-pill bg-border h-1 w-full overflow-hidden"
+        role="progressbar"
+        aria-valuenow={Math.round((index / items.length) * 100)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Прогресс сессии"
+      >
+        <div
+          className="ease-app h-full rounded-full transition-[width] duration-300"
           style={{
-            color: categoryTextColor(item.category.colorIndex),
-            background: `color-mix(in srgb, ${categoryColorVar(item.category.colorIndex)} 12%, transparent)`,
+            width: `${Math.round((index / items.length) * 100)}%`,
+            backgroundImage: "var(--gradient-accent)",
           }}
-        >
-          {item.category.title}
-        </Badge>
+        />
+      </div>
+
+      <div>
+        <CategoryChip title={item.category.title} colorIndex={item.category.colorIndex} />
       </div>
 
       {/* Флип-карточка: свайпы по открытому ответу = оценки (spec 7.6). */}
@@ -215,8 +240,11 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
               доступности — backface-visibility прячет только визуально. */}
           <div className="col-start-1 row-start-1 [backface-visibility:hidden]" inert={flipped}>
             <Card className="min-h-[280px]">
-              <CardContent className="lesson-prose p-6 text-[16px]">
-                {item.questionNode}
+              <CardContent className="p-6">
+                <p className="text-text-3 mb-3 text-[12px] font-medium tracking-wide uppercase">
+                  Вопрос
+                </p>
+                <div className="lesson-prose text-[17px]">{item.questionNode}</div>
               </CardContent>
             </Card>
           </div>
@@ -276,6 +304,7 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
           </div>
         ) : (
           <Button variant="secondary" className="min-h-11" onClick={() => setFlipped(true)}>
+            <RotateCw size={15} strokeWidth={1.75} aria-hidden="true" />
             Показать ответ
           </Button>
         )}
