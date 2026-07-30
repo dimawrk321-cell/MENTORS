@@ -53,7 +53,7 @@ interface AchievementIconProps {
 
 export function AchievementIcon({
   name,
-  size = 18,
+  size = 20,
   muted = false,
   className,
 }: AchievementIconProps) {
@@ -61,7 +61,7 @@ export function AchievementIcon({
   return (
     <span
       className={cn(
-        "rounded-pill inline-flex size-8 shrink-0 items-center justify-center border",
+        "rounded-pill inline-flex size-10 shrink-0 items-center justify-center border",
         muted
           ? "border-border bg-surface-1 text-text-3"
           : "border-border-strong bg-surface-2 text-text-1",

@@ -79,7 +79,7 @@ export default async function CoursesPage() {
                 href={`/courses/${course.slug}`}
                 className="group block min-w-0"
               >
-                <Card interactive className="h-full">
+                <Card catHover={catVar} className="h-full">
                   <CardContent className="flex h-full flex-col gap-3 p-5">
                     <div className="flex items-center gap-3">
                       <IconTile icon={Icon} colorVar={catVar} />

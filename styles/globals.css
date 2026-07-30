@@ -338,3 +338,21 @@
   border-radius: 3px;
   padding: 0 1px;
 }
+
+/* Per-category hover glow for hub/course cards (design handoff — «Справочник»/
+   «Обучение»): the card lifts with a border + shadow tinted by its own category
+   colour, read from --card-cat (set inline per card via <Card catHover>).
+   Unlayered on purpose so the hover border-color/box-shadow win over the base
+   border-border / shadow-card utilities (which live in the utilities layer and
+   would otherwise override an @layer components rule). */
+.card-cat-hover {
+  transition:
+    transform 150ms var(--ease),
+    border-color 150ms var(--ease),
+    box-shadow 150ms var(--ease);
+}
+.card-cat-hover:hover {
+  border-color: color-mix(in srgb, var(--card-cat) 45%, transparent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--card-cat) 12%, transparent);
+}

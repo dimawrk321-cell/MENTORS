@@ -107,7 +107,7 @@ function HubCardTile({ card }: { card: HubCard }) {
   const Icon = card.icon;
   return (
     <Link href={card.href} className="group">
-      <Card interactive>
+      <Card catHover={card.colorVar}>
         <CardContent className="flex items-center gap-3.5 p-4">
           <IconTile icon={Icon} colorVar={card.colorVar} />
           <div className="min-w-0 flex-1">
