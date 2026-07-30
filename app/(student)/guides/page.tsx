@@ -26,6 +26,8 @@ import { pluralRu } from "@/lib/utils/dates";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { IconTile } from "@/components/features/icon-tile";
 
 export const metadata: Metadata = {
   title: "Справочник",
@@ -42,12 +44,20 @@ const SECTION_ICON: Record<string, LucideIcon> = {
   job_search: Briefcase,
 };
 
+// Per-section tint (design handoff): each hub card carries its own category colour.
+const SECTION_COLOR: Record<string, string> = {
+  stages: "var(--cat-1)",
+  ask_interviewer: "var(--cat-5)",
+  job_search: "var(--cat-7)",
+};
+
 interface HubCard {
   key: string;
   label: string;
   href: string;
   subtitle: string;
   icon: LucideIcon;
+  colorVar: string;
 }
 
 function GuideRow({ guide }: { guide: GuideNavItem }) {
@@ -98,10 +108,8 @@ function HubCardTile({ card }: { card: HubCard }) {
   return (
     <Link href={card.href} className="group">
       <Card interactive>
-        <CardContent className="flex items-center gap-4 p-4">
-          <div className="rounded-pill border-border bg-surface-2 flex size-10 shrink-0 items-center justify-center border">
-            <Icon size={20} strokeWidth={1.75} className="text-text-2" aria-hidden="true" />
-          </div>
+        <CardContent className="flex items-center gap-3.5 p-4">
+          <IconTile icon={Icon} colorVar={card.colorVar} />
           <div className="min-w-0 flex-1">
             <p className="group-hover:text-accent text-[15px] font-medium">{card.label}</p>
             <p className="text-text-3 text-[13px]">{card.subtitle}</p>
@@ -132,7 +140,7 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
     });
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-[22px] font-semibold">Поиск: «{query}»</h1>
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">Поиск: «{query}»</h1>
         {results.length === 0 ? (
           <Card>
             <EmptyState
@@ -171,6 +179,7 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
         href: `/guides/${items[0]!.slug}`,
         subtitle: `${items.length} ${pluralRu(items.length, "гайд", "гайда", "гайдов")}`,
         icon: SECTION_ICON[section] ?? BookMarked,
+        colorVar: SECTION_COLOR[section] ?? "var(--cat-0)",
       },
     ];
   });
@@ -183,6 +192,7 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
             href: "/resume",
             subtitle: "Как собрать сильное резюме",
             icon: FileText,
+            colorVar: "var(--cat-0)",
           },
         ]
       : []),
@@ -194,6 +204,7 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
             href: "/legend",
             subtitle: "Как выстроить историю проектов",
             icon: Feather,
+            colorVar: "var(--cat-6)",
           },
         ]
       : []),
@@ -247,13 +258,10 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-[24px] font-semibold">Справочник</h1>
-        <p className="text-text-2 mt-1 max-w-[60ch] text-[14px]">
-          Гайды по этапам собеседований, вопросам интервьюеру и поиску работы. Открывай раздел и
-          добавляй нужное в закладки.
-        </p>
-      </div>
+      <PageHeader
+        title="Справочник"
+        subtitle="Гайды по этапам собеседований, вопросам интервьюеру и поиску работы. Открывай раздел и добавляй нужное в закладки."
+      />
 
       {/* D6 (spec 13.1): bookmarks lead the hub when the student has them. */}
       {bookmarks.length > 0 ? [bookmarksBlock, sectionsBlock] : [sectionsBlock, bookmarksBlock]}

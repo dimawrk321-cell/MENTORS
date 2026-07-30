@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Book } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getGuideBySlug, isGuideBookmarked, listSimilarGuides } from "@/lib/services/guides";
@@ -68,9 +69,11 @@ export default async function GuidePage({ params }: GuidePageProps) {
           <GuideBookmark guideId={guide.id} initialBookmarked={bookmarked} />
         </div>
       </div>
-      <h1 className="text-[32px] font-semibold">{guide.title}</h1>
+      <h1 className="mb-4 text-[32px] leading-[1.2] font-semibold tracking-[-0.02em]">
+        {guide.title}
+      </h1>
       {/* Reading column with the always-present watermark layer (spec 5.7). */}
-      <div className="relative mt-5">
+      <div className="relative">
         <Watermark email={session.user.email} />
         <div className="lesson-prose" data-reading-size={user.readingFontSize}>
           {content}
@@ -78,22 +81,27 @@ export default async function GuidePage({ params }: GuidePageProps) {
       </div>
 
       {similar.length > 0 && (
-        <section className="border-border mt-10 border-t pt-6">
-          <h2 className="text-text-2 mb-3 text-[13px] font-medium tracking-wide uppercase">
+        <section className="border-border mt-8 border-t pt-5">
+          <h2 className="text-text-3 mb-2.5 text-[13px] font-semibold tracking-[0.08em] uppercase">
             Похожие гайды
           </h2>
-          <ul className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             {similar.map((g) => (
-              <li key={g.id}>
-                <Link
-                  href={`/guides/${g.slug}`}
-                  className="text-text-1 hover:text-accent text-[14px]"
-                >
-                  {g.title}
-                </Link>
-              </li>
+              <Link
+                key={g.id}
+                href={`/guides/${g.slug}`}
+                className="group border-border bg-surface-1 hover:border-border-strong flex items-center gap-2.5 rounded-[10px] border px-3.5 py-2.5 text-[14px] transition-colors"
+              >
+                <Book
+                  size={14}
+                  strokeWidth={1.75}
+                  className="text-text-3 shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="group-hover:text-accent min-w-0 truncate">{g.title}</span>
+              </Link>
             ))}
-          </ul>
+          </div>
         </section>
       )}
     </article>
