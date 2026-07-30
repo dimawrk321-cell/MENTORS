@@ -7,7 +7,7 @@ import { haptic } from "@/lib/utils/haptic";
 // Кольцо дневной цели (spec 5.3/7.7): SVG-кольцо с градиентной заливкой. Ритуал
 // закрытия — glow ≤500мс + вибрация (spec 5.4), один раз в день (localStorage по
 // дате в TZ). prefers-reduced-motion отключает анимацию (глобально в globals.css)
-// и вибрацию (внутри haptic). Градиент кольца — одно из трёх разрешённых мест (5.1).
+// и вибрацию (внутри haptic). Градиент — системный акцент бренда v2 (changelog 5.1).
 
 interface GoalRingProps {
   /** XP за сегодня. */
