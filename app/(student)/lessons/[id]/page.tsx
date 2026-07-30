@@ -104,7 +104,9 @@ export default async function LessonPage({ params }: LessonPageProps) {
           <span>{view.module.title}</span>
         </nav>
 
-        <h1 className="text-[32px] font-semibold">{view.lesson.title}</h1>
+        <h1 className="text-[32px] leading-[1.2] font-semibold tracking-[-0.02em]">
+          {view.lesson.title}
+        </h1>
         <div className="mt-2.5 mb-5 flex flex-wrap items-center gap-2">
           <Badge>{view.lesson.readingMinutes} мин</Badge>
           <Badge>{DIFFICULTY_LABEL[view.lesson.difficulty]}</Badge>

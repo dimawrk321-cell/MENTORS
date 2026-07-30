@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -92,13 +93,14 @@ export function TestRunner({ attemptId, questions, answeredIds }: TestRunnerProp
           </span>
         </div>
         <ProgressBar
+          gradient
           value={((index + 1) / total) * 100}
           aria-label={`Вопрос ${index + 1} из ${total}`}
         />
       </div>
 
-      <div className="rounded-card border-border bg-surface-1 border p-5">
-        <div className="lesson-prose mb-4 text-[16px] font-medium">{question.questionNode}</div>
+      <div className="border-border bg-surface-1 rounded-[20px] border p-6">
+        <div className="lesson-prose mb-5 text-[16px] font-medium">{question.questionNode}</div>
 
         {question.type === "short_text" ? (
           <Input
@@ -112,8 +114,8 @@ export function TestRunner({ attemptId, questions, answeredIds }: TestRunnerProp
             }}
           />
         ) : (
-          <div className="flex flex-col gap-1.5" role={multi ? "group" : "radiogroup"}>
-            {question.options.map((option) => {
+          <div className="flex flex-col gap-2.5" role={multi ? "group" : "radiogroup"}>
+            {question.options.map((option, optionIndex) => {
               const isSelected = selected.includes(option.id);
               return (
                 <button
@@ -122,14 +124,40 @@ export function TestRunner({ attemptId, questions, answeredIds }: TestRunnerProp
                   role={multi ? "checkbox" : "radio"}
                   aria-checked={isSelected}
                   onClick={() => toggleOption(option.id)}
-                  className={cn(
-                    "rounded-control ease-app border px-3.5 py-2.5 text-left text-[14px] transition-colors duration-150",
+                  style={
                     isSelected
-                      ? "border-accent bg-accent/8 text-text-1"
+                      ? {
+                          boxShadow: "0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent)",
+                        }
+                      : undefined
+                  }
+                  className={cn(
+                    "ease-app flex items-center gap-3.5 rounded-[12px] border px-4 py-3 text-left text-[15px] transition-[border-color,background-color,box-shadow] duration-150",
+                    isSelected
+                      ? "border-accent/70 bg-accent/10 text-text-1"
                       : "border-border text-text-2 hover:border-border-strong hover:text-text-1",
                   )}
                 >
-                  {option.text}
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-[7px] text-[12px] font-semibold",
+                      isSelected
+                        ? "bg-accent text-white"
+                        : "border-border-strong bg-surface-2 text-text-3 border",
+                    )}
+                    aria-hidden="true"
+                  >
+                    {String.fromCharCode(65 + optionIndex)}
+                  </span>
+                  <span className="flex-1">{option.text}</span>
+                  {isSelected && (
+                    <Check
+                      size={16}
+                      strokeWidth={2.25}
+                      className="text-accent shrink-0"
+                      aria-hidden="true"
+                    />
+                  )}
                 </button>
               );
             })}
@@ -140,7 +168,10 @@ export function TestRunner({ attemptId, questions, answeredIds }: TestRunnerProp
         )}
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-text-3 max-w-[40ch] text-[12px]">
+          Верно или нет — узнаешь в конце: это экзамен, а не квиз.
+        </span>
         <Button loading={pending} disabled={!canSubmit} onClick={submit}>
           {isLast ? "Завершить тест" : "Далее"}
         </Button>
