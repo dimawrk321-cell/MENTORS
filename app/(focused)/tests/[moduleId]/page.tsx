@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Check, CircleOff, Trophy, X } from "lucide-react";
+import { Check, CircleOff, Sparkles, Trophy, X, Zap } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getCourseView } from "@/lib/services/content";
@@ -11,6 +11,7 @@ import {
   getTestOverview,
   TESTOUT_THRESHOLD,
 } from "@/lib/services/tests";
+import { DEFAULT_XP_MAP } from "@/lib/services/xp";
 import { parseOptions } from "@/lib/utils/answers";
 import { seededShuffle } from "@/lib/utils/shuffle";
 import { BackButton } from "@/components/ui/back-button";
@@ -151,6 +152,26 @@ export default async function TestPage({ params, searchParams }: TestPageProps) 
           <p className="text-text-2 mt-1 text-[14px]">
             {mod.title} · порог {review.threshold}%
           </p>
+        </div>
+
+        {/* Пилюли наград (по образцу done-экрана сессии, PRIME-Тест): XP за сдачу +
+            бонус за первую попытку. Факт начисления выводится из данных, уже
+            загруженных на этом рендере (kind + overview.finishedModuleAttempts) —
+            без новых запросов; суммы — код-константы DEFAULT_XP_MAP. */}
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <span className="rounded-pill bg-success/12 text-success inline-flex items-center gap-1.5 px-3 py-[5px] text-[13px] font-medium">
+            <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />+
+            {review.attempt.kind === "testout"
+              ? DEFAULT_XP_MAP["testout.passed"]
+              : DEFAULT_XP_MAP["test.passed"]}{" "}
+            XP {review.attempt.kind === "testout" ? "за экстерн" : "за тест"}
+          </span>
+          {review.attempt.kind === "module" && overview.finishedModuleAttempts === 1 && (
+            <span className="rounded-pill border-accent/30 bg-accent/10 text-text-1 inline-flex items-center gap-1.5 border px-3 py-[5px] text-[13px] font-medium">
+              <Zap size={14} strokeWidth={1.75} className="text-accent" aria-hidden="true" />+
+              {DEFAULT_XP_MAP["test.passed_first_try"]} XP — с первой попытки
+            </span>
+          )}
         </div>
 
         <h2 className="text-[18px] font-semibold">Разбор вопросов</h2>

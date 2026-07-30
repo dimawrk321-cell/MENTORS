@@ -308,7 +308,7 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
       </div>
 
       {/* Оценки внизу, тач-зоны ≥44px (spec 13); sticky над BottomNav на мобильном. */}
-      <div className="bg-bg sticky bottom-16 z-10 flex flex-col gap-2 py-2 md:static md:bg-transparent md:py-0">
+      <div className="bg-bg sticky bottom-0 z-10 flex flex-col gap-2 py-2 md:static md:bg-transparent md:py-0">
         {flipped ? (
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="Оценка карточки">
             <Button
