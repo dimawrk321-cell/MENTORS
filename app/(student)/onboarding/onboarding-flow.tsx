@@ -39,6 +39,7 @@ const GOALS = [
 ];
 
 interface OnboardingFlowProps {
+  brandName: string;
   initialName: string;
   initialTrack: Track | null;
   initialGoal: 30 | 60 | 120;
@@ -46,6 +47,7 @@ interface OnboardingFlowProps {
 }
 
 export function OnboardingFlow({
+  brandName,
   initialName,
   initialTrack,
   initialGoal,
@@ -120,14 +122,23 @@ export function OnboardingFlow({
                   active ? "border-accent bg-accent/6" : "border-border hover:border-border-strong",
                 )}
               >
-                <Icon
-                  size={20}
-                  strokeWidth={1.75}
-                  className={active ? "text-accent" : "text-text-3"}
-                  aria-hidden="true"
-                />
-                <span>
-                  <span className="block text-[14px] font-medium">{option.title}</span>
+                <span
+                  className="flex size-[38px] shrink-0 items-center justify-center rounded-[10px]"
+                  style={
+                    active
+                      ? { backgroundImage: "var(--gradient-accent)" }
+                      : { background: "color-mix(in srgb, var(--accent) 10%, transparent)" }
+                  }
+                >
+                  <Icon
+                    size={19}
+                    strokeWidth={1.75}
+                    className={active ? "text-white" : "text-accent"}
+                    aria-hidden="true"
+                  />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-semibold">{option.title}</span>
                   <span className="text-text-2 block text-[13px]">{option.description}</span>
                 </span>
               </button>
@@ -155,7 +166,7 @@ export function OnboardingFlow({
                   active ? "border-accent bg-accent/6" : "border-border hover:border-border-strong",
                 )}
               >
-                <span className="text-[14px] font-medium">{option.title}</span>
+                <span className="text-[15px] font-semibold">{option.title}</span>
                 <span className="text-text-2 text-[13px]">{option.description}</span>
               </button>
             );
@@ -197,9 +208,21 @@ export function OnboardingFlow({
   const last = step === steps.length - 1;
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-5 p-6">
-        {/* Progress dots (spec 8.2) */}
+    <div className="flex flex-col gap-6">
+      {/* Branded header above the card (design handoff): logo tile + step
+          title/subtitle + progress dots. */}
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span
+          className="flex size-10 items-center justify-center rounded-[12px] text-[18px] font-bold text-white"
+          style={{ backgroundImage: "var(--gradient-accent)" }}
+          aria-hidden="true"
+        >
+          {brandName.trim().charAt(0).toUpperCase()}
+        </span>
+        <div>
+          <h1 className="text-[24px] font-semibold tracking-[-0.01em]">{current.title}</h1>
+          <p className="text-text-2 mt-1 text-[14px]">{current.description}</p>
+        </div>
         <div
           className="flex justify-center gap-1.5"
           aria-label={`Шаг ${step + 1} из ${steps.length}`}
@@ -214,42 +237,49 @@ export function OnboardingFlow({
             />
           ))}
         </div>
+      </div>
 
-        <div>
-          <h1 className="text-center text-[24px] font-semibold">{current.title}</h1>
-          <p className="text-text-2 mt-1 text-center text-[14px]">{current.description}</p>
-        </div>
+      <Card className="rounded-[18px]">
+        <CardContent className="p-6">{current.body}</CardContent>
+      </Card>
 
-        {current.body}
-
-        <div className="flex items-center justify-between gap-3">
-          {step > 0 ? (
-            <Button variant="ghost" onClick={() => setStep(step - 1)}>
-              Назад
+      <div className="flex items-center justify-between gap-3">
+        {step > 0 ? (
+          <Button variant="ghost" onClick={() => setStep(step - 1)}>
+            Назад
+          </Button>
+        ) : (
+          <span />
+        )}
+        <div className="flex items-center gap-2">
+          {/* «Пропустить» keeps the defaults for the rest but persists the name
+              (mandatory) — so it is offered only after the name step, never on it. */}
+          {step > 0 && !last && (
+            <Button variant="ghost" onClick={finish} disabled={pending}>
+              Пропустить
+            </Button>
+          )}
+          {last ? (
+            <Button
+              loading={pending}
+              onClick={finish}
+              className="text-white"
+              style={{ backgroundImage: "var(--gradient-accent)" }}
+            >
+              Начать обучение
             </Button>
           ) : (
-            <span />
+            <Button
+              disabled={!current.canNext}
+              onClick={() => setStep(step + 1)}
+              className="text-white disabled:opacity-50"
+              style={{ backgroundImage: "var(--gradient-accent)" }}
+            >
+              Далее
+            </Button>
           )}
-          <div className="flex items-center gap-2">
-            {/* «Пропустить» keeps the defaults for the rest but persists the name
-                (mandatory) — so it is offered only after the name step, never on it. */}
-            {step > 0 && !last && (
-              <Button variant="ghost" onClick={finish} disabled={pending}>
-                Пропустить
-              </Button>
-            )}
-            {last ? (
-              <Button loading={pending} onClick={finish}>
-                Начать обучение
-              </Button>
-            ) : (
-              <Button disabled={!current.canNext} onClick={() => setStep(step + 1)}>
-                Далее
-              </Button>
-            )}
-          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
