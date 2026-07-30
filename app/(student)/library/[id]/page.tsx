@@ -22,10 +22,10 @@ interface RecordingPageProps {
   params: Promise<{ id: string }>;
 }
 
-const OUTCOME_VARIANT: Record<string, "success" | "danger" | "default"> = {
+const OUTCOME_VARIANT: Record<string, "success" | "danger" | "warning"> = {
   offer: "success",
   reject: "danger",
-  unknown: "default",
+  unknown: "warning",
 };
 
 /** Просмотр записи (spec 7.9). Виден только при library_enabled. */
@@ -42,11 +42,13 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
       <BackButton href="/library" label="Библиотека" />
 
       <div>
-        <h1 className="text-[24px] font-semibold">{recordingCardTitle(recording)}</h1>
+        <h1 className="text-[24px] font-semibold tracking-[-0.02em]">
+          {recordingCardTitle(recording)}
+        </h1>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <Badge>{recording.durationMinutes} мин</Badge>
           <Badge>{COMPANY_TYPE_LABEL[recording.companyType] ?? recording.companyType}</Badge>
-          <Badge variant={OUTCOME_VARIANT[recording.outcome] ?? "default"}>
+          <Badge variant={OUTCOME_VARIANT[recording.outcome] ?? "warning"}>
             {RECORDING_OUTCOME_LABEL[recording.outcome] ?? recording.outcome}
           </Badge>
         </div>
@@ -70,6 +72,10 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
           <RecordingOpenLink recordingId={recording.id} url={recording.url} />
         </div>
       )}
+
+      <p className="text-text-3 text-[12px]">
+        Скачивание отключено. Водяной знак с твоей почтой присутствует на каждой сессии просмотра.
+      </p>
     </div>
   );
 }

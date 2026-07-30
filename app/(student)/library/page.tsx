@@ -27,6 +27,7 @@ import {
 import { RecordingCard } from "@/components/features/recording-card";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils/cn";
 
 export const metadata: Metadata = {
@@ -118,12 +119,10 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-[24px] font-semibold">Библиотека</h1>
-        <p className="text-text-2 mt-1 text-[14px]">
-          Анонимизированные записи реальных собеседований — по этапам, направлениям и грейдам.
-        </p>
-      </div>
+      <PageHeader
+        title="Библиотека записей"
+        subtitle="Реальные мок-интервью выпускников: анонимизированные записи с этапами, грейдами и исходами. Смотри, как отвечают другие — и что решает оффер."
+      />
 
       <div className="rounded-card border-border bg-surface-1 flex flex-col gap-2 border p-4">
         <FilterRow
@@ -195,12 +194,16 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           />
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3.5">
           {recordings.map((recording) => (
             <RecordingCard key={recording.id} recording={recording} />
           ))}
         </div>
       )}
+
+      <p className="text-text-3 text-[12px]">
+        Записи защищены: персональная сессия просмотра с водяным знаком, скачивание недоступно.
+      </p>
     </div>
   );
 }
