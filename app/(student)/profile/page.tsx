@@ -46,7 +46,19 @@ export default async function ProfilePage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[24px] font-semibold">Профиль</h1>
+        <div className="flex items-center gap-3.5">
+          <div
+            className="rounded-pill flex size-[52px] shrink-0 items-center justify-center text-[19px] font-bold text-white"
+            style={{ backgroundImage: "var(--gradient-accent)" }}
+            aria-hidden="true"
+          >
+            {user.name.trim().charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-[24px] leading-[1.2] font-bold tracking-[-0.02em]">{user.name}</h1>
+            <p className="text-text-3 mt-0.5 text-[13px]">{user.email}</p>
+          </div>
+        </div>
         <LevelBadge
           level={xp.level.level}
           progress={xp.level.progress}
@@ -142,11 +154,13 @@ export default async function ProfilePage() {
       {/* Достижения (spec 8.3): счётчик + список полученных; витрина — V1. */}
       <Card>
         <CardHeader>
-          <CardTitle>Достижения</CardTitle>
-          <CardDescription>
-            {achievements.count}{" "}
-            {pluralRu(achievements.count, "достижение", "достижения", "достижений")}
-          </CardDescription>
+          <div className="flex items-baseline justify-between gap-3">
+            <CardTitle>Достижения</CardTitle>
+            <span className="text-text-3 shrink-0 text-[13px]">
+              {achievements.count}{" "}
+              {pluralRu(achievements.count, "достижение", "достижения", "достижений")}
+            </span>
+          </div>
         </CardHeader>
         <CardContent>
           {achievements.count === 0 ? (
