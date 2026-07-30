@@ -75,7 +75,7 @@ export function BottomNav({
   return (
     <nav
       aria-label="Основная навигация"
-      className="border-border bg-bg fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="border-border bg-bg/92 fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
       <div className="flex">
         {mainItems.map((item) => {
@@ -87,12 +87,12 @@ export function BottomNav({
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "ease-app flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-150",
-                active ? "text-text-1" : "text-text-3",
+                "ease-app flex min-h-14 flex-1 flex-col items-center justify-center gap-[3px] text-[10px] transition-colors duration-150",
+                active ? "text-accent" : "text-text-3",
               )}
             >
-              <Icon size={18} strokeWidth={1.75} />
-              <span>{item.label}</span>
+              <Icon size={20} strokeWidth={1.75} />
+              <span className={active ? "font-semibold" : "font-medium"}>{item.label}</span>
             </Link>
           );
         })}
@@ -103,12 +103,12 @@ export function BottomNav({
               type="button"
               aria-label="Ещё"
               className={cn(
-                "ease-app flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-150",
-                moreActive ? "text-text-1" : "text-text-3",
+                "ease-app flex min-h-14 flex-1 flex-col items-center justify-center gap-[3px] text-[10px] transition-colors duration-150",
+                moreActive ? "text-accent" : "text-text-3",
               )}
             >
-              <Menu size={18} strokeWidth={1.75} />
-              <span>Ещё</span>
+              <Menu size={20} strokeWidth={1.75} />
+              <span className={moreActive ? "font-semibold" : "font-medium"}>Ещё</span>
             </button>
           </SheetTrigger>
           <SheetContent className="md:hidden">
