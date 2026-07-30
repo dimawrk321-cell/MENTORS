@@ -326,7 +326,7 @@ export default async function DashboardPage() {
                       {Math.round(entry.againShare * 100)}% «не знаю»
                     </span>
                     <Link
-                      href="/trainer"
+                      href={`/questions?category=${entry.categoryId}`}
                       className="text-accent hover:text-accent-hover shrink-0 text-[13px] font-medium"
                     >
                       Повторить

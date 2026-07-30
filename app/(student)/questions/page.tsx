@@ -27,6 +27,7 @@ interface QuestionsPageProps {
     type?: string;
     difficulty?: string;
     lagging?: string;
+    category?: string;
   }>;
 }
 
@@ -56,7 +57,7 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
     ? (Number(params.difficulty) as 1 | 2 | 3)
     : undefined;
   const lagging = params.lagging === "1";
-  const anyFilter = Boolean(params.q?.trim() || type || difficulty || lagging);
+  const anyFilter = Boolean(params.q?.trim() || type || difficulty || lagging || params.category);
   // «Мои западающие» — единственный активный фильтр (для пустого состояния 5.5):
   // отдельный предикат, т.к. lagging входит в anyFilter (иначе ветка недостижима).
   const laggingOnly = lagging && !params.q?.trim() && !type && !difficulty;
@@ -66,6 +67,7 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
 
   const { groups, total } = await listQuestionsCatalogGrouped(prisma, {
     q: params.q?.trim() || undefined,
+    categoryId: params.category || undefined,
     type,
     difficulty,
     ids: laggingIds,
@@ -81,6 +83,7 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
     type: params.type,
     difficulty: params.difficulty,
     lagging: params.lagging,
+    category: params.category,
   };
 
   return (
@@ -96,6 +99,7 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
         {params.type && <input type="hidden" name="type" value={params.type} />}
         {params.difficulty && <input type="hidden" name="difficulty" value={params.difficulty} />}
         {params.lagging && <input type="hidden" name="lagging" value={params.lagging} />}
+        {params.category && <input type="hidden" name="category" value={params.category} />}
         <Input
           type="search"
           name="q"
