@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Lock, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Lock, Settings, Sparkles } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getMocksPageData } from "@/lib/services/mock-queries";
@@ -8,8 +8,15 @@ import { MOCK_DURATION_MINUTES, MOCK_TYPE_DESCRIPTION, MOCK_TYPE_LABEL } from "@
 import { formatDateRu, formatDateTimeRu, MINUTE_MS, pluralRu } from "@/lib/utils/dates";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { IconTile } from "@/components/features/icon-tile";
 import { MockBookingCard } from "@/components/features/mock-booking-card";
 import { ClaimOfferButton } from "@/components/features/mock-actions";
+
+// Tile per mock type (design handoff): accent «шестерёнка» for theory, violet «книга» for legend.
+const TYPE_TILE = {
+  theory: { icon: Settings, colorVar: "var(--accent)" },
+  legend: { icon: BookOpen, colorVar: "var(--violet)" },
+} as const;
 
 export const metadata: Metadata = {
   title: "Моки",
@@ -52,7 +59,13 @@ export default async function MocksPage() {
 
       {/* Активные hold-предложения из листа ожидания (spec 7.8) */}
       {data.offers.map((offer) => (
-        <Card key={offer.waitlistId} className="border-l-accent border-l-2">
+        <Card
+          key={offer.waitlistId}
+          style={{
+            borderColor: "color-mix(in srgb, var(--accent) 35%, transparent)",
+            boxShadow: "0 0 24px color-mix(in srgb, var(--accent) 10%, transparent)",
+          }}
+        >
           <CardContent className="flex flex-wrap items-center gap-3">
             <Sparkles size={18} strokeWidth={1.75} className="text-accent shrink-0" />
             <div className="min-w-0 flex-1">
@@ -88,17 +101,18 @@ export default async function MocksPage() {
         <h2 className="text-[18px] font-semibold">Забронировать мок</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           {TYPES.map((type) => (
-            <Link key={type} href={`/mocks/book?type=${type}`} className="group">
+            <Link key={type} href={`/mocks/book?type=${type}`} className="group block min-w-0">
               <Card interactive className="h-full">
-                <CardContent className="flex h-full flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <p className="group-hover:text-accent text-[16px] font-semibold">
+                <CardContent className="flex h-full flex-col gap-2 p-5">
+                  <div className="flex items-center gap-3">
+                    <IconTile icon={TYPE_TILE[type].icon} colorVar={TYPE_TILE[type].colorVar} />
+                    <p className="group-hover:text-accent min-w-0 flex-1 text-[16px] font-semibold">
                       {MOCK_TYPE_LABEL[type]}
                     </p>
                     <ArrowRight
                       size={16}
                       strokeWidth={1.75}
-                      className="text-text-3 group-hover:text-accent"
+                      className="text-text-3 group-hover:text-accent shrink-0"
                       aria-hidden="true"
                     />
                   </div>

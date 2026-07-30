@@ -73,7 +73,9 @@ export default async function BookingDetailPage({
       <div className="flex flex-col gap-1">
         <BackButton href="/mocks/mine" label="Мои моки" />
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-[24px] font-semibold">Мок: {MOCK_TYPE_LABEL[booking.type]}</h1>
+          <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">
+            Мок: {MOCK_TYPE_LABEL[booking.type]}
+          </h1>
           <Badge variant={STATUS_VARIANT[booking.status] ?? "default"}>
             {BOOKING_STATUS_LABEL[booking.status]}
           </Badge>

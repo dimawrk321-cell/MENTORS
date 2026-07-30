@@ -65,7 +65,7 @@ export default async function MyMocksPage() {
       {/* D4 (spec 13.1): missing hierarchical back added (/mocks/mine is a child of /mocks). */}
       <BackButton href="/mocks" label="Моки" />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[24px] font-semibold">Мои моки</h1>
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">Мои моки</h1>
         <Button asChild variant="secondary" size="sm">
           <Link href="/mocks">К бронированию</Link>
         </Button>

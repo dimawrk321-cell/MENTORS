@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CalendarClock, Shuffle, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  CalendarClock,
+  Settings,
+  Shuffle,
+  Users,
+} from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import {
@@ -10,7 +18,12 @@ import {
   type SlotChip,
   type SlotDay,
 } from "@/lib/services/mock-queries";
-import { BOOKING_RULES_LINE, CANCEL_FREE_HOURS, MOCK_TYPE_LABEL } from "@/lib/constants";
+import {
+  BOOKING_RULES_LINE,
+  CANCEL_FREE_HOURS,
+  MOCK_TYPE_DESCRIPTION,
+  MOCK_TYPE_LABEL,
+} from "@/lib/constants";
 import {
   formatDateRu,
   formatDateTimeRu,
@@ -22,6 +35,7 @@ import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color"
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { IconTile } from "@/components/features/icon-tile";
 import { SlotPicker } from "@/components/features/slot-picker";
 import {
   ConfirmBookButton,
@@ -34,6 +48,12 @@ export const metadata: Metadata = {
 };
 
 const HOUR_MS = 60 * 60 * 1000;
+
+// Tile per mock type — mirrors the hub (accent «шестерёнка» theory, violet «книга» legend).
+const TYPE_TILE = {
+  theory: { icon: Settings, colorVar: "var(--accent)" },
+  legend: { icon: BookOpen, colorVar: "var(--violet)" },
+} as const;
 
 type MockTypeKey = "theory" | "legend";
 
@@ -126,7 +146,7 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
       return (
         <div className="flex flex-col gap-4">
           <StepBack href="/mocks/mine" label="Мои моки" />
-          <h1 className="text-[24px] font-semibold">Перенести мок</h1>
+          <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">Перенести мок</h1>
           <EmptyState
             title="Бронь для переноса недоступна"
             description="Возможно, она уже прошла или была отменена — открой список моих моков."
@@ -144,7 +164,7 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
   if (state.lock) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-[24px] font-semibold">{heading}</h1>
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">{heading}</h1>
         <EmptyState
           title={isReschedule ? "Перенос пока недоступен" : "Бронирование пока недоступно"}
           description={`Из-за страйков бронирование закрыто до ${formatDateRu(state.lock.lockedUntil, user.timezone)}.`}
@@ -160,7 +180,9 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
   if (!isReschedule && state.activeBooking) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-[24px] font-semibold">Забронировать мок</h1>
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">
+          Забронировать мок
+        </h1>
         <EmptyState
           title="У тебя уже есть активная бронь"
           description="Можно держать только одну бронь. Заверши или отмени текущую, чтобы записаться снова. Чтобы сменить время — нажми «Перенести» на карточке брони."
@@ -190,16 +212,26 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
       <div className="flex flex-col gap-6">
         {/* D4 (spec 13.1): step 1 back to the mocks hub (was the only step with no back). */}
         <StepBack href="/mocks" label="Моки" />
-        <h1 className="text-[24px] font-semibold">Какой мок бронируем?</h1>
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">
+          Какой мок бронируем?
+        </h1>
         <div className="grid gap-3 sm:grid-cols-2">
           {(["theory", "legend"] as const).map((t) => (
-            <Link key={t} href={`/mocks/book?type=${t}`} className="group">
+            <Link key={t} href={`/mocks/book?type=${t}`} className="group block min-w-0">
               <Card interactive className="h-full">
-                <CardContent className="flex items-center justify-between">
-                  <span className="group-hover:text-accent text-[16px] font-semibold">
-                    {MOCK_TYPE_LABEL[t]}
-                  </span>
-                  <ArrowRight size={16} strokeWidth={1.75} className="text-text-3" />
+                <CardContent className="flex h-full flex-col gap-2 p-5">
+                  <div className="flex items-center gap-3">
+                    <IconTile icon={TYPE_TILE[t].icon} colorVar={TYPE_TILE[t].colorVar} />
+                    <span className="group-hover:text-accent min-w-0 flex-1 text-[16px] font-semibold">
+                      {MOCK_TYPE_LABEL[t]}
+                    </span>
+                    <ArrowRight
+                      size={16}
+                      strokeWidth={1.75}
+                      className="text-text-3 group-hover:text-accent shrink-0"
+                    />
+                  </div>
+                  <p className="text-text-2 text-[14px]">{MOCK_TYPE_DESCRIPTION[t]}</p>
                 </CardContent>
               </Card>
             </Link>
@@ -220,7 +252,7 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
           href={isReschedule ? `/mocks/${rescheduleId}` : "/mocks/book"}
           label={isReschedule ? "К броне" : "Тип мока"}
         />
-        <h1 className="text-[24px] font-semibold">
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">
           {isReschedule ? "Куда переносим?" : "Выбери интервьюера"}
         </h1>
         <div className="flex flex-col gap-3">
@@ -326,7 +358,7 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
             href={`/mocks/book?type=${type}&interviewer=${interviewer}${rs}`}
             label="Выбор слота"
           />
-          <h1 className="text-[24px] font-semibold">Перенести мок</h1>
+          <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">Перенести мок</h1>
           <Card>
             <CardContent className="flex flex-col gap-2">
               <div className="flex justify-between gap-3">
@@ -371,7 +403,7 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
           href={`/mocks/book?type=${type}&interviewer=${interviewer}`}
           label="Выбор слота"
         />
-        <h1 className="text-[24px] font-semibold">Подтверждение</h1>
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">Подтверждение</h1>
         <Card>
           <CardContent className="flex flex-col gap-2">
             <div className="flex justify-between gap-3">
@@ -431,7 +463,7 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
       />
       <div className="flex items-center gap-2">
         <CalendarClock size={20} strokeWidth={1.75} className="text-accent" aria-hidden="true" />
-        <h1 className="text-[24px] font-semibold">
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">
           {isReschedule ? "Новое время" : "Выбери время"}
         </h1>
       </div>
