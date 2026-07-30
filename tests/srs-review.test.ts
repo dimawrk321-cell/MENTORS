@@ -7,6 +7,7 @@ import {
   reviewSrsCard,
   SRS_LEARNED_INTERVAL_DAYS,
 } from "@/lib/services/srs";
+import { countStreakDay } from "@/lib/services/streak";
 import { addDays, dateOnlyUtc } from "@/lib/utils/dates";
 import { createTestUser, resetDb, testDb } from "./helpers/db";
 
@@ -425,5 +426,51 @@ describe("reviewSrsCard — конкурентный двойной сабмит
     const updated = await testDb.srsCard.findUniqueOrThrow({ where: { id: card.id } });
     expect(updated.reviewsCount).toBe(2); // 1 + ровно один инкремент
     expect(await testDb.srsReview.count({ where: { cardId: card.id } })).toBe(1);
+  });
+});
+
+describe("reviewSrsCard — сигнал продления серии для пилюль награды (design handoff)", () => {
+  it("первый качественный ответ дня продлевает серию: streakCounted=true + current", async () => {
+    const user = await makeStudent();
+    const category = await makeCategory({ slug: "c", title: "C" });
+    const card = await makeCard(user.id, category.id);
+
+    const result = await reviewSrsCard(testDb, {
+      userId: user.id,
+      cardId: card.id,
+      grade: "good",
+      now: NOW,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      queueCompleted: true,
+      streakCounted: true,
+      streakCurrent: 1,
+    });
+  });
+
+  it("день уже засчитан → закрытие очереди серию не продлевает: streakCounted=false", async () => {
+    const user = await makeStudent();
+    const category = await makeCategory({ slug: "c", title: "C" });
+    const card = await makeCard(user.id, category.id);
+
+    // День уже засчитан ранее сегодня (напр. завершён урок) — считаем его напрямую.
+    const pre = await countStreakDay(testDb, { userId: user.id, now: NOW });
+    expect(pre).toMatchObject({ counted: true, current: 1 });
+
+    // Закрытие очереди: день уже засчитан → серия не продлевается (XP-пилюля
+    // покажется, стрик-пилюля — нет), но её длина по-прежнему возвращается.
+    const result = await reviewSrsCard(testDb, {
+      userId: user.id,
+      cardId: card.id,
+      grade: "good",
+      now: NOW,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      queueCompleted: true,
+      streakCounted: false,
+      streakCurrent: 1,
+    });
   });
 });

@@ -419,6 +419,8 @@ const NO_GAMIFICATION: EmitResult = {
   xpAwarded: 0,
   leveledUpTo: null,
   earnedAchievements: [],
+  streakCounted: false,
+  streakCurrent: 0,
 };
 
 /** Explicit, idempotent completion (spec 7.3); returns the next open lesson. */

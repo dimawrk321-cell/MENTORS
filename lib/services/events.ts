@@ -46,6 +46,10 @@ export interface EmitResult {
   leveledUpTo: number | null;
   /** Новые достижения — для toast (spec 5.4/5.6). */
   earnedAchievements: EarnedAchievement[];
+  /** true, если это событие впервые засчитало учебный день (серия продлилась). */
+  streakCounted: boolean;
+  /** Текущая длина серии после этого события (уже вычислено countStreakDay). */
+  streakCurrent: number;
 }
 
 const EMPTY_RESULT: EmitResult = {
@@ -53,6 +57,8 @@ const EMPTY_RESULT: EmitResult = {
   xpAwarded: 0,
   leveledUpTo: null,
   earnedAchievements: [],
+  streakCounted: false,
+  streakCurrent: 0,
 };
 
 /** Складывает два результата эмита в один (для действия с несколькими событиями). */
@@ -62,6 +68,10 @@ export function mergeEmitResults(a: EmitResult, b: EmitResult): EmitResult {
     xpAwarded: a.xpAwarded + b.xpAwarded,
     leveledUpTo: b.leveledUpTo ?? a.leveledUpTo,
     earnedAchievements: [...a.earnedAchievements, ...b.earnedAchievements],
+    // Серия засчитывается на первом качественном событии дня — берём OR флага и
+    // максимальную длину (нулевые = событие без стрик-подсчёта).
+    streakCounted: a.streakCounted || b.streakCounted,
+    streakCurrent: Math.max(a.streakCurrent, b.streakCurrent),
   };
 }
 
@@ -121,8 +131,12 @@ export async function emitEvent(
   // (3) Стрик: качественное событие засчитывает учебный день; вехи эмитятся здесь
   // (стрик их лишь возвращает, чтобы не зависеть от events.ts).
   const nestedAchievements: EarnedAchievement[] = [];
+  let streakCounted = false;
+  let streakCurrent = 0;
   if (STREAK_QUALIFYING_EVENTS.has(type)) {
     const streakResult = await countStreakDay(db, { userId, now });
+    streakCounted = streakResult.counted;
+    streakCurrent = streakResult.current;
     for (const milestone of streakResult.milestonesReached) {
       const nested = await emitEvent(db, "streak.milestone", { milestone }, { userId, now });
       xpAwarded += nested.xpAwarded;
@@ -160,5 +174,7 @@ export async function emitEvent(
     xpAwarded,
     leveledUpTo,
     earnedAchievements: [...earned, ...nestedAchievements],
+    streakCounted,
+    streakCurrent,
   };
 }

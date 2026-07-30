@@ -17,10 +17,15 @@ import { toFeedback, type GamificationFeedback } from "@/lib/gamification";
 
 // SRS actions (spec 9): reviewCard(cardId, grade) + addToSrs(questionId).
 
-export async function reviewCardAction(
-  input: unknown,
-): Promise<
-  ActionResult<{ remaining: number; queueCompleted: boolean; gamification: GamificationFeedback }>
+export async function reviewCardAction(input: unknown): Promise<
+  ActionResult<{
+    remaining: number;
+    queueCompleted: boolean;
+    /** Серия продлилась этим ответом (для пилюли на done-экране) + её длина. */
+    streakCounted: boolean;
+    streakCurrent: number;
+    gamification: GamificationFeedback;
+  }>
 > {
   return runAction(async () => {
     const auth = await requireActionStudent();
@@ -43,6 +48,8 @@ export async function reviewCardAction(
     return {
       remaining: result.remaining,
       queueCompleted: result.queueCompleted,
+      streakCounted: result.streakCounted,
+      streakCurrent: result.streakCurrent,
       gamification: toFeedback(result),
     };
   });

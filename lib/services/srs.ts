@@ -341,6 +341,9 @@ export type ReviewCardResult =
       xpAwarded: number;
       leveledUpTo: number | null;
       earnedAchievements: EarnedAchievement[];
+      /** Серия продлилась этим ответом (впервые засчитан день) + её длина. */
+      streakCounted: boolean;
+      streakCurrent: number;
     }
   | { ok: false; code: "not_found" | "not_due" };
 
@@ -433,6 +436,8 @@ export async function reviewSrsCard(
     xpAwarded: result.xpAwarded,
     leveledUpTo: result.leveledUpTo,
     earnedAchievements: result.earnedAchievements,
+    streakCounted: result.streakCounted,
+    streakCurrent: result.streakCurrent,
   };
 }
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { BookOpen, Check, Layers, RotateCw } from "lucide-react";
+import { BookOpen, Check, Flame, Layers, RotateCw, Sparkles } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,6 +41,12 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
   const [remaining, setRemaining] = useState(queueTotal - items.length);
   const [pending, startTransition] = useTransition();
   const [refreshing, startRefresh] = useTransition();
+  // Награды для done-экрана — из результата грейда (без новых запросов): XP за
+  // закрытие очереди и продление серии. Серию засчитывает событие queue.completed
+  // (закрывающий грейд), поэтому streakCounted приходит именно с него.
+  const [doneXp, setDoneXp] = useState(0);
+  const [streakAdvanced, setStreakAdvanced] = useState(false);
+  const [streakCurrent, setStreakCurrent] = useState(0);
   const touchStart = useRef<{ x: number; y: number; scrollY: number } | null>(null);
 
   const item = items[index];
@@ -68,8 +74,19 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
         return;
       }
       setRemaining(result.data.remaining);
-      // Ритуалы: toast за достижения (напр. cards_100) и новый уровень (spec 5.4).
-      celebrateGamification(result.data.gamification);
+      // Серия продлевается на первом качественном событии дня — копим флаг за сессию.
+      if (result.data.streakCounted) {
+        setStreakAdvanced(true);
+        setStreakCurrent(result.data.streakCurrent);
+      }
+      if (result.data.queueCompleted) {
+        // На шаге закрытия очереди награды показываем пилюлями на done-экране —
+        // тосты этого шага убраны, чтобы не дублировать (по решению владельца).
+        setDoneXp(result.data.gamification.xpAwarded);
+      } else {
+        // Ритуалы: toast за достижения (напр. cards_100) и новый уровень (spec 5.4).
+        celebrateGamification(result.data.gamification);
+      }
       advance(result.data.remaining);
     });
   }
@@ -155,6 +172,23 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
             Очередь на сегодня закрыта. Следующие карточки придут по расписанию.
           </p>
         </div>
+        {/* Пилюли наград (design handoff): XP за закрытие очереди + продление серии,
+            если день ещё не был засчитан. Значения — из результата грейда. */}
+        {(doneXp > 0 || streakAdvanced) && (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {doneXp > 0 && (
+              <span className="rounded-pill bg-success/12 text-success inline-flex items-center gap-1.5 px-3 py-[5px] text-[13px] font-medium">
+                <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />+{doneXp} XP
+              </span>
+            )}
+            {streakAdvanced && (
+              <span className="rounded-pill border-accent/30 bg-accent/10 inline-flex items-center gap-1.5 border px-3 py-[5px] text-[13px] font-medium">
+                <Flame size={14} strokeWidth={1.75} className="text-accent" aria-hidden="true" />
+                Серия продлена: {streakCurrent} {pluralRu(streakCurrent, "день", "дня", "дней")}
+              </span>
+            )}
+          </div>
+        )}
         <Button asChild variant="secondary">
           <Link href="/trainer">В тренажёр</Link>
         </Button>
