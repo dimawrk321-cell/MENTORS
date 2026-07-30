@@ -15,7 +15,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const permissions = [...effectivePermissions(user)];
 
   return (
-    // Block layout on mobile (chip row above content), flex row with sidebar on md+.
+    // Block layout on mobile (sticky header + drawer above content), flex row
+    // with the sidebar on md+.
     <div className="min-h-dvh md:flex">
       <OfflineBanner />
       <AdminNav
