@@ -299,11 +299,13 @@ export async function removeQuestionLinkAction(input: unknown): Promise<ActionRe
 /** Поиск по банку для привязки из редактора урока. */
 export async function searchQuestionsAction(
   q: string,
+  categoryId?: string,
 ): Promise<ActionResult<Array<{ id: string; textMd: string; category: string; status: string }>>> {
   return runAction(async () => {
     await requireActionPermission("content.manage");
     const query = parseInput(z.string().max(200), q);
-    const items = await searchQuestionsForLink(prisma, query.trim());
+    const category = categoryId ? parseInput(z.string().min(1), categoryId) : undefined;
+    const items = await searchQuestionsForLink(prisma, query.trim(), category);
     return items.map((item) => ({
       id: item.id,
       textMd: item.textMd,

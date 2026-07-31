@@ -27,6 +27,7 @@ import type { Role, Theme } from "@prisma/client";
 import { cn } from "@/lib/utils/cn";
 import { ADMIN_SECTIONS, type AdminSection, type Permission } from "@/lib/constants";
 import { logoutAction } from "@/lib/actions/auth";
+import { NotificationBell } from "@/components/features/notification-bell";
 import { SearchTriggerBar, SearchTriggerIcon } from "@/components/features/search-trigger";
 import { ThemeToggleIcon } from "@/components/features/theme-toggle";
 import { BrandMark } from "@/components/layout/brand-mark";
@@ -217,7 +218,9 @@ export function AdminNav({
             <div className="text-text-1 truncate text-[13px]">{userName}</div>
             <div className="text-text-3 text-[11px]">{ROLE_LABEL[role]}</div>
           </div>
-          {/* Quick theme toggle (spec 12.1/B1) — admin has no header bar. */}
+          {/* Quick theme toggle (spec 12.1/B1) — admin has no header bar.
+              Bell (changelog 13.6): staff see incoming notifications in-zone. */}
+          <NotificationBell className="size-8" />
           <ThemeToggleIcon initialTheme={theme} className="size-8" />
           <form action={logoutAction}>
             <button
@@ -239,6 +242,7 @@ export function AdminNav({
       >
         <BrandMark brandName={brandName} sublabel="Админка" tileSize={24} />
         <div className="flex items-center gap-1.5">
+          <NotificationBell className="border-border hover:border-border-strong size-10 rounded-[12px] border" />
           <SearchTriggerIcon className="border-border hover:border-border-strong size-10 rounded-[12px] border" />
           <DialogPrimitive.Root>
             <DialogPrimitive.Trigger

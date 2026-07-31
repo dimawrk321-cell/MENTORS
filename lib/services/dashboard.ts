@@ -8,6 +8,7 @@ import {
   zonedDayUtcRange,
 } from "@/lib/utils/dates";
 import { getCourseView } from "@/lib/services/content";
+import { sortByRecommendedPath, trackCourseOrder } from "@/lib/services/course-order";
 
 // Дашборд-агрегаторы (spec 8.3): «Продолжить» (текущий/первый открытый урок) и
 // Heatmap активности. Курсы-прогресс дашборд берёт из listCoursesForStudent,
@@ -33,21 +34,15 @@ const publishedLessonFilter = {
 };
 
 /** Упорядоченные опубликованные курсы: сперва по треку, затем остальные (spec 8.3). */
+/** Recommended path (changelog 13.6) — shared with the /courses catalog so the
+ *  hero's «next» course and the catalog's «Начни отсюда» badge always agree. */
 async function orderedCourses(db: Db, track: Track | null) {
   const courses = await db.course.findMany({
     where: { status: "published" },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: { id: true, slug: true },
+    select: { id: true, slug: true, order: true },
   });
-  if (!track) return courses;
-  const trackDef = await db.trackDef.findUnique({ where: { key: track } });
-  const trackOrder = (trackDef?.courseIds as string[] | undefined) ?? [];
-  const rank = new Map(trackOrder.map((id, index) => [id, index]));
-  return [...courses].sort((a, b) => {
-    const ra = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-    const rb = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-    return ra - rb;
-  });
+  return sortByRecommendedPath(courses, await trackCourseOrder(db, track));
 }
 
 type CourseViewResult = NonNullable<Awaited<ReturnType<typeof getCourseView>>>;

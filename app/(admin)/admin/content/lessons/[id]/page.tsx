@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
 import { getLessonForEditor } from "@/lib/services/content-admin";
-import { listLessonQuestionLinks } from "@/lib/services/questions";
+import { listCategoriesTree, listLessonQuestionLinks } from "@/lib/services/questions";
 import { stripMarkdown } from "@/lib/utils/text";
 import { LessonEditor } from "./lesson-editor";
 import { LessonQuestions } from "./lesson-questions";
@@ -22,7 +22,16 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
   const { id } = await params;
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();
-  const questionLinks = await listLessonQuestionLinks(prisma, lesson.id);
+  const [questionLinks, categoryTree] = await Promise.all([
+    listLessonQuestionLinks(prisma, lesson.id),
+    listCategoriesTree(prisma),
+  ]);
+  // Root categories + children for the «+ Добавить вопрос» filter (13.6);
+  // the service expands a root to its family, so either level works.
+  const categories = categoryTree.flatMap((root) => [
+    { id: root.id, label: root.title },
+    ...root.children.map((child) => ({ id: child.id, label: `— ${child.title}` })),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -43,6 +52,7 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
       />
       <LessonQuestions
         lessonId={lesson.id}
+        categories={categories}
         links={questionLinks.map((link) => ({
           questionId: link.questionId,
           teaser: stripMarkdown(link.question.textMd, 120) || "— без текста —",

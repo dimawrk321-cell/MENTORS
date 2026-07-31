@@ -32,7 +32,7 @@ const YANDEX_DISK_FRAME_SRC = [
 //   /library/:id only (spec 7.9), the rest of the site keeps the tight list.
 const isDev = process.env.NODE_ENV === "development";
 
-function csp(frameExtra = ""): string {
+function csp(frameExtra = "", frameAncestors = "'none'"): string {
   return [
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -45,7 +45,7 @@ function csp(frameExtra = ""): string {
     "base-uri 'self'",
     "form-action 'self'",
     // Modern twin of X-Frame-Options: DENY (kept below for older agents).
-    "frame-ancestors 'none'",
+    `frame-ancestors ${frameAncestors}`,
   ].join("; ");
 }
 
@@ -98,6 +98,24 @@ const nextConfig: NextConfig = {
         // appended to frame-src for the embedded player.
         source: "/library/:id*",
         headers: [{ key: "Content-Security-Policy", value: csp(YANDEX_DISK_FRAME_SRC) }],
+      },
+      {
+        // Editor live preview (spec 8.5 / changelog 13.6): the lesson and guide
+        // editors frame /content-preview/:id and /guide-preview/:id — same
+        // origin. But `X-Frame-Options: DENY` + `frame-ancestors 'none'` forbid
+        // framing by ANY ancestor, the app itself included — there is no
+        // same-origin exception — so the iframe was blocked
+        // (ERR_BLOCKED_BY_RESPONSE → «сайт не позволяет установить соединение»).
+        // These two routes, and only these, relax to 'self'; they are gated by
+        // content.manage, so an outsider cannot open them, and cross-origin
+        // clickjacking stays impossible.
+        // Order is load-bearing: headers() lets the LAST matching rule replace a
+        // same-key header, so this is a point-wise override of the two rules above.
+        source: "/(content-preview|guide-preview)/:id*",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: csp("", "'self'") },
+        ],
       },
     ];
   },

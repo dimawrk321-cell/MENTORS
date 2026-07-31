@@ -81,7 +81,11 @@ export default async function LessonPage({ params }: LessonPageProps) {
 
   return (
     <div className="flex gap-10">
-      <div className="mx-auto w-full max-w-[680px] min-w-0">
+      {/* break-words covers everything OUTSIDE .lesson-prose (title, breadcrumbs,
+          chips, key questions, quiz) — a long unbreakable title burst the page at
+          390px (changelog 13.6). Inside the article the stricter
+          `overflow-wrap: anywhere` rule still wins. */}
+      <div className="mx-auto w-full max-w-[680px] min-w-0 break-words">
         {/* Header: breadcrumbs, title, chips (spec 7.3) */}
         <nav
           aria-label="Хлебные крошки"

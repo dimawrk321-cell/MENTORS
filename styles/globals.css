@@ -181,9 +181,32 @@
   .lesson-prose > :first-child {
     margin-top: 0;
   }
+  /* Long words, URLs and inline code must never burst the reading column
+     (changelog 13.6 / spec 13: no horizontal overflow at 390px). `anywhere`, not
+     `break-word`: only `anywhere` also lowers min-content, which is what
+     min-content-sized descendants (material-link grid items, anonymous flex
+     items) are sized by — with `break-word` alone the page still overflowed. */
+  .lesson-prose {
+    overflow-wrap: anywhere;
+  }
+  /* Tables keep min-content sizing, so a wide table still SCROLLS inside its
+     wrapper (spec 13 allows that) instead of collapsing to 3-character columns. */
+  .lesson-prose table {
+    overflow-wrap: break-word;
+  }
+  /* Headings clamp by viewport (changelog 13.6). h1 previously had NO rule, so
+     Tailwind preflight made it inherit the body size — a markdown h1 rendered
+     SMALLER than an h2 (1.5em), which read as «каша масштабов» on guides. Sizes
+     stay em-based so the reading-size control (S/M/L) still scales them; the vw
+     term only lowers them on narrow screens. At 390px: h1 ≈ 24px, h2 ≈ 20px;
+     desktop keeps the 5.2 scale (32 / 24). */
+  .lesson-prose h1 {
+    margin: 2rem 0 0.75rem;
+    font-size: clamp(1.5em, 1.2em + 1vw, 2em);
+  }
   .lesson-prose h2 {
     margin: 2rem 0 0.75rem;
-    font-size: 1.5em;
+    font-size: clamp(1.25em, 1.05em + 0.8vw, 1.5em);
   }
   .lesson-prose h3 {
     margin: 1.5rem 0 0.5rem;

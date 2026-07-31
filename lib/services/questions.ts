@@ -797,9 +797,18 @@ export async function listLessonQuestionLinks(db: Db, lessonId: string) {
 }
 
 /** Поиск по банку для привязки (spec 8.5: поиск по банку из редактора урока). */
-export async function searchQuestionsForLink(db: Db, q: string) {
+export async function searchQuestionsForLink(db: Db, q: string, categoryId?: string) {
+  // Changelog 13.6: the lesson editor's «+ Добавить вопрос» panel filters by
+  // category, so an empty query with a category picked still lists that
+  // category's bank (the family — root + children, like the student catalog).
+  const categoryFilter = categoryId
+    ? { categoryId: { in: await categoryFamilyIds(db, categoryId) } }
+    : {};
   return db.question.findMany({
-    where: q ? { textMd: { contains: q, mode: "insensitive" } } : {},
+    where: {
+      ...(q ? { textMd: { contains: q, mode: "insensitive" } } : {}),
+      ...categoryFilter,
+    },
     include: { category: { select: { title: true } } },
     orderBy: { createdAt: "desc" },
     take: 20,

@@ -16,7 +16,10 @@ import type { Track } from "@prisma/client";
 // scripts/seed-welcome-course.ts (supports --dry-run). Services take `db` as a
 // parameter (repo test/seed convention) — never the singleton.
 
-const COURSE_SLUG = "welcome";
+/** Slug of the onboarding course. Exported so the shared course ordering can pin
+ *  it first for every student, track or no track (changelog 13.6). */
+export const WELCOME_COURSE_SLUG = "welcome";
+const COURSE_SLUG = WELCOME_COURSE_SLUG;
 const COURSE_TITLE = "Знакомство с PRIME";
 const COURSE_DESCRIPTION =
   "Короткий вводный курс: как устроены обучение, тренажёр, моки и справочник — и как выжать из платформы максимум.";

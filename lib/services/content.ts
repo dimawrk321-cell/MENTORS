@@ -2,6 +2,11 @@ import type { CourseGating, PrismaClient, Track } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { emitEvent, type EarnedAchievement, type EmitResult } from "@/lib/services/events";
 import { writeAudit } from "@/lib/services/audit";
+import {
+  markRecommendedPath,
+  sortByRecommendedPath,
+  trackCourseOrder,
+} from "@/lib/services/course-order";
 import { addSrsCardsForLessonCompletion } from "@/lib/services/srs";
 import {
   getModuleTestStates,
@@ -197,17 +202,9 @@ export async function listCoursesForStudent(db: Db, userId: string, track: Track
     include: { modules: publishedModulesArg },
   });
 
-  let ordered = courses;
-  if (track) {
-    const trackDef = await db.trackDef.findUnique({ where: { key: track } });
-    const trackOrder = (trackDef?.courseIds as string[] | undefined) ?? [];
-    const rank = new Map(trackOrder.map((id, index) => [id, index]));
-    ordered = [...courses].sort((a, b) => {
-      const ra = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER;
-      const rb = rank.has(b.id) ? rank.get(b.id)! : Number.MAX_SAFE_INTEGER;
-      return ra !== rb ? ra - rb : a.order - b.order;
-    });
-  }
+  // Recommended path (changelog 13.6): welcome first, then track, then order —
+  // the same helper the dashboard hero uses, so the two never disagree.
+  const ordered = sortByRecommendedPath(courses, await trackCourseOrder(db, track));
 
   const allLessonIds = ordered.flatMap((course) =>
     course.modules.flatMap((module) => module.lessons.map((lesson) => lesson.id)),
@@ -217,22 +214,26 @@ export async function listCoursesForStudent(db: Db, userId: string, track: Track
   const testStates = await getModuleTestStates(db, userId, allModuleIds);
   const testHook = makeModuleTestHook(testStates);
 
-  return ordered.map((course) => {
-    const state = computeCourseState(course.gating, course.modules, progress, testHook);
-    return {
-      id: course.id,
-      slug: course.slug,
-      title: course.title,
-      description: course.description,
-      gating: course.gating,
-      lessonsTotal: state.totalRequired,
-      lessonsCompleted: state.completedRequired,
-      progressPct:
-        state.totalRequired === 0
-          ? 0
-          : Math.round((state.completedRequired / state.totalRequired) * 100),
-    };
-  });
+  // markRecommendedPath adds isCompleted (all required lessons done) and isNext
+  // (first not-yet-complete course) — badges only, no gating.
+  return markRecommendedPath(
+    ordered.map((course) => {
+      const state = computeCourseState(course.gating, course.modules, progress, testHook);
+      return {
+        id: course.id,
+        slug: course.slug,
+        title: course.title,
+        description: course.description,
+        gating: course.gating,
+        lessonsTotal: state.totalRequired,
+        lessonsCompleted: state.completedRequired,
+        progressPct:
+          state.totalRequired === 0
+            ? 0
+            : Math.round((state.completedRequired / state.totalRequired) * 100),
+      };
+    }),
+  );
 }
 
 export async function getCourseView(db: Db, slug: string, userId: string) {
