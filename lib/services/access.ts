@@ -800,6 +800,9 @@ export async function listStudents(db: Db, query?: string) {
         : {}),
     },
     orderBy: { createdAt: "desc" },
+    // Streak is a 1:1 relation — one JOIN, no N+1; the register shows «серия»
+    // per row (design handoff) instead of a permanently empty column.
+    include: { streak: { select: { current: true } } },
     // DECISION: plain limit is enough for the current cohort (~25); cursor
     // pagination lands with the full students table at stage 10 (spec 12).
     take: 50,

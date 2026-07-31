@@ -279,8 +279,9 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
         </Card>
       )}
 
-      {/* Вкладки диагностики (spec 8.5): прогресс/тесты/повторения/моки/уведомления/события. */}
-      <div className="pt-2">
+      {/* Вкладки диагностики (spec 8.5): прогресс/тесты/повторения/моки/уведомления/события.
+          Обёрнуты в карточку-секцию (прототип «Карточка ученика»). */}
+      <Card className="p-5">
         <StudentTabs
           progress={progress}
           testAttempts={testAttempts}
@@ -291,7 +292,7 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
           timezone={viewer.timezone}
           defaultTab={tab ?? "progress"}
         />
-      </div>
+      </Card>
     </div>
   );
 }

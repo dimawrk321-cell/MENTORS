@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { IssueCredentialsDialog } from "./issue-credentials-dialog";
 import { StudentsBulkTable } from "./students-bulk-table";
 
@@ -32,23 +33,31 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[24px] font-semibold">Ученики</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          {canManage && <IssueCredentialsDialog />}
-        </div>
-      </div>
+      <PageHeader
+        size="admin"
+        title="Ученики"
+        actions={canManage ? <IssueCredentialsDialog /> : undefined}
+      />
 
       <form className="flex max-w-md gap-2" role="search">
-        <Input
-          type="search"
-          name="q"
-          defaultValue={query ?? ""}
-          placeholder="Поиск по имени или email"
-          aria-label="Поиск по имени или email"
-        />
+        {/* Leading-icon field (design handoff): the magnifier lives inside the input. */}
+        <div className="relative flex-1">
+          <Search
+            size={16}
+            strokeWidth={1.75}
+            className="text-text-3 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            name="q"
+            defaultValue={query ?? ""}
+            placeholder="Поиск по имени или email"
+            aria-label="Поиск по имени или email"
+            className="pl-9"
+          />
+        </div>
         <Button type="submit" variant="secondary">
-          <Search size={16} strokeWidth={1.75} aria-hidden="true" />
           Найти
         </Button>
       </form>
@@ -78,6 +87,7 @@ export default async function StudentsPage({ searchParams }: StudentsPageProps) 
             status: s.status,
             accessUntilText: s.accessUntil ? formatDateRu(s.accessUntil, viewer.timezone) : "—",
             lastSeenText: s.lastSeenAt ? formatDateTimeRu(s.lastSeenAt, viewer.timezone) : "—",
+            streak: s.streak?.current ?? 0,
           }))}
         />
       )}

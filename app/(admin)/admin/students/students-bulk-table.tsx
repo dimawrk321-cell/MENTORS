@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
+import { Flame } from "lucide-react";
 import type { UserStatus } from "@prisma/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,8 @@ export interface StudentRow {
   status: UserStatus;
   accessUntilText: string;
   lastSeenText: string;
+  /** Текущая серия (0 — не идёт; колонка показывает «—»). */
+  streak: number;
 }
 
 // C5 (spec 13.1): students register with row checkboxes + bulk extend (+30/+90)
@@ -66,8 +69,12 @@ export function StudentsBulkTable({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Selected-bar (design handoff): accent-tinted border instead of the neutral card. */}
       {canManage && selection.size > 0 && (
-        <Card className="flex flex-wrap items-center gap-3 p-3">
+        <Card
+          className="flex flex-wrap items-center gap-3 rounded-[12px] px-3.5 py-2.5"
+          style={{ borderColor: "color-mix(in srgb, var(--accent) 30%, transparent)" }}
+        >
           <span className="text-text-2 text-[13px]">Выбрано: {selection.size}</span>
           <Button
             variant="secondary"
@@ -150,7 +157,7 @@ export function StudentsBulkTable({
                           </span>
                         )}
                       </span>
-                      <span className="text-text-3 block text-[13px]">{student.email}</span>
+                      <span className="text-text-3 block text-[12px]">{student.email}</span>
                     </Link>
                   </td>
                   <td className="px-5 py-3">
@@ -158,7 +165,21 @@ export function StudentsBulkTable({
                   </td>
                   <td className="text-text-2 px-5 py-3">{student.accessUntilText}</td>
                   <td className="text-text-2 px-5 py-3">{student.lastSeenText}</td>
-                  <td className="text-text-3 px-5 py-3">—</td>
+                  <td className="px-5 py-3">
+                    {student.streak > 0 ? (
+                      <span className="text-text-2 inline-flex items-center gap-1.5 tabular-nums">
+                        <Flame
+                          size={14}
+                          strokeWidth={1.75}
+                          className="text-accent shrink-0"
+                          aria-hidden="true"
+                        />
+                        {student.streak}
+                      </span>
+                    ) : (
+                      <span className="text-text-3">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
               {students.length === 0 && (

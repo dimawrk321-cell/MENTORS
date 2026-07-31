@@ -33,7 +33,7 @@ export function IssueCredentialsDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button variant="gradient">
           <UserRoundPlus size={16} strokeWidth={1.75} aria-hidden="true" />
           Выдать доступ
         </Button>

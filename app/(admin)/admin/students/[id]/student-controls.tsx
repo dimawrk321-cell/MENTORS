@@ -20,8 +20,8 @@ import {
 
 export function ImpersonateButton({ userId }: { userId: string }) {
   return (
-    <ActionButton action={() => impersonateAction(userId)} variant="secondary" size="md">
-      <Eye size={16} strokeWidth={1.75} aria-hidden="true" />
+    <ActionButton action={() => impersonateAction(userId)} variant="secondary" size="sm">
+      <Eye size={15} strokeWidth={1.75} aria-hidden="true" />
       Глазами ученика
     </ActionButton>
   );
@@ -190,10 +190,15 @@ export function SectionAccessToggle({
     });
   }
 
+  // Row (design handoff «Карточка ученика»): label + persistent state hint on the
+  // left, switch on the right, divider between rows.
   return (
-    <label className="flex items-center gap-2.5 text-[14px]">
+    <label className="border-border flex items-center justify-between gap-4 border-b pb-2.5 text-[14px] last:border-b-0 last:pb-0">
+      <span className="min-w-0">
+        <span className="block">{label}</span>
+        <span className="text-text-3 block text-[12px]">{on ? onLabel : offLabel}</span>
+      </span>
       <Switch checked={on} onCheckedChange={change} disabled={pending} aria-label={label} />
-      {label}
     </label>
   );
 }
