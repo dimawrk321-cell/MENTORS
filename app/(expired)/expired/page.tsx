@@ -26,10 +26,10 @@ export default async function ExpiredPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div>
-        <h1 className="text-[32px] font-semibold">Доступ завершён</h1>
-        <p className="text-text-2 mt-2 max-w-[52ch] text-[16px]">
+        <h1 className="text-[28px] font-semibold tracking-[-0.01em]">Доступ завершён</h1>
+        <p className="text-text-2 mt-2 max-w-[52ch] text-[15px]">
           {user.name}, доступ действовал до{" "}
           {user.accessUntil ? formatDateRu(user.accessUntil, user.timezone) : "сегодняшнего дня"}.
           Весь прогресс, серия и история сохранены — после продления продолжишь ровно с того же

@@ -92,7 +92,7 @@ export default async function InterviewerBookingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-[24px] font-semibold">Брони</h1>
+      <h1 className="text-[24px] font-semibold tracking-[-0.02em]">Брони</h1>
 
       <section className="flex flex-col gap-3">
         <h2 className="text-[18px] font-semibold">Сегодня</h2>

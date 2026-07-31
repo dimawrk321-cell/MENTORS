@@ -49,9 +49,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </CardContent>
         </Card>
       )}
+      <h1 className="text-center text-[20px] font-semibold tracking-[-0.01em]">Вход</h1>
       <Card>
-        <CardContent className="p-6">
-          <h1 className="mb-5 text-[24px] font-semibold">Вход</h1>
+        <CardContent className="p-5">
           <LoginForm resetContact={resetContact} />
         </CardContent>
       </Card>

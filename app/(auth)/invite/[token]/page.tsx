@@ -54,14 +54,20 @@ export default async function InvitePage({ params }: InvitePageProps) {
   const rulesText = await getAccessRulesText();
 
   return (
-    <Card>
-      <CardContent className="p-6">
-        <h1 className="text-[24px] font-semibold">Привет, {validation.user.name}!</h1>
-        <p className="text-text-2 mt-1.5 mb-5 text-[14px]">
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col items-center gap-1.5 text-center">
+        <h1 className="text-[20px] font-semibold tracking-[-0.01em]">
+          Привет, {validation.user.name}!
+        </h1>
+        <p className="text-text-3 text-[13px]">
           Тебя пригласили на платформу. Придумай пароль — и начнём.
         </p>
-        <InviteForm token={token} rulesText={rulesText} />
-      </CardContent>
-    </Card>
+      </div>
+      <Card>
+        <CardContent className="p-5">
+          <InviteForm token={token} rulesText={rulesText} />
+        </CardContent>
+      </Card>
+    </div>
   );
 }

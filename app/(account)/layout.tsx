@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BrandMark } from "@/components/layout/brand-mark";
 
 // Spec 0.5: brand name only from env, never hardcoded.
 const brandName = process.env.BRAND_NAME ?? "PRIME";
@@ -11,8 +12,10 @@ const brandName = process.env.BRAND_NAME ?? "PRIME";
 export default function AccountLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
-      <div className="w-full max-w-[400px]">
-        <div className="mb-8 text-center text-[18px] font-semibold tracking-tight">{brandName}</div>
+      <div className="flex w-full max-w-[384px] flex-col gap-5">
+        <div className="flex justify-center">
+          <BrandMark brandName={brandName} tileSize={36} showLabel={false} />
+        </div>
         {children}
       </div>
     </div>

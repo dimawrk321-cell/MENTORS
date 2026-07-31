@@ -18,16 +18,18 @@ export default async function SetPasswordPage() {
   await requirePasswordSetup();
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-5 p-6">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight">Придумай свой пароль</h1>
-          <p className="text-text-2 mt-1 text-[14px]">
-            Вход выполнен по временному паролю. Задай свой — он его заменит.
-          </p>
-        </div>
-        <SetPasswordForm />
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col items-center gap-1.5 text-center">
+        <h1 className="text-[20px] font-semibold tracking-[-0.01em]">Придумай свой пароль</h1>
+        <p className="text-text-3 text-[13px]">
+          Вход выполнен по временному паролю. Задай свой — он его заменит.
+        </p>
+      </div>
+      <Card>
+        <CardContent className="p-5">
+          <SetPasswordForm />
+        </CardContent>
+      </Card>
+    </div>
   );
 }

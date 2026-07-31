@@ -8,11 +8,20 @@ interface EmptyStateProps {
   description?: string;
   /** Spec 5.3: exactly one action. */
   action?: React.ReactNode;
+  /** «warning» tints the icon circle for blocking states (нет доступа). */
+  tone?: "neutral" | "warning";
   className?: string;
 }
 
 /** Icon + heading + text + one action (spec 5.3). */
-export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  tone = "neutral",
+  className,
+}: EmptyStateProps) {
   return (
     <div
       className={cn(
@@ -21,8 +30,15 @@ export function EmptyState({ icon: Icon, title, description, action, className }
       )}
     >
       {Icon ? (
-        <div className="rounded-pill border-border bg-surface-2 mb-3 flex size-10 items-center justify-center border">
-          <Icon size={20} strokeWidth={1.75} className="text-text-3" />
+        <div
+          className={cn(
+            "rounded-pill mb-3 flex items-center justify-center",
+            tone === "warning"
+              ? "bg-warning/12 text-warning size-11"
+              : "border-border bg-surface-2 text-text-3 size-10 border",
+          )}
+        >
+          <Icon size={20} strokeWidth={1.75} />
         </div>
       ) : null}
       {/* DECISION: h3 for the heading — empty states sit inside page sections, never as the page title. */}

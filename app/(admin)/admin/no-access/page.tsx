@@ -21,6 +21,7 @@ export default async function NoAccessPage() {
     <Card>
       <EmptyState
         icon={ShieldOff}
+        tone="warning"
         title="Нет доступа к разделам"
         description="У тебя пока нет прав ни на один раздел админки. Обратись к владельцу платформы."
       />

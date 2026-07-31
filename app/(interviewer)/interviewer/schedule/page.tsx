@@ -113,7 +113,7 @@ export default async function InterviewerSchedulePage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-[24px] font-semibold">Расписание</h1>
+      <h1 className="text-[24px] font-semibold tracking-[-0.02em]">Расписание</h1>
 
       {/* Баннер незаполненной комнаты (acceptance-фикс г) */}
       {roomMissing && (
