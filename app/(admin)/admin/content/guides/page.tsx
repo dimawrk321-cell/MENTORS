@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
 import { listGuidesAdmin } from "@/lib/services/guides";
 import { ContentStudioTabs } from "@/components/features/content-studio-tabs";
+import { PageHeader } from "@/components/ui/page-header";
 import { GuidesBulkList } from "./guides-bulk-list";
 
 export const metadata: Metadata = {
@@ -17,6 +18,11 @@ export default async function AdminGuidesPage() {
   return (
     <div className="flex flex-col gap-4">
       <ContentStudioTabs />
+      <PageHeader
+        size="admin"
+        title="Справочник"
+        subtitle="Гайды по секциям · массовая публикация выбранных."
+      />
       <GuidesBulkList
         guides={guides.map((g) => ({
           id: g.id,
