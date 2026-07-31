@@ -212,7 +212,7 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))] items-start gap-4">
         {/* Левая колонка — поля */}
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -395,14 +395,14 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
         <div className="flex flex-col gap-1.5">
           <span className="text-text-2 text-[13px]">Предпросмотр</span>
           <div
-            className="lesson-prose rounded-card border-border bg-surface-1 min-h-[200px] border p-4 text-[15px]"
+            className="lesson-prose rounded-card border-border bg-surface-1 shadow-card min-h-[200px] border p-5 text-[15px]"
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
         </div>
       </div>
 
       {/* Привязки к урокам (spec 7.4/8.5) */}
-      <section className="rounded-card border-border bg-surface-1 border p-4">
+      <section className="rounded-card border-border bg-surface-1 shadow-card border p-5">
         <h2 className="mb-3 text-[16px] font-semibold">Привязка к урокам</h2>
         {links.length === 0 ? (
           <p className="text-text-3 mb-3 text-[13px]">Вопрос пока не привязан к урокам.</p>
@@ -445,7 +445,7 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
             ))}
           </ul>
         )}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="border-border flex flex-wrap items-center gap-2 border-t pt-3">
           <Select
             value={newLink.lessonId || "none"}
             onValueChange={(value) =>

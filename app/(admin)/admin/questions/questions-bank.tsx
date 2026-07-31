@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Dialog,
   DialogContent,
@@ -162,19 +163,22 @@ export function QuestionsBank({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[24px] font-semibold">Вопросы</h1>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setNewCategoryOpen(true)}>
-            <FolderPlus size={15} strokeWidth={1.75} aria-hidden="true" />
-            Категория
-          </Button>
-          <Button onClick={() => setNewQuestionOpen(true)}>
-            <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
-            Вопрос
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        size="admin"
+        title="Вопросы"
+        actions={
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setNewCategoryOpen(true)}>
+              <FolderPlus size={15} strokeWidth={1.75} aria-hidden="true" />
+              Категория
+            </Button>
+            <Button variant="gradient" onClick={() => setNewQuestionOpen(true)}>
+              <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+              Вопрос
+            </Button>
+          </div>
+        }
+      />
 
       {/* Фильтры (spec 8.5: категория, тип, статус, needs_latex) */}
       <div className="flex flex-wrap items-center gap-2">
@@ -319,11 +323,11 @@ export function QuestionsBank({
           />
         </Card>
       ) : (
-        <Card>
+        <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-[14px]">
               <thead>
-                <tr className="border-border text-text-3 border-b text-left text-[12px] tracking-wide uppercase">
+                <tr className="border-border text-text-3 border-b text-left text-[12px] tracking-[0.04em] uppercase">
                   <th className="w-10 px-4 py-3">
                     <Checkbox
                       checked={pageCheckState(selection, pageIds)}

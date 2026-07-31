@@ -35,6 +35,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
@@ -984,13 +985,16 @@ export function ContentTree({ courses }: { courses: TreeCourse[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[24px] font-semibold">Контент</h1>
-        <Button onClick={() => setNewCourseOpen(true)}>
-          <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
-          Курс
-        </Button>
-      </div>
+      <PageHeader
+        size="admin"
+        title="Контент"
+        actions={
+          <Button variant="gradient" onClick={() => setNewCourseOpen(true)}>
+            <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+            Курс
+          </Button>
+        }
+      />
 
       {courses.length === 0 ? (
         <Card>

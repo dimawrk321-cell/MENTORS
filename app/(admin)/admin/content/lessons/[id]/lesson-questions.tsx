@@ -86,7 +86,7 @@ export function LessonQuestions({
   }
 
   return (
-    <section className="rounded-card border-border bg-surface-1 border p-4">
+    <section className="rounded-card border-border bg-surface-1 shadow-card border p-5">
       <h2 className="mb-1 flex items-center gap-2 text-[16px] font-semibold">
         <Link2 size={16} strokeWidth={1.75} className="text-accent" aria-hidden="true" />
         Вопросы урока

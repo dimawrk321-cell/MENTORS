@@ -348,7 +348,7 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
 
       {/* Metadata — hidden in fullscreen. */}
       {!fullscreen && (
-        <div className="rounded-card border-border bg-surface-1 grid gap-3 border p-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-card border-border bg-surface-1 shadow-card grid gap-3 border p-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="guide-title" className="text-text-2 text-[13px]">
               Название
