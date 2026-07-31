@@ -14,6 +14,7 @@ import { formatDateTimeRu } from "@/lib/utils/dates";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { ResolveFlagButton, TerminateSessionButton } from "./security-actions";
 
 export const metadata: Metadata = {
@@ -31,7 +32,9 @@ const FLAG_LABEL: Record<SecurityFlagType, string> = {
 function StudentLink({ id, name, email }: { id: string; name: string; email: string }) {
   return (
     <Link href={`/admin/students/${id}`} className="group block">
-      <span className="text-text-1 group-hover:text-accent block font-medium">{name || email}</span>
+      <span className="text-text-1 group-hover:text-accent block text-[14px] font-medium">
+        {name || email}
+      </span>
       <span className="text-text-3 block text-[12px]">{email}</span>
     </Link>
   );
@@ -63,12 +66,11 @@ export default async function SecurityPage({ searchParams }: SecurityPageProps) 
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-[24px] font-semibold">Безопасность</h1>
-        <p className="text-text-3 text-[13px]">
-          Активные сессии учеников, устройства, флаги и сбросы паролей.
-        </p>
-      </div>
+      <PageHeader
+        size="admin"
+        title="Безопасность"
+        subtitle="Активные сессии учеников, устройства, флаги и сбросы паролей."
+      />
 
       {/* Открытые security-флаги */}
       <Card>
@@ -80,9 +82,12 @@ export default async function SecurityPage({ searchParams }: SecurityPageProps) 
           {flags.length === 0 ? (
             <p className="text-text-3 text-[14px]">Открытых флагов нет.</p>
           ) : (
-            <ul className="flex flex-col divide-y divide-border">
+            <ul className="divide-border flex flex-col divide-y">
               {flags.map((flag) => (
-                <li key={flag.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <li
+                  key={flag.id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3"
+                >
                   <div className="min-w-0">
                     <StudentLink
                       id={flag.studentId}
@@ -108,15 +113,20 @@ export default async function SecurityPage({ searchParams }: SecurityPageProps) 
       <Card>
         <CardHeader>
           <CardTitle>Несколько устройств за 7 дней</CardTitle>
-          <CardDescription>Новое устройство при уже занятых слотах — возможный шаринг.</CardDescription>
+          <CardDescription>
+            Новое устройство при уже занятых слотах — возможный шаринг.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {multiDevice.length === 0 ? (
             <p className="text-text-3 text-[14px]">Подозрительной смены устройств нет.</p>
           ) : (
-            <ul className="flex flex-col divide-y divide-border">
+            <ul className="divide-border flex flex-col divide-y">
               {multiDevice.map((row) => (
-                <li key={row.studentId} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <li
+                  key={row.studentId}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3"
+                >
                   <StudentLink id={row.studentId} name={row.studentName} email={row.studentEmail} />
                   <div className="text-text-2 flex flex-col gap-0.5 text-right text-[12px]">
                     {row.devices.map((d, i) => (
@@ -142,7 +152,7 @@ export default async function SecurityPage({ searchParams }: SecurityPageProps) 
           {resets.length === 0 ? (
             <p className="text-text-3 text-[14px]">За 30 дней сбросов не было.</p>
           ) : (
-            <ul className="flex flex-col divide-y divide-border">
+            <ul className="divide-border flex flex-col divide-y">
               {resets.map((r, i) => (
                 <li key={i} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                   <div className="min-w-0">
@@ -210,7 +220,10 @@ export default async function SecurityPage({ searchParams }: SecurityPageProps) 
           {totalPages > 1 && (
             <div className="mt-3 flex items-center justify-center gap-4 text-[13px]">
               {page > 1 ? (
-                <Link href={`/admin/security?page=${page - 1}`} className="text-text-2 hover:text-text-1">
+                <Link
+                  href={`/admin/security?page=${page - 1}`}
+                  className="text-text-2 hover:text-text-1"
+                >
                   ← Назад
                 </Link>
               ) : (
@@ -220,7 +233,10 @@ export default async function SecurityPage({ searchParams }: SecurityPageProps) 
                 {page} из {totalPages}
               </span>
               {page < totalPages ? (
-                <Link href={`/admin/security?page=${page + 1}`} className="text-text-2 hover:text-text-1">
+                <Link
+                  href={`/admin/security?page=${page + 1}`}
+                  className="text-text-2 hover:text-text-1"
+                >
                   Дальше →
                 </Link>
               ) : (

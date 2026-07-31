@@ -11,6 +11,10 @@ export function TerminateSessionButton({ sessionId }: { sessionId: string }) {
     <ActionButton
       action={() => terminateSessionAction(sessionId)}
       successMessage="Сессия завершена"
+      // Destructive action reads as danger (design handoff): bordered + danger text.
+      variant="secondary"
+      size="sm"
+      className="text-danger h-7 px-2.5 text-[12px]"
       confirm={{
         title: "Завершить сессию?",
         description: "Ученика выбьет из этой сессии при следующем запросе.",

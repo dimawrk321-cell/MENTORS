@@ -8,6 +8,7 @@ import {
   listWaitlist,
 } from "@/lib/services/mock-admin";
 import { getRubricCriteria } from "@/lib/services/feedback";
+import { PageHeader } from "@/components/ui/page-header";
 import { AdminInterviews } from "@/components/features/admin-interviews";
 
 export const metadata: Metadata = {
@@ -32,7 +33,7 @@ export default async function AdminInterviewsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-[24px] font-semibold">Интервью</h1>
+      <PageHeader size="admin" title="Интервью" />
       <AdminInterviews
         bookings={bookings}
         strikes={strikes}

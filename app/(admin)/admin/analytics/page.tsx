@@ -16,6 +16,7 @@ import {
 import { emitEvent } from "@/lib/services/events";
 import { MOCK_VERDICT_LABEL } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { ChartEmpty, HBarRow, StatTile } from "@/components/features/analytics-charts";
 import { WidgetBoundary, WidgetSkeleton } from "@/components/features/widget-boundary";
 import { CourseSelect, PeriodTabs } from "./analytics-controls";
@@ -148,7 +149,7 @@ function GuideStatRow({ id, title, count }: { id: string; title: string; count: 
     <div className="flex items-center justify-between gap-3 text-[13px]">
       <a
         href={`/admin/content/guides/${id}`}
-        className="ease-app hover:text-text-1 min-w-0 truncate"
+        className="ease-app hover:text-accent min-w-0 truncate"
         title={title}
       >
         {title}
@@ -206,15 +207,12 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-[24px] font-semibold">Аналитика</h1>
-          <p className="text-text-2 mt-1 text-[14px]">
-            Агрегаты по событиям · обновление раз в 10 мин
-          </p>
-        </div>
-        <PeriodTabs period={period} />
-      </div>
+      <PageHeader
+        size="admin"
+        title="Аналитика"
+        subtitle="Агрегаты по событиям · обновление раз в 10 мин"
+        actions={<PeriodTabs period={period} />}
+      />
 
       {/* Воронка курса */}
       <Card>

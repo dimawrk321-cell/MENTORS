@@ -33,6 +33,7 @@ import {
   type RecordingFormValue,
 } from "@/components/features/recording-form-dialog";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils/cn";
 import { Library } from "lucide-react";
@@ -170,15 +171,12 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-[22px] font-semibold">Библиотека</h1>
-          <p className="text-text-3 text-[13px]">
-            Записи со ссылкой старше {LINK_STALE_DAYS} дней: {staleCount}
-          </p>
-        </div>
-        <RecordingFormDialog />
-      </div>
+      <PageHeader
+        size="admin"
+        title="Библиотека"
+        subtitle={`Записи со ссылкой старше ${LINK_STALE_DAYS} дней: ${staleCount}`}
+        actions={<RecordingFormDialog />}
+      />
 
       <div className="rounded-card border-border bg-surface-1 flex flex-col gap-2 border p-4">
         <FilterRow

@@ -34,7 +34,7 @@ export function HBarRow({
   return (
     <div className="flex items-center gap-3">
       {href ? (
-        <a href={href} className="ease-app hover:text-text-1 w-36 shrink-0 sm:w-48">
+        <a href={href} className="ease-app hover:text-accent w-36 shrink-0 sm:w-48">
           <span className="block truncate text-[13px]" title={label}>
             {label}
           </span>
@@ -42,7 +42,8 @@ export function HBarRow({
       ) : (
         labelNode
       )}
-      <div className="bg-surface-2 relative h-2 flex-1 overflow-hidden rounded-full">
+      {/* Track (design handoff): bordered surface-2 rail. */}
+      <div className="bg-surface-2 border-border relative h-2 flex-1 overflow-hidden rounded-full border">
         <div
           className={cn("h-full rounded-full", toneClass)}
           style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
@@ -65,7 +66,7 @@ export function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-control border-border flex flex-col gap-0.5 border p-3">
       <span className="text-text-2 text-[12px]">{label}</span>
-      <span className="text-[20px] font-semibold">{value}</span>
+      <span className="text-[20px] font-semibold tabular-nums">{value}</span>
     </div>
   );
 }

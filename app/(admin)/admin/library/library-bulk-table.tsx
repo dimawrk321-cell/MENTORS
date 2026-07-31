@@ -66,7 +66,12 @@ export function LibraryBulkTable({ rows }: { rows: LibRow[] }) {
       {selection.size > 0 && (
         <Card className="flex flex-wrap items-center gap-3 p-3">
           <span className="text-text-2 text-[13px]">Выбрано: {selection.size}</span>
-          <Button variant="secondary" size="sm" loading={pending} onClick={() => runBulk("published")}>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={pending}
+            onClick={() => runBulk("published")}
+          >
             Опубликовать 4/4
           </Button>
           <Button variant="secondary" size="sm" loading={pending} onClick={() => runBulk("draft")}>
@@ -78,7 +83,8 @@ export function LibraryBulkTable({ rows }: { rows: LibRow[] }) {
         </Card>
       )}
 
-      <div className="rounded-card border-border overflow-x-auto border">
+      {/* Table lives in a full card (surface-1 + shadow) per the prototype. */}
+      <Card className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-[13px]">
           <thead className="text-text-3 border-border border-b">
             <tr>
@@ -143,7 +149,7 @@ export function LibraryBulkTable({ rows }: { rows: LibRow[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
     </div>
   );
 }
