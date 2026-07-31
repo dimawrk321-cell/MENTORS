@@ -4,6 +4,7 @@ import { requireOwnerZone } from "@/lib/auth/guards";
 import { auditDateBounds, getAuditFilterOptions, listAuditLog } from "@/lib/services/audit";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { AuditTable } from "./audit-table";
 
 export const metadata: Metadata = { title: "Аудит" };
@@ -33,12 +34,11 @@ export default async function AuditPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-[24px] font-semibold">Аудит</h1>
-        <p className="text-text-2 mt-1 text-[14px]">
-          Все мутации admin/mentor/owner. Только чтение.
-        </p>
-      </div>
+      <PageHeader
+        size="admin"
+        title="Аудит"
+        subtitle="Все мутации admin/mentor/owner. Только чтение."
+      />
 
       {/* Фильтры — обычная GET-форма (searchParams перезагружают первую страницу). */}
       <Card className="p-4">

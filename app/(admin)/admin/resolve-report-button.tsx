@@ -1,7 +1,6 @@
 "use client";
 
 import { useTransition } from "react";
-import { Check } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { resolveContentReportAction } from "@/lib/actions/admin";
 
@@ -12,7 +11,6 @@ export function ResolveReportButton({ reportId }: { reportId: string }) {
     <button
       type="button"
       disabled={pending}
-      aria-label="Отметить решённым"
       title="Отметить решённым"
       onClick={() =>
         start(async () => {
@@ -21,9 +19,9 @@ export function ResolveReportButton({ reportId }: { reportId: string }) {
           else toast({ title: res.error.message, variant: "danger" });
         })
       }
-      className="rounded-control border-border text-text-2 ease-app hover:border-border-strong hover:text-text-1 flex size-7 shrink-0 items-center justify-center border transition-colors duration-150 disabled:opacity-50"
+      className="border-border text-text-1 ease-app hover:border-border-strong hover:bg-surface-2 flex h-[30px] shrink-0 items-center rounded-[8px] border px-3 text-[12px] font-medium transition-colors duration-150 disabled:opacity-50"
     >
-      <Check size={14} strokeWidth={2} aria-hidden="true" />
+      Решён
     </button>
   );
 }

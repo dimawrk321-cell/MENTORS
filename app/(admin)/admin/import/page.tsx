@@ -9,6 +9,7 @@ import {
 } from "@/lib/constants";
 import { IMPORT_STALE_MINUTES } from "@/lib/services/notion-import/admin-import";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { History } from "lucide-react";
@@ -28,12 +29,11 @@ export default async function ImportPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-[24px] font-semibold">Импорт</h1>
-        <p className="text-text-2 mt-1 text-[14px]">
-          Загрузка markdown-экспорта Notion · та же логика, что у CLI · всё создаётся черновиками
-        </p>
-      </div>
+      <PageHeader
+        size="admin"
+        title="Импорт"
+        subtitle="Загрузка markdown-экспорта Notion · та же логика, что у CLI · всё создаётся черновиками"
+      />
 
       <ImportRunner />
 

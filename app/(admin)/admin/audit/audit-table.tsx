@@ -119,7 +119,7 @@ function DiffPane({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="min-w-0">
       <p className="text-text-3 mb-1 text-[11px] tracking-wide uppercase">{label}</p>
-      <pre className="bg-surface-2 rounded-control text-text-2 overflow-x-auto p-2 text-[12px] whitespace-pre-wrap">
+      <pre className="bg-surface-2 rounded-control text-text-2 overflow-x-auto p-2.5 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap">
         {value == null ? "—" : JSON.stringify(value, null, 2)}
       </pre>
     </div>

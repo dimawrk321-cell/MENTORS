@@ -20,6 +20,7 @@ import { getPultData, type MetricDelta } from "@/lib/services/admin-dashboard";
 import { emitEvent } from "@/lib/services/events";
 import { formatDateRu, pluralRu } from "@/lib/utils/dates";
 import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { ResolveReportButton } from "./resolve-report-button";
 
 export const metadata: Metadata = { title: "Пульт" };
@@ -39,10 +40,7 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-[24px] font-semibold">Пульт</h1>
-        <p className="text-text-2 mt-1 text-[14px]">Неделя к неделе · красные флаги</p>
-      </div>
+      <PageHeader size="admin" title="Пульт" subtitle="Неделя к неделе · красные флаги" />
 
       {/* Метрики недели */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -53,7 +51,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* Красные флаги */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-3 md:grid-cols-2">
         <FlagWidget
           icon={UserX}
           title="Пропали 7+ дней"
@@ -111,7 +109,7 @@ export default async function AdminDashboardPage() {
 
         <FlagWidget
           icon={CalendarClock}
-          title={`Доступ истекает ≤14 дней: ${flags.expiring.length}`}
+          title="Доступ истекает ≤14 дней"
           count={flags.expiring.length}
           empty="Ни у кого не истекает в ближайшие 2 недели."
         >
@@ -158,7 +156,7 @@ export default async function AdminDashboardPage() {
                 {r.href ? (
                   <Link
                     href={r.href}
-                    className="ease-app hover:text-text-1 min-w-0 flex-1 text-[13px] transition-colors duration-150"
+                    className="ease-app hover:text-accent min-w-0 flex-1 text-[13px] transition-colors duration-150"
                   >
                     {body}
                   </Link>
@@ -184,9 +182,9 @@ function MetricCard({ label, metric }: { label: string; metric: MetricDelta }) {
   return (
     <Card className="flex flex-col gap-1 p-4">
       <span className="text-text-2 text-[13px]">{label}</span>
-      <span className="text-[28px] leading-none font-semibold">{metric.current}</span>
+      <span className="text-[28px] leading-none font-semibold tabular-nums">{metric.current}</span>
       <span className={`flex items-center gap-1 text-[12px] ${color}`}>
-        <Arrow size={13} strokeWidth={2} aria-hidden="true" />
+        {delta !== 0 && <Arrow size={13} strokeWidth={2} aria-hidden="true" />}
         {delta === 0 ? "без изменений" : `${delta > 0 ? "+" : ""}${delta} к прошлой неделе`}
       </span>
     </Card>
@@ -227,6 +225,7 @@ function FlagWidget({
         ) : (
           <h2 className="flex-1 text-[14px] font-semibold">{title}</h2>
         )}
+        <span className="text-text-3 shrink-0 text-[12px] tabular-nums">{count}</span>
       </div>
       {count === 0 ? (
         <p className="text-text-3 text-[13px]">{empty}</p>
@@ -250,7 +249,7 @@ function FlagRowLink({
     <li className="py-1.5">
       <Link
         href={href}
-        className="ease-app hover:text-text-1 block text-[13px] transition-colors duration-150"
+        className="ease-app hover:text-accent block text-[13px] transition-colors duration-150"
       >
         <span className="text-text-1 font-medium">{label}</span>
         <span className="text-text-3 ml-2">{children}</span>

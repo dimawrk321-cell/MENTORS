@@ -7,6 +7,7 @@ import { formatDateTimeRu } from "@/lib/utils/dates";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { AnnouncementForm } from "./announcement-form";
 
 export const metadata: Metadata = { title: "Объявления" };
@@ -21,14 +22,12 @@ export default async function AnnouncementsPage() {
   ]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-[24px] font-semibold">Объявления</h1>
-        <p className="text-text-2 mt-1 text-[14px]">
-          Баннер над контентом или уведомление в колокольчик — для всех, курса или тех, у кого мок
-          на этой неделе.
-        </p>
-      </div>
+    <div className="mx-auto flex w-full max-w-[860px] flex-col gap-4">
+      <PageHeader
+        size="admin"
+        title="Объявления"
+        subtitle="Баннер над контентом или уведомление в колокольчик — для всех, курса или тех, у кого мок на этой неделе."
+      />
 
       <Card>
         <CardHeader>

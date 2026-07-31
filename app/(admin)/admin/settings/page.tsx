@@ -27,6 +27,7 @@ import { STREAK_FREEZE_CAP, STREAK_FREEZE_EVERY, STREAK_MILESTONES } from "@/lib
 import { SRS_NEW_PER_DAY } from "@/lib/services/srs";
 import { CANCEL_FREE_HOURS, SLOT_HORIZON_DAYS, STRIKE_LOCK_DAYS } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { TelegramSection } from "@/components/features/telegram-section";
 import { SettingsForm } from "./settings-form";
 import {
@@ -117,13 +118,12 @@ export default async function SettingsPage() {
     : false;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-[24px] font-semibold">Настройки</h1>
-        <p className="text-text-2 mt-1 text-[14px]">
-          Меняются без редеплоя · каждое сохранение в аудите
-        </p>
-      </div>
+    <div className="mx-auto flex w-full max-w-[860px] flex-col gap-4">
+      <PageHeader
+        size="admin"
+        title="Настройки"
+        subtitle="Меняются без редеплоя · каждое сохранение в аудите"
+      />
 
       <Card>
         <CardHeader>

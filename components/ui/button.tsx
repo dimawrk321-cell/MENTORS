@@ -4,7 +4,7 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils/cn";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "gradient";
 type ButtonSize = "sm" | "md" | "lg";
 
 const variantClasses: Record<ButtonVariant, string> = {
@@ -13,6 +13,9 @@ const variantClasses: Record<ButtonVariant, string> = {
   ghost: "bg-transparent text-text-2 hover:text-text-1 hover:bg-surface-2",
   // Ghost-danger (design handoff): transparent, danger text, faint danger hover fill.
   danger: "bg-transparent text-danger hover:bg-danger/8",
+  // Gradient CTA (design handoff v2): systemic indigo→violet fill for the primary
+  // create-actions; lifts 1px on hover.
+  gradient: "[background-image:var(--gradient-accent)] text-white hover:-translate-y-px",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

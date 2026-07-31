@@ -4,6 +4,7 @@ import { requireOwnerZone } from "@/lib/auth/guards";
 import { parsePermissions } from "@/lib/auth/permissions";
 import { listTeam } from "@/lib/services/team";
 import { formatDateTimeRu } from "@/lib/utils/dates";
+import { PageHeader } from "@/components/ui/page-header";
 import { AddMemberDialog } from "./add-member-dialog";
 import { TeamMemberCard, type TeamMemberView } from "./team-member-card";
 
@@ -30,15 +31,14 @@ export default async function TeamPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-[24px] font-semibold">Команда</h1>
-          <p className="text-text-3 text-[13px]">Роли, права и доступы участников платформы.</p>
-        </div>
-        <AddMemberDialog />
-      </div>
+      <PageHeader
+        size="admin"
+        title="Команда"
+        subtitle="Роли, права и доступы участников платформы."
+        actions={<AddMemberDialog />}
+      />
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         {rows.map((member) => (
           <TeamMemberCard
             // Content key: any owner-side change (role/permissions/interviewer/
