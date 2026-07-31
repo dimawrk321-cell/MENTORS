@@ -64,7 +64,7 @@ function BookingCard({ row, timezone }: { row: InterviewerBookingRow; timezone: 
           <ActionButton
             action={() => cancelByInterviewerAction({ bookingId: row.bookingId })}
             size="sm"
-            className="text-danger"
+            variant="danger"
             successMessage="Бронь отменена"
             confirm={{
               title: "Отменить бронь?",

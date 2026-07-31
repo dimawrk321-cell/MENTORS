@@ -273,6 +273,11 @@ export default async function InterviewerSchedulePage() {
                         </div>
                       </div>
                     ))}
+                    {/* Легенда (design handoff). Цвета описаны так, как реально
+                        отрисованы: «занят» — акцентный, не violet. */}
+                    <p className="text-text-3 text-[12px]">
+                      Зелёный — свободен, синий — занят, перечёркнутый — закрыт.
+                    </p>
                   </CardContent>
                 </Card>
               )}
