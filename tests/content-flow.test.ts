@@ -190,4 +190,36 @@ describe("«урок обновлён» + reading_minutes on save (spec 6/7.3)",
     const view = await getCourseView(testDb, "course", user.id);
     expect(view?.state.lessons.get(l1)?.updatedSinceCompletion).toBe(true);
   });
+
+  // Walk 13.6 rail 2: the block editor re-serialises on mount, so a mentor merely
+  // OPENING a lesson must not look like an edit. A save whose contentMd is
+  // byte-identical must notify nobody.
+  it("a no-op save notifies nobody; a real change notifies the completer once", async () => {
+    const user = await makeStudent();
+    const { bySlug } = await makeCourse();
+    const l1 = bySlug.get("l1")!;
+    await testDb.lesson.update({ where: { id: l1 }, data: { status: "published" } });
+    await completeLesson(testDb, { userId: user.id, lessonId: l1, now: NOW });
+
+    const countNotifications = () =>
+      testDb.notification.count({ where: { userId: user.id, type: "lesson_updated" } });
+
+    const baseline = await countNotifications();
+
+    // Identical bytes → no notification at all.
+    await saveLessonContent(testDb as never, {
+      lessonId: l1,
+      contentMd: "# 1",
+      now: new Date(NOW.getTime() + 1000),
+    });
+    expect(await countNotifications()).toBe(baseline);
+
+    // Real change → exactly one.
+    await saveLessonContent(testDb as never, {
+      lessonId: l1,
+      contentMd: "# 1 обновлённый текст",
+      now: new Date(NOW.getTime() + 2000),
+    });
+    expect(await countNotifications()).toBe(baseline + 1);
+  });
 });

@@ -18,6 +18,8 @@ import { BackButton } from "@/components/ui/back-button";
 import { ActionButton } from "@/components/features/action-button";
 import { cn } from "@/lib/utils/cn";
 import { applySnippet, type SnippetDef } from "@/lib/utils/editor-insert";
+import { BlockEditor } from "@/components/features/block-editor";
+import { canUseBlockEditor } from "@/lib/content/markdown-blocks";
 import {
   deleteGuideAction,
   saveGuideContentAction,
@@ -123,6 +125,9 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
   const [saveState, setSaveState] = useState<"saved" | "dirty" | "saving">("saved");
   const [previewVersion, setPreviewVersion] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
+  // Walk 13.6 rail 1 — see the lesson editor for the rationale.
+  const [blockCapable] = useState(() => canUseBlockEditor(guide.contentMd));
+  const [mode, setMode] = useState<"blocks" | "text">(blockCapable ? "blocks" : "text");
   const [meta, setMeta] = useState({
     title: guide.title,
     slug: guide.slug,
@@ -405,8 +410,37 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
         </div>
       )}
 
-      {/* Directive panel + inline marks */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      {/* Mode switch (walk 13.6) — same rail as the lesson editor: «Блоки» only
+          when segmentation is provably lossless for this document. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="border-border inline-flex rounded-[10px] border p-0.5">
+          {(["blocks", "text"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              disabled={value === "blocks" && !blockCapable}
+              onClick={() => setMode(value)}
+              className={cn(
+                "ease-app rounded-[8px] px-3 py-1 text-[12px] font-medium transition-colors duration-150 disabled:opacity-40",
+                mode === value ? "bg-surface-2 text-text-1" : "text-text-2 hover:text-text-1",
+              )}
+            >
+              {value === "blocks" ? "Блоки" : "Текст"}
+            </button>
+          ))}
+        </div>
+        {!blockCapable && (
+          <span className="text-text-3 text-[12px]">
+            Разметка этого гайда нестандартная — блочный режим отключён, чтобы не переписать её
+            автоматически.
+          </span>
+        )}
+      </div>
+
+      {/* Directive panel + inline marks — text mode only. */}
+      <div
+        className={cn("flex flex-wrap items-center gap-x-4 gap-y-2", mode === "blocks" && "hidden")}
+      >
         {SNIPPET_GROUPS.map((group) => (
           <div key={group} className="flex flex-wrap items-center gap-1.5">
             <span className="text-text-3 text-[11px] uppercase">{group}</span>
@@ -441,18 +475,29 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
 
       {/* Editor ↔ Preview */}
       <div className={cn("grid gap-4 lg:grid-cols-2", fullscreen && "min-h-0 flex-1")}>
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={(event) => onContentChange(event.target.value)}
-          onKeyDown={onEditorKeyDown}
-          spellCheck={false}
-          aria-label="Markdown гайда"
-          className={cn(
-            "rounded-card border-border bg-surface-1 text-text-1 ease-app hover:border-border-strong w-full resize-none border p-4 font-mono text-[13px] leading-relaxed transition-colors duration-150",
-            fullscreen ? "h-[80dvh]" : "h-[70dvh]",
-          )}
-        />
+        {mode === "blocks" ? (
+          <div
+            className={cn(
+              "rounded-card border-border bg-bg overflow-y-auto border p-3",
+              fullscreen ? "h-[80dvh]" : "h-[70dvh]",
+            )}
+          >
+            <BlockEditor value={content} onChange={onContentChange} zone="guide" />
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(event) => onContentChange(event.target.value)}
+            onKeyDown={onEditorKeyDown}
+            spellCheck={false}
+            aria-label="Markdown гайда"
+            className={cn(
+              "rounded-card border-border bg-surface-1 text-text-1 ease-app hover:border-border-strong w-full resize-none border p-4 font-mono text-[13px] leading-relaxed transition-colors duration-150",
+              fullscreen ? "h-[80dvh]" : "h-[70dvh]",
+            )}
+          />
+        )}
         <iframe
           key={previewVersion}
           src={`/guide-preview/${guide.id}?v=${previewVersion}`}
