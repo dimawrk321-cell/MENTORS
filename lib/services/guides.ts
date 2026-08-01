@@ -111,6 +111,35 @@ export async function searchGuidesByContent(
   }));
 }
 
+export interface GuideChapterNav {
+  /** 1-based position in the section; 0 when the guide is not in the list. */
+  index: number;
+  total: number;
+  prev: GuideNavItem | null;
+  next: GuideNavItem | null;
+}
+
+/**
+ * «Глава X из Y» + карточки соседних глав внутри раздела справочника
+ * («Читалка v2»). Порядок берётся у витрины раздела
+ * (`listPublishedGuidesBySection`) — второй сортировки не заводим, чтобы
+ * нумерация главы совпадала со списком, из которого читатель сюда пришёл.
+ * Доступ к разделу проверяет страница до вызова (spec 12.1/C3).
+ */
+export async function getGuideChapterNav(
+  db: Db,
+  input: { section: GuideSection; guideId: string },
+): Promise<GuideChapterNav> {
+  const chapters = await listPublishedGuidesBySection(db, input.section);
+  const index = chapters.findIndex((g) => g.id === input.guideId);
+  return {
+    index: index + 1,
+    total: chapters.length,
+    prev: index > 0 ? (chapters[index - 1] ?? null) : null,
+    next: index >= 0 && index < chapters.length - 1 ? (chapters[index + 1] ?? null) : null,
+  };
+}
+
 /** D6 (spec 13.1): other published guides in the same section («Похожие гайды»). */
 export async function listSimilarGuides(
   db: Db,

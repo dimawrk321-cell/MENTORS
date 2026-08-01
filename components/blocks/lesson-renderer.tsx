@@ -128,12 +128,16 @@ function RenderError({ error }: { error: unknown }) {
   );
 }
 
-/** Render markdown for a preview without ever blowing up the pane (spec 13.1/D5). */
-export async function renderLessonContentSafe(markdown: string): Promise<ReactNode> {
+/**
+ * Render markdown for a preview without ever blowing up the pane (spec 13.1/D5).
+ * Returns the headings too, so the preview can carry the same
+ * `data-section-level` as the student page and stay identical by construction
+ * (нумерация разделов 01/02/03 — «Читалка v2»).
+ */
+export async function renderLessonContentSafe(markdown: string): Promise<RenderedLessonContent> {
   try {
-    const { content } = await renderLessonContent(markdown);
-    return content;
+    return await renderLessonContent(markdown);
   } catch (error) {
-    return <RenderError error={error} />;
+    return { content: <RenderError error={error} />, headings: [] };
   }
 }

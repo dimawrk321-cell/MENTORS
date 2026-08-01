@@ -3,61 +3,128 @@
 import { useState } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ProgressBar } from "@/components/ui/progress-bar";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useReadingTracker } from "@/components/features/reading-tracker";
 import { cn } from "@/lib/utils/cn";
-import type { LessonHeading } from "@/lib/utils/markdown";
+import { buildToc, readingPercent, type ReadingHeading } from "@/lib/utils/reading";
 
-// Lesson table of contents: slim sticky rail on xl desktops (LessonTocRail),
-// Sheet-шторка on mobile (LessonTocSheet) — spec 13 + changelog (Sheet ships
-// with its first consumer).
+// Оглавление читального экрана (урок и гайд — один компонент, «Читалка v2»):
+// липкая колонка справа со scroll-spy и процентом прочитанного на ≥1180px,
+// Sheet-шторка ниже. Активный раздел и процент берутся из общего хука через
+// ReadingTracker — второго слушателя скролла на странице нет.
+//
+// Нумерация 01/02/03 идёт по САМОМУ ВЕРХНЕМУ уровню заголовков документа, а не
+// строго по H2: импортированный контент сплошь и рядом структурирован H3 (63 из
+// 85 уроков базы вообще без H2), и жёсткая привязка к H2 оставила бы оглавление
+// пустым (см. lib/utils/reading.ts).
+
+// Оглавление живёт рядом с колонкой только когда для него есть место:
+// 680 (текст) + 40 (зазор) + 224 (колонка) + поля. Ниже 1180px оно уходит в
+// шторку, а читальная колонка просто центрируется — пустого столбца не остаётся.
+// Брейкпоинт написан литералами (`min-[1180px]:…`) в обоих местах намеренно:
+// сканер Tailwind v4 читает исходник как текст и склеенный из переменной класс
+// не увидит.
 
 function TocLinks({
   headings,
+  activeId,
   onNavigate,
 }: {
-  headings: LessonHeading[];
+  headings: readonly ReadingHeading[];
+  activeId: string | null;
   onNavigate?: () => void;
 }) {
+  const entries = buildToc(headings);
   return (
-    <nav aria-label="Оглавление урока">
-      <ul className="flex flex-col gap-0.5">
-        {headings.map((heading) => (
-          <li key={heading.id}>
+    <ul className="flex flex-col gap-0.5">
+      {entries.map((entry) => {
+        const active = entry.id === activeId;
+        return (
+          <li key={entry.id}>
             <a
-              href={`#${heading.id}`}
+              href={`#${entry.id}`}
               onClick={onNavigate}
+              aria-current={active ? "location" : undefined}
               className={cn(
-                "rounded-control text-text-2 ease-app hover:bg-surface-2 hover:text-text-1 block px-2 py-1.5 text-[13px] transition-colors duration-150",
-                heading.depth === 3 && "pl-5",
+                "ease-app flex items-baseline gap-2 border-l-2 py-1.5 pr-1 text-[13px] break-words transition-colors duration-150",
+                entry.section === null ? "pl-6 text-[12.5px]" : "pl-3",
+                active
+                  ? "border-l-accent text-text-1"
+                  : "border-l-border text-text-3 hover:text-text-1",
               )}
             >
-              {heading.text}
+              {entry.number && (
+                <span
+                  className={cn(
+                    "shrink-0 text-[11px] font-semibold tabular-nums",
+                    // accent-ink: 11px акцентом не берёт 4.5 в тёмной теме.
+                    active ? "accent-ink" : "text-text-3",
+                  )}
+                >
+                  {entry.number}
+                </span>
+              )}
+              <span className="min-w-0">{entry.text}</span>
             </a>
           </li>
-        ))}
-      </ul>
-    </nav>
+        );
+      })}
+    </ul>
   );
 }
 
-export function LessonTocRail({ headings }: { headings: LessonHeading[] }) {
-  if (headings.length < 2) return null;
+function ReadCounter({ className }: { className?: string }) {
+  const { fraction } = useReadingTracker();
+  const percent = readingPercent(fraction);
   return (
-    <aside className="sticky top-10 hidden max-h-[calc(100dvh-5rem)] w-56 shrink-0 self-start overflow-y-auto xl:block">
-      <p className="text-text-3 mb-2 px-2 text-[12px] font-medium tracking-wide uppercase">
-        Оглавление
+    <div className={cn("border-border border-t pt-3", className)}>
+      <ProgressBar value={percent} gradient className="h-1" aria-label="Прочитано" />
+      <p className="text-text-3 mt-1.5 text-[11px] tabular-nums">Прочитано {percent}%</p>
+    </div>
+  );
+}
+
+export function LessonTocRail({
+  headings,
+  title = "В этом уроке",
+}: {
+  headings: ReadingHeading[];
+  title?: string;
+}) {
+  const { activeId } = useReadingTracker();
+  // Материал без заголовков оглавления не получает — но колонку СОХРАНЯЕТ пустой
+  // и невидимой: иначе читальная колонка прыгала бы по горизонтали при переходе
+  // между соседними главами раздела (одна с заголовками, другая без).
+  if (headings.length < 2) {
+    return <aside aria-hidden="true" className="hidden w-56 shrink-0 min-[1180px]:block" />;
+  }
+  return (
+    <aside className="sticky top-[76px] hidden max-h-[calc(100dvh-7rem)] w-56 shrink-0 flex-col self-start min-[1180px]:flex">
+      <p className="text-text-3 mb-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase">
+        {title}
       </p>
-      <TocLinks headings={headings} />
+      <nav aria-label={title} className="min-h-0 flex-1 overflow-y-auto">
+        <TocLinks headings={headings} activeId={activeId} />
+      </nav>
+      <ReadCounter className="mt-3" />
     </aside>
   );
 }
 
-export function LessonTocSheet({ headings }: { headings: LessonHeading[] }) {
+export function LessonTocSheet({
+  headings,
+  title = "В этом уроке",
+}: {
+  headings: ReadingHeading[];
+  title?: string;
+}) {
   const [open, setOpen] = useState(false);
+  const { activeId } = useReadingTracker();
   if (headings.length < 2) return null;
 
   return (
-    <div className="xl:hidden">
+    <div className="min-[1180px]:hidden">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <Button variant="secondary" size="sm">
@@ -66,8 +133,11 @@ export function LessonTocSheet({ headings }: { headings: LessonHeading[] }) {
           </Button>
         </SheetTrigger>
         <SheetContent>
-          <SheetTitle>Оглавление</SheetTitle>
-          <TocLinks headings={headings} onNavigate={() => setOpen(false)} />
+          <SheetTitle>{title}</SheetTitle>
+          <nav aria-label={title}>
+            <TocLinks headings={headings} activeId={activeId} onNavigate={() => setOpen(false)} />
+          </nav>
+          <ReadCounter className="mt-4" />
         </SheetContent>
       </Sheet>
     </div>

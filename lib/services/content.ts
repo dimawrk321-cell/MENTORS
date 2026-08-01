@@ -308,6 +308,16 @@ export interface LessonView {
   prev: { id: string; title: string; unlocked: boolean } | null;
   next: { id: string; title: string; unlocked: boolean } | null;
   progress: { scrollPos: number | null; videoPos: number | null; completedAt: Date | null };
+  /**
+   * Позиция урока в СВОЁМ модуле для шапки «Урок X из Y» и сегментированного
+   * индикатора («Читалка v2»). Чистое представление — уже вычисленное состояние
+   * гейтинга (`computeCourseState`), никакой новой логики доступа.
+   */
+  position: {
+    index: number;
+    total: number;
+    steps: { id: string; completed: boolean; unlocked: boolean; current: boolean }[];
+  };
 }
 
 export async function getLessonView(
@@ -379,6 +389,21 @@ export async function getLessonView(
     where: { userId_lessonId: { userId, lessonId: lesson.id } },
   });
 
+  // «Урок X из Y» считается по модулю, а не по курсу: модуль — это глава, и его
+  // 1–14 уроков ложатся в сегментированный индикатор, тогда как курс целиком
+  // (до 40 уроков) в него не помещается.
+  const ownModule = courseView.course.modules.find((m) => m.id === lesson.moduleId);
+  const moduleLessons = ownModule?.lessons ?? [];
+  const steps = moduleLessons.map((l) => {
+    const s = state.lessons.get(l.id);
+    return {
+      id: l.id,
+      completed: s?.completed ?? false,
+      unlocked: s?.unlocked ?? false,
+      current: l.id === lesson.id,
+    };
+  });
+
   return {
     lesson: {
       id: lesson.id,
@@ -405,6 +430,11 @@ export async function getLessonView(
       scrollPos: progressRow?.scrollPos ?? null,
       videoPos: progressRow?.videoPos ?? null,
       completedAt: progressRow?.completedAt ?? null,
+    },
+    position: {
+      index: steps.findIndex((s) => s.current) + 1,
+      total: steps.length,
+      steps,
     },
   };
 }

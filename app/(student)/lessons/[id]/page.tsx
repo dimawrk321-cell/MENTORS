@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, ArrowRight, ChevronRight, Lock } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getLessonView } from "@/lib/services/content";
@@ -16,10 +16,15 @@ import { LessonTocRail, LessonTocSheet } from "@/components/features/lesson-toc"
 import { CompleteLessonButton } from "@/components/features/complete-lesson-button";
 import { ReportDialog } from "@/components/features/report-dialog";
 import { ReadingSizeControl } from "@/components/features/reading-size-control";
+import { ReadingTracker } from "@/components/features/reading-tracker";
+import { ReadingChapterHeader } from "@/components/features/reading-chapter-header";
+import { ReadingNavCards, type ReadingNavItem } from "@/components/features/reading-nav-cards";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import type { ProgressSegment } from "@/components/ui/progress-bar";
+import { sectionDepth } from "@/lib/utils/reading";
 
 const DIFFICULTY_LABEL = { intro: "интро", base: "база", advanced: "продвинутый" } as const;
 
@@ -86,116 +91,134 @@ export default async function LessonPage({ params }: LessonPageProps) {
     getQuizQuestionsForLesson(prisma, { lessonId: view.lesson.id, userId: user.id }),
   ]);
 
+  // Сегменты шапки «Урок X из Y» — уже посчитанное состояние гейтинга модуля.
+  const segments: ProgressSegment[] = view.position.steps.map((step) =>
+    step.current ? "current" : step.completed ? "done" : step.unlocked ? "todo" : "locked",
+  );
+
+  // Карточки «Предыдущий/Следующий урок». Доступность решена на сервере: цепь
+  // курсов уже пропустила нас сюда (redirect выше), внутрикурсовой гейтинг —
+  // в `unlocked`. Закрытый следующий урок рендерится замком и не кликается.
+  const prevNav: ReadingNavItem | null =
+    view.prev && view.prev.unlocked
+      ? { href: `/lessons/${view.prev.id}`, title: view.prev.title, kicker: "Предыдущий урок" }
+      : null;
+  const nextNav: ReadingNavItem | null = view.next
+    ? {
+        href: `/lessons/${view.next.id}`,
+        title: view.next.title,
+        kicker: "Следующий урок",
+        locked: !view.next.unlocked,
+        lockHint: view.next.unlocked ? undefined : "Откроется после предыдущих шагов курса",
+      }
+    : null;
+
   return (
-    <div className="flex gap-10">
-      {/* break-words covers everything OUTSIDE .lesson-prose (title, breadcrumbs,
+    <ReadingTracker headingIds={headings.map((heading) => heading.id)}>
+      <div className="flex gap-10">
+        {/* break-words covers everything OUTSIDE .lesson-prose (title, breadcrumbs,
           chips, key questions, quiz) — a long unbreakable title burst the page at
           390px (changelog 13.6). Inside the article the stricter
           `overflow-wrap: anywhere` rule still wins. */}
-      {/* data-reading-size lives on the whole reading COLUMN, not just the
+        {/* data-reading-size lives on the whole reading COLUMN, not just the
           article: the key questions and the quiz are prose too (audit 13.6). */}
-      <div
-        className="mx-auto w-full max-w-[680px] min-w-0 break-words"
-        data-reading-size={user.readingFontSize}
-      >
-        {/* Header: breadcrumbs, title, chips (spec 7.3) */}
-        <nav
-          aria-label="Хлебные крошки"
-          className="text-text-3 mb-3 flex flex-wrap items-center gap-1 text-[13px]"
+        <div
+          className="mx-auto w-full max-w-[680px] min-w-0 break-words"
+          data-reading-size={user.readingFontSize}
         >
-          <Link
-            href="/courses"
-            className="ease-app hover:text-text-1 transition-colors duration-150"
+          {/* Header: breadcrumbs, title, chips (spec 7.3) */}
+          <nav
+            aria-label="Хлебные крошки"
+            className="text-text-3 mb-3 flex flex-wrap items-center gap-1 text-[13px]"
           >
-            Обучение
-          </Link>
-          <ChevronRight size={13} strokeWidth={1.75} aria-hidden="true" />
-          <Link
-            href={`/courses/${view.course.slug}`}
-            className="ease-app hover:text-text-1 transition-colors duration-150"
-          >
-            {view.course.title}
-          </Link>
-          <ChevronRight size={13} strokeWidth={1.75} aria-hidden="true" />
-          <span>{view.module.title}</span>
-        </nav>
+            <Link
+              href="/courses"
+              className="ease-app hover:text-text-1 transition-colors duration-150"
+            >
+              Обучение
+            </Link>
+            <ChevronRight size={13} strokeWidth={1.75} aria-hidden="true" />
+            <Link
+              href={`/courses/${view.course.slug}`}
+              className="ease-app hover:text-text-1 transition-colors duration-150"
+            >
+              {view.course.title}
+            </Link>
+            <ChevronRight size={13} strokeWidth={1.75} aria-hidden="true" />
+            <span>{view.module.title}</span>
+          </nav>
 
-        <h1 className="text-[32px] leading-[1.2] font-semibold tracking-[-0.02em]">
-          {view.lesson.title}
-        </h1>
-        <div className="mt-2.5 mb-5 flex flex-wrap items-center gap-2">
-          <Badge>{view.lesson.readingMinutes} мин</Badge>
-          <Badge>{DIFFICULTY_LABEL[view.lesson.difficulty]}</Badge>
-          {view.lesson.isOptional && <Badge>необязательный</Badge>}
-          {view.state.updatedSinceCompletion && <Badge variant="accent">обновлён</Badge>}
-          <div className="ml-auto flex items-center gap-2">
-            <ReadingSizeControl initial={user.readingFontSize} />
-            <LessonTocSheet headings={headings} />
+          {/* «Урок X из Y» + сегментированный индикатор модуля («Читалка v2»). */}
+          <ReadingChapterHeader
+            kicker="Урок"
+            index={view.position.index}
+            total={view.position.total}
+            segments={segments}
+          />
+
+          <h1 className="text-[32px] leading-[1.2] font-semibold tracking-[-0.02em]">
+            {view.lesson.title}
+          </h1>
+          <div className="mt-2.5 mb-5 flex flex-wrap items-center gap-2">
+            <Badge>{view.lesson.readingMinutes} мин</Badge>
+            <Badge>{DIFFICULTY_LABEL[view.lesson.difficulty]}</Badge>
+            {view.lesson.isOptional && <Badge>необязательный</Badge>}
+            {view.state.updatedSinceCompletion && <Badge variant="accent">обновлён</Badge>}
+            <div className="ml-auto flex items-center gap-2">
+              <ReadingSizeControl initial={user.readingFontSize} />
+              <LessonTocSheet headings={headings} />
+            </div>
+          </div>
+
+          <LessonReader
+            lessonId={view.lesson.id}
+            initialScrollPos={view.progress.scrollPos}
+            initialVideoPos={view.progress.videoPos}
+            completed={view.progress.completedAt !== null}
+            impersonated={impersonated}
+            video={
+              view.lesson.videoUrl
+                ? {
+                    url: view.lesson.videoUrl,
+                    status: view.lesson.videoStatus,
+                    title: view.lesson.title,
+                  }
+                : null
+            }
+          >
+            {/* Reading column with the always-present watermark layer (spec 5.7). */}
+            <div className="relative">
+              <Watermark email={session.user.email} />
+              {/* data-section-level включает нумерацию 01/02/03 по верхнему уровню
+                заголовков этого документа (H2, а если их нет — H3). */}
+              <article
+                className="lesson-prose reading-article"
+                data-section-level={sectionDepth(headings) ?? undefined}
+              >
+                {content}
+              </article>
+            </div>
+          </LessonReader>
+
+          {/* Автоблок ключевых вопросов + квиз (spec 7.3/7.5) */}
+          <KeyQuestions questions={keyQuestions} />
+          <QuizWidget lessonId={view.lesson.id} userId={user.id} questions={quizQuestions} />
+
+          {/* Completion + prev/next (spec 7.3) */}
+          <div className="border-border mt-10 flex flex-col gap-5 border-t pt-6">
+            <div className="flex justify-center">
+              <CompleteLessonButton
+                lessonId={view.lesson.id}
+                completed={view.progress.completedAt !== null}
+              />
+            </div>
+            <ReadingNavCards prev={prevNav} next={nextNav} />
           </div>
         </div>
 
-        <LessonReader
-          lessonId={view.lesson.id}
-          initialScrollPos={view.progress.scrollPos}
-          initialVideoPos={view.progress.videoPos}
-          completed={view.progress.completedAt !== null}
-          impersonated={impersonated}
-          video={
-            view.lesson.videoUrl
-              ? {
-                  url: view.lesson.videoUrl,
-                  status: view.lesson.videoStatus,
-                  title: view.lesson.title,
-                }
-              : null
-          }
-        >
-          {/* Reading column with the always-present watermark layer (spec 5.7). */}
-          <div className="relative">
-            <Watermark email={session.user.email} />
-            <article className="lesson-prose">{content}</article>
-          </div>
-        </LessonReader>
-
-        {/* Автоблок ключевых вопросов + квиз (spec 7.3/7.5) */}
-        <KeyQuestions questions={keyQuestions} />
-        <QuizWidget lessonId={view.lesson.id} userId={user.id} questions={quizQuestions} />
-
-        {/* Completion + prev/next (spec 7.3) */}
-        <div className="border-border mt-10 flex flex-col gap-4 border-t pt-6">
-          <div className="flex justify-center">
-            <CompleteLessonButton
-              lessonId={view.lesson.id}
-              completed={view.progress.completedAt !== null}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            {view.prev && view.prev.unlocked ? (
-              <Button asChild variant="ghost" size="sm" className="max-w-[45%]">
-                <Link href={`/lessons/${view.prev.id}`}>
-                  <ArrowLeft size={15} strokeWidth={1.75} aria-hidden="true" />
-                  <span className="truncate">{view.prev.title}</span>
-                </Link>
-              </Button>
-            ) : (
-              <span />
-            )}
-            {view.next && view.next.unlocked ? (
-              <Button asChild variant="ghost" size="sm" className="max-w-[45%]">
-                <Link href={`/lessons/${view.next.id}`}>
-                  <span className="truncate">{view.next.title}</span>
-                  <ArrowRight size={15} strokeWidth={1.75} aria-hidden="true" />
-                </Link>
-              </Button>
-            ) : (
-              <span />
-            )}
-          </div>
-        </div>
+        <LessonTocRail headings={headings} title="В этом уроке" />
       </div>
-
-      <LessonTocRail headings={headings} />
       <ReportDialog lessonId={view.lesson.id} />
-    </div>
+    </ReadingTracker>
   );
 }

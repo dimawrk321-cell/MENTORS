@@ -9,6 +9,9 @@ export default function LessonLoading() {
     <div className="flex gap-10">
       <div className="mx-auto w-full max-w-[680px] min-w-0">
         <Skeleton className="rounded-pill mb-3 h-4 w-64" />
+        {/* «Урок X из Y» + сегментированный индикатор («Читалка v2»). */}
+        <Skeleton className="rounded-pill mb-2 h-3 w-28" />
+        <Skeleton className="rounded-pill mb-3.5 h-1 w-full" />
         <Skeleton className="h-9 w-3/4" />
         <div className="mt-2.5 mb-5 flex flex-wrap items-center gap-2">
           <Skeleton className="rounded-pill h-6 w-16" />
@@ -25,7 +28,9 @@ export default function LessonLoading() {
           <Skeleton className="h-4 w-4/5" />
         </div>
       </div>
-      <aside className="hidden w-56 shrink-0 xl:block">
+      {/* Тот же брейкпоинт, что у боевого оглавления (LessonTocRail) — иначе
+          колонка чтения прыгнула бы при смене скелета на контент. */}
+      <aside className="hidden w-56 shrink-0 min-[1180px]:block">
         <Skeleton className="mb-2 h-3 w-24" />
         <div className="flex flex-col gap-2">
           <Skeleton className="h-5 w-full" />

@@ -39,3 +39,61 @@ export function ProgressBar({
     </div>
   );
 }
+
+/** Per-step state of a {@link SegmentedProgress} tick. */
+export type ProgressSegment = "done" | "current" | "todo" | "locked";
+
+const segmentClasses: Record<ProgressSegment, string> = {
+  done: "bg-accent/55",
+  current: "",
+  todo: "bg-border",
+  // A locked step reads the same as a future one in a 3px tick; the lock itself
+  // is carried by the navigation card, not by the indicator.
+  locked: "bg-border",
+};
+
+/** Above this the ticks turn into hairline mush — fall back to a plain bar. */
+const MAX_SEGMENTS = 24;
+
+/**
+ * Segmented progress (design v2): one tick per step, the current step filled
+ * with the brand gradient. Used by the «Урок X из Y» / «Глава X из Y» reading
+ * header; degrades to a plain gradient ProgressBar for very long sequences.
+ */
+export function SegmentedProgress({
+  segments,
+  className,
+  "aria-label": ariaLabel,
+}: {
+  segments: readonly ProgressSegment[];
+  className?: string;
+  "aria-label": string;
+}) {
+  if (segments.length === 0) return null;
+  if (segments.length > MAX_SEGMENTS) {
+    const done = segments.filter((s) => s === "done" || s === "current").length;
+    return (
+      <ProgressBar
+        value={(done / segments.length) * 100}
+        gradient
+        aria-label={ariaLabel}
+        className={cn("h-1", className)}
+      />
+    );
+  }
+  return (
+    <div
+      role="img"
+      aria-label={ariaLabel}
+      className={cn("flex w-full items-center gap-1", className)}
+    >
+      {segments.map((state, index) => (
+        <span
+          key={index}
+          className={cn("rounded-pill h-1 min-w-1.5 flex-1", segmentClasses[state])}
+          style={state === "current" ? { backgroundImage: "var(--gradient-accent)" } : undefined}
+        />
+      ))}
+    </div>
+  );
+}
