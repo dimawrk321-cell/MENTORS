@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestUser, resetDb, testDb } from "./helpers/db";
-import { unlockCourse } from "@/lib/services/course-access";
+import { canOpenCourse, unlockCourse } from "@/lib/services/course-access";
 
 // Block 2v2.3: a locked course must not be reachable by a direct URL. These tests
 // drive the REAL page functions (RSC are plain async functions) with the session
@@ -47,6 +47,21 @@ vi.mock("@/lib/db", async () => {
 async function makeChain() {
   const welcome = await testDb.course.create({
     data: { slug: "welcome", title: "Добро пожаловать", order: 0, status: "published" },
+  });
+  // welcome needs a required lesson: a course with nothing to finish is a
+  // pass-through link, so it could never be the «Откроется после» blocker.
+  const wMod = await testDb.module.create({
+    data: { courseId: welcome.id, title: "Модуль", order: 0, status: "published" },
+  });
+  await testDb.lesson.create({
+    data: {
+      moduleId: wMod.id,
+      title: "Вводный урок",
+      slug: "welcome-first",
+      order: 0,
+      status: "published",
+      contentMd: "текст",
+    },
   });
   const python = await testDb.course.create({
     data: { slug: "python", title: "Python + PyTorch", order: 1, status: "published" },
@@ -225,5 +240,128 @@ describe("admin student card shows the chain (block 2v2.4)", () => {
     const pythonRow = courses.find((c) => c.courseId === python.id)!;
     expect(pythonRow.state).toBe("locked_chain");
     expect(pythonRow.unlocksAfter).toBe("Добро пожаловать");
+  });
+});
+
+describe("the chain advances on a module test, not only on a lesson (audit blocker)", () => {
+  beforeEach(async () => {
+    await resetDb();
+    redirectSpy.mockClear();
+  });
+
+  /** welcome (1 required lesson + an enabled module test) → python. */
+  async function makeTestGatedChain() {
+    const welcome = await testDb.course.create({
+      data: { slug: "welcome", title: "Знакомство", order: 0, status: "published", gating: "free" },
+    });
+    const wMod = await testDb.module.create({
+      data: { courseId: welcome.id, title: "Модуль", order: 0, status: "published" },
+    });
+    const wLesson = await testDb.lesson.create({
+      data: {
+        moduleId: wMod.id,
+        slug: "w-lesson",
+        title: "Урок",
+        order: 0,
+        status: "published",
+        contentMd: "текст",
+      },
+    });
+    const category = await testDb.questionCategory.create({
+      data: { title: "Кат", slug: "kat", colorIndex: 0, order: 0 },
+    });
+    const question = await testDb.question.create({
+      data: {
+        type: "single",
+        categoryId: category.id,
+        textMd: "2+2?",
+        answerMd: "4",
+        status: "published",
+        difficulty: 1,
+        options: [
+          { id: "a", text: "4", correct: true },
+          { id: "b", text: "5", correct: false },
+        ],
+      },
+    });
+    // The module test pool is sourced through the lesson links (getModuleQuestionPool).
+    await testDb.questionLesson.create({
+      data: { questionId: question.id, lessonId: wLesson.id },
+    });
+    await testDb.moduleTest.create({
+      data: { moduleId: wMod.id, enabled: true, poolSize: 1, threshold: 100, cooldownMinutes: 0 },
+    });
+    const python = await testDb.course.create({
+      data: { slug: "python", title: "Python", order: 1, status: "published", gating: "free" },
+    });
+    const pMod = await testDb.module.create({
+      data: { courseId: python.id, title: "Модуль", order: 0, status: "published" },
+    });
+    await testDb.lesson.create({
+      data: {
+        moduleId: pMod.id,
+        slug: "p-lesson",
+        title: "Урок",
+        order: 0,
+        status: "published",
+        contentMd: "текст",
+      },
+    });
+    return { welcome, wMod, wLesson, python, question };
+  }
+
+  it("finishing the last lesson does NOT open the next course while the test is unpassed", async () => {
+    const { wLesson, python } = await makeTestGatedChain();
+    const user = await createTestUser({ email: "chain-test-gate-1@test.local" });
+
+    const { completeLesson } = await import("@/lib/services/content");
+    const res = await completeLesson(testDb as never, { userId: user.id, lessonId: wLesson.id });
+    expect(res.ok).toBe(true);
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(false);
+  });
+
+  it("passing the module test then opens it — the chain does not dead-end on a test", async () => {
+    const { wLesson, wMod, python, question } = await makeTestGatedChain();
+    const user = await createTestUser({ email: "chain-test-gate-2@test.local" });
+
+    const { completeLesson, advanceChainIfCourseComplete } = await import("@/lib/services/content");
+    await completeLesson(testDb as never, { userId: user.id, lessonId: wLesson.id });
+
+    const { startTestAttempt, answerTestQuestion, finishTestAttempt } =
+      await import("@/lib/services/tests");
+    const started = await startTestAttempt(testDb as never, {
+      userId: user.id,
+      moduleId: wMod.id,
+      kind: "module",
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    await answerTestQuestion(testDb as never, {
+      userId: user.id,
+      attemptId: started.attemptId,
+      questionId: question.id,
+      answer: "a",
+    });
+    const finished = await finishTestAttempt(testDb as never, {
+      userId: user.id,
+      attemptId: started.attemptId,
+    });
+    expect(finished.ok && finished.passed).toBe(true);
+
+    // This is the hook finishTestAction runs after a pass.
+    const opened = await advanceChainIfCourseComplete(testDb as never, {
+      userId: user.id,
+      courseSlug: "welcome",
+    });
+    expect(opened).toBe("Python");
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(true);
+
+    // Idempotent: a second call opens nothing and notifies nobody twice.
+    expect(
+      await advanceChainIfCourseComplete(testDb as never, {
+        userId: user.id,
+        courseSlug: "welcome",
+      }),
+    ).toBeNull();
   });
 });

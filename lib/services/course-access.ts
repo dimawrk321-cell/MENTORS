@@ -79,12 +79,13 @@ export async function chainCourses(db: Db) {
 
 /** Access state for every published course, in chain order. */
 export async function listCourseAccess(db: Db, userId: string): Promise<CourseAccessRow[]> {
-  const [courses, records] = await Promise.all([
+  const [courses, records, counts] = await Promise.all([
     chainCourses(db),
     db.courseAccess.findMany({
       where: { userId },
       select: { courseId: true, unlockedAt: true, lockedByAdmin: true, unlockedBy: true },
     }),
+    requiredLessonCounts(db),
   ]);
   const byCourse = new Map(records.map((r) => [r.courseId, r as AccessRecord]));
 
@@ -96,10 +97,27 @@ export async function listCourseAccess(db: Db, userId: string): Promise<CourseAc
       title: course.title,
       order: course.order,
       state,
-      // «Откроется после {курс}» — the previous link in the chain.
-      unlocksAfter: state === "locked_chain" && index > 0 ? courses[index - 1]!.title : null,
+      unlocksAfter: state === "locked_chain" ? blockingCourseBefore(courses, counts, index) : null,
     };
   });
+}
+
+/**
+ * «Откроется после {курс}» — the nearest EARLIER course that actually gates this
+ * one. Not simply `courses[index - 1]`: an empty course is a pass-through link
+ * (chainTargetsAfter), so naming it would promise the student something they can
+ * never finish. Walk back to the last course with required lessons.
+ */
+function blockingCourseBefore(
+  courses: { id: string; title: string }[],
+  counts: Map<string, number>,
+  index: number,
+): string | null {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const previous = courses[i]!;
+    if ((counts.get(previous.id) ?? 0) > 0) return previous.title;
+  }
+  return null;
 }
 
 /** Single-course check used by the page guards and the student actions. */

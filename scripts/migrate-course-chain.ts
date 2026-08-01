@@ -52,14 +52,14 @@ async function main(): Promise<void> {
   }
 
   console.log("\n2. Доступы существующих учеников:");
-  const { reports, skipped } = await migrateAllStudents(prisma, { commit });
+  const { reports, untouched } = await migrateAllStudents(prisma, { commit });
   for (const report of reports) {
     console.log(`  ${report.email}`);
     for (const course of report.opened) console.log(`      + ${course}`);
   }
   const totalOpened = reports.reduce((sum, r) => sum + r.opened.length, 0);
   console.log(
-    `   учеников затронуто: ${reports.length} · ${commit ? "открыто" : "будет открыто"} курсов: ${totalOpened} · пропущено (не активны): ${skipped}`,
+    `   учеников затронуто: ${reports.length} · ${commit ? "открыто" : "будет открыто"} курсов: ${totalOpened} · без изменений: ${untouched}`,
   );
 
   if (!commit) console.log("\nНичего не записано. Повтори с --commit.");

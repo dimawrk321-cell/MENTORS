@@ -446,6 +446,52 @@ const NO_GAMIFICATION: EmitResult = {
   streakCurrent: 0,
 };
 
+/**
+ * Block 2v2: a finished course opens the next link of the chain.
+ *
+ * A module is `closed` only when its required lessons AND its module test are
+ * done, so a course's LAST outstanding requirement can be a module test rather
+ * than a lesson. That path does not go through completeLesson, so this hook is
+ * shared: completeLesson calls it, and so does finishTestAction after a pass.
+ * Without the second caller a student who closes a course with its final test
+ * is locked out of the rest of the programme with no way to re-trigger it —
+ * «Завершить урок» is disabled once the lessons are already complete.
+ *
+ * Idempotent (unlockCourse is), so replays open nothing and notify nobody twice.
+ * Returns the title of the course this call opened, or null.
+ */
+export async function advanceChainIfCourseComplete(
+  db: Db,
+  input: { userId: string; courseSlug: string; now?: Date },
+): Promise<string | null> {
+  const now = input.now ?? new Date();
+  const view = await getCourseView(db, input.courseSlug, input.userId);
+  if (!view) return null;
+  if (!isCourseComplete(view.state.modules, view.state.totalRequired)) return null;
+
+  const opened = await unlockNextAfter(db, {
+    userId: input.userId,
+    completedCourseId: view.course.id,
+    now,
+  });
+  if (!opened) return null;
+
+  const next = await db.course.findUnique({
+    where: { id: opened.id },
+    select: { slug: true },
+  });
+  if (next) {
+    await notify(
+      db,
+      input.userId,
+      "course_unlocked",
+      { courseSlug: next.slug, courseTitle: opened.title },
+      { now },
+    );
+  }
+  return opened.title;
+}
+
 /** Explicit, idempotent completion (spec 7.3); returns the next open lesson. */
 export async function completeLesson(
   db: PrismaClient,
@@ -506,35 +552,11 @@ export async function completeLesson(
 
   // Recompute after the write — the completion may have opened the next slot.
   const courseView = await getCourseView(db, view.course.slug, input.userId);
-
-  // Block 2v2: finishing a course opens the next link of the chain. A module is
-  // `closed` only when its required lessons AND its module test are done, so
-  // «every module closed» is exactly the spec's «все обязательные уроки +
-  // модульные тесты». unlockNextAfter is idempotent, so replays are harmless.
-  let unlockedCourseTitle: string | null = null;
-  if (courseView && isCourseComplete(courseView.state.modules, courseView.state.totalRequired)) {
-    const opened = await unlockNextAfter(db, {
-      userId: input.userId,
-      completedCourseId: view.course.id,
-      now,
-    });
-    if (opened) {
-      unlockedCourseTitle = opened.title;
-      const next = await db.course.findUnique({
-        where: { id: opened.id },
-        select: { slug: true },
-      });
-      if (next) {
-        await notify(
-          db,
-          input.userId,
-          "course_unlocked",
-          { courseSlug: next.slug, courseTitle: opened.title },
-          { now },
-        );
-      }
-    }
-  }
+  const unlockedCourseTitle = await advanceChainIfCourseComplete(db, {
+    userId: input.userId,
+    courseSlug: view.course.slug,
+    now,
+  });
 
   return {
     ok: true,

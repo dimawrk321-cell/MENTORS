@@ -2,6 +2,7 @@ import type { ContentStatus, CourseGating, LessonDifficulty, PrismaClient } from
 import type { Db } from "@/lib/db";
 import { writeAudit } from "@/lib/services/audit";
 import { notify } from "@/lib/services/notifications";
+import { canOpenCourse } from "@/lib/services/course-access";
 import { getDefaultCourseGating } from "@/lib/services/settings";
 import { computeReadingMinutes } from "@/lib/utils/markdown";
 import { slugify, uniqueSlug } from "@/lib/utils/slug";
@@ -303,7 +304,13 @@ export async function notifyLessonPublished(
   const lesson = await db.lesson.findUnique({
     where: { id: lessonId },
     include: {
-      module: { select: { status: true, course: { select: { title: true, status: true } } } },
+      module: {
+        select: {
+          status: true,
+          courseId: true,
+          course: { select: { title: true, status: true } },
+        },
+      },
     },
   });
   if (!lesson || lesson.status !== "published") return;
@@ -314,6 +321,12 @@ export async function notifyLessonPublished(
     select: { id: true },
   });
   for (const student of students) {
+    // Block 2v2: only students who can actually open the course. The bell body
+    // carries the lesson TITLE, which search now hides for locked courses and
+    // both pages redirect away from — fanning it out here would leak it back.
+    // It also makes the toggle's own promise true: «Когда в ТВОИХ курсах
+    // публикуется новый урок» (notifications.ts matrix label).
+    if (!(await canOpenCourse(db, student.id, lesson.module.courseId))) continue;
     await notify(
       db,
       student.id,

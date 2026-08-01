@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { answerQuizQuestion } from "@/lib/services/questions";
 import { answerTestQuestion, finishTestAttempt, startTestAttempt } from "@/lib/services/tests";
-import { getCourseView } from "@/lib/services/content";
+import { advanceChainIfCourseComplete, getCourseView } from "@/lib/services/content";
 import { canOpenCourse } from "@/lib/services/course-access";
 import {
   ActionError,
@@ -24,6 +24,35 @@ import { toFeedback, type GamificationFeedback } from "@/lib/gamification";
 
 const answerSchema = z.union([z.string().max(2000), z.array(z.string().max(100)).max(50)]);
 
+/**
+ * Block 2v2 guards. Every student write below belongs to a course, and the
+ * course chain is enforced HERE — the page guard is cosmetic, the action is the
+ * boundary. Three lookups because the client hands us three different ids.
+ */
+async function assertCourseOpenForLesson(userId: string, lessonId: string): Promise<void> {
+  const lesson = await prisma.lesson.findUnique({
+    where: { id: lessonId },
+    select: { module: { select: { courseId: true } } },
+  });
+  if (!lesson) throw new ActionError("not_found", "Урок не найден");
+  if (!(await canOpenCourse(prisma, userId, lesson.module.courseId))) {
+    throw new ActionError("locked", "Курс ещё закрыт");
+  }
+}
+
+async function assertCourseOpenForAttempt(userId: string, attemptId: string): Promise<void> {
+  const attempt = await prisma.testAttempt.findUnique({
+    where: { id: attemptId },
+    select: { userId: true, module: { select: { courseId: true } } },
+  });
+  // Ownership stays finishTestAttempt's job; here we only re-resolve the course
+  // so an attempt started before a lock cannot be answered or banked after it.
+  if (!attempt || attempt.userId !== userId) return;
+  if (!(await canOpenCourse(prisma, userId, attempt.module.courseId))) {
+    throw new ActionError("locked", "Курс ещё закрыт");
+  }
+}
+
 const quizInputSchema = z.object({
   lessonId: z.string().min(1),
   questionId: z.string().min(1),
@@ -38,6 +67,10 @@ export async function answerQuizAction(
     assertNotImpersonating(auth);
     assertActiveAccess(auth);
     const parsed = parseInput(quizInputSchema, input);
+    // Block 2v2: the quiz pays XP, counts a streak day and seeds SRS cards, so
+    // it is a progress write like any other — an already-open page must not keep
+    // earning after the course is locked.
+    await assertCourseOpenForLesson(auth.user.id, parsed.lessonId);
     const result = await answerQuizQuestion(prisma, {
       userId: auth.user.id,
       lessonId: parsed.lessonId,
@@ -132,6 +165,7 @@ export async function answerTestAction(
     assertNotImpersonating(auth);
     assertActiveAccess(auth);
     const parsed = parseInput(answerTestSchema, input);
+    await assertCourseOpenForAttempt(auth.user.id, parsed.attemptId);
     const result = await answerTestQuestion(prisma, {
       userId: auth.user.id,
       attemptId: parsed.attemptId,
@@ -157,15 +191,19 @@ export async function finishTestAction(attemptId: string): Promise<
     passed: boolean;
     threshold: number;
     gamification: GamificationFeedback;
+    /** Block 2v2: set when banking this test finished the course and opened the next. */
+    unlockedCourseTitle: string | null;
   }>
 > {
   return runAction(async () => {
     const auth = await requireActionStudent();
     assertNotImpersonating(auth);
     assertActiveAccess(auth);
+    const parsedAttemptId = parseInput(z.string().min(1), attemptId);
+    await assertCourseOpenForAttempt(auth.user.id, parsedAttemptId);
     const result = await finishTestAttempt(prisma, {
       userId: auth.user.id,
-      attemptId: parseInput(z.string().min(1), attemptId),
+      attemptId: parsedAttemptId,
     });
     if (!result.ok) {
       throw new ActionError(
@@ -173,11 +211,30 @@ export async function finishTestAction(attemptId: string): Promise<
         result.code === "finished" ? "Попытка уже завершена" : "Попытка не найдена",
       );
     }
+
+    // Block 2v2: a module test can be a course's LAST outstanding requirement,
+    // and that completion never passes through completeLesson. Without this the
+    // chain would stop dead on any course whose final step is a test.
+    let unlockedCourseTitle: string | null = null;
+    if (result.passed) {
+      const attempt = await prisma.testAttempt.findUnique({
+        where: { id: parsedAttemptId },
+        select: { module: { select: { course: { select: { slug: true } } } } },
+      });
+      if (attempt) {
+        unlockedCourseTitle = await advanceChainIfCourseComplete(prisma, {
+          userId: auth.user.id,
+          courseSlug: attempt.module.course.slug,
+        });
+      }
+    }
+
     return {
       score: result.score,
       passed: result.passed,
       threshold: result.threshold,
       gamification: toFeedback(result),
+      unlockedCourseTitle,
     };
   });
 }

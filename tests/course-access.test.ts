@@ -5,6 +5,7 @@ import {
   canOpenCourse,
   isCourseComplete,
   listCourseAccess,
+  requiredLessonCounts,
   setAdminLock,
   unlockCourse,
   unlockNextAfter,
@@ -408,5 +409,63 @@ describe("isCourseComplete", () => {
     // Every module is trivially «closed», but there was nothing to finish — this
     // must not cascade the chain open (caught on the local stand dry-run).
     expect(isCourseComplete(new Map([["m1", { closed: true }]]), 0)).toBe(false);
+  });
+});
+
+describe("the «Откроется после» hint names a course that can actually be finished", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it("skips a pass-through link and names the last course with content", async () => {
+    await makeCourse("welcome", "Знакомство", 0);
+    // An empty shell sits between welcome and the locked course.
+    await testDb.course.create({
+      data: { slug: "shell", title: "Пустышка", order: 1, status: "published" },
+    });
+    await makeCourse("nlp", "NLP", 2);
+
+    const user = await makeStudent();
+    const rows = await listCourseAccess(testDb as never, user.id);
+    const nlp = rows.find((r) => r.slug === "nlp")!;
+    expect(nlp.state).toBe("locked_chain");
+    // NOT «Пустышка» — finishing it is impossible, so the promise would be a lie.
+    expect(nlp.unlocksAfter).toBe("Знакомство");
+  });
+
+  it("verifies the required-lesson rollup the hint depends on", async () => {
+    const course = await testDb.course.create({
+      data: { slug: "multi", title: "Мульти", order: 0, status: "published" },
+    });
+    const m1 = await testDb.module.create({
+      data: { courseId: course.id, title: "М1", order: 0, status: "published" },
+    });
+    const m2 = await testDb.module.create({
+      data: { courseId: course.id, title: "М2", order: 1, status: "published" },
+    });
+    const draftModule = await testDb.module.create({
+      data: { courseId: course.id, title: "Черновик", order: 2, status: "draft" },
+    });
+    const lesson = (moduleId: string, slug: string, extra: Record<string, unknown> = {}) =>
+      testDb.lesson.create({
+        data: {
+          moduleId,
+          slug,
+          title: slug,
+          order: 0,
+          status: "published",
+          contentMd: "т",
+          ...extra,
+        },
+      });
+    await lesson(m1.id, "a");
+    await lesson(m1.id, "b");
+    await lesson(m2.id, "c");
+    await lesson(m2.id, "optional", { isOptional: true }); // not required
+    await lesson(m1.id, "draft-lesson", { status: "draft" }); // not published
+    await lesson(draftModule.id, "in-draft-module"); // module not published
+
+    const counts = await requiredLessonCounts(testDb as never);
+    expect(counts.get(course.id)).toBe(3);
   });
 });

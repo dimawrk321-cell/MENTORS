@@ -1,3 +1,4 @@
+import type { PrismaClient } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { getCourseView } from "@/lib/services/content";
 import {
@@ -54,16 +55,23 @@ export async function planChainOrder(db: Db): Promise<OrderPlanRow[]> {
   }));
 }
 
-/** Writes the planned order; returns how many courses actually moved. */
-export async function applyChainOrder(db: Db): Promise<number> {
+/**
+ * Writes the planned order; returns how many courses actually moved.
+ *
+ * ONE transaction on purpose: under the hard chain `courses.order` IS the unlock
+ * order, and the intermediate states of the loop contain duplicate values. A run
+ * that died half-way would leave those duplicates behind, and a re-run derives
+ * its plan from the partially-written orders with createdAt breaking the ties —
+ * which can permanently swap two courses. All-or-nothing removes that.
+ */
+export async function applyChainOrder(db: PrismaClient): Promise<number> {
   const plan = await planChainOrder(db);
-  let moved = 0;
-  for (const row of plan) {
-    if (row.from === row.to) continue;
-    await db.course.update({ where: { id: row.id }, data: { order: row.to } });
-    moved += 1;
-  }
-  return moved;
+  const moves = plan.filter((row) => row.from !== row.to);
+  if (moves.length === 0) return 0;
+  await db.$transaction(
+    moves.map((row) => db.course.update({ where: { id: row.id }, data: { order: row.to } })),
+  );
+  return moves.length;
 }
 
 export interface StudentMigrationReport {
@@ -144,27 +152,34 @@ export async function migrateStudentAccess(
 
 export interface MigrationSummary {
   reports: StudentMigrationReport[];
-  /** Students left untouched: blocked/invited — they start like newcomers. */
-  skipped: number;
+  /** Students the migration produced no rows for (nothing earned yet). */
+  untouched: number;
 }
 
+/**
+ * Migrates EVERY student, including blocked and invited ones.
+ *
+ * An earlier version skipped non-active students «because they start like
+ * newcomers» — but blocking only flips a status and revokes sessions, it does
+ * not erase lesson_progress. A blocked student who is later reinstated would
+ * come back to a catalog with everything shut, including courses they had
+ * half-finished, and nothing re-runs this migration. A course_access row for a
+ * student who cannot log in is inert, so granting it costs nothing and removes
+ * the whole class of problem.
+ */
 export async function migrateAllStudents(
   db: Db,
   options: { now?: Date; commit?: boolean } = {},
 ): Promise<MigrationSummary> {
   const students = await db.user.findMany({
     where: { role: "student" },
-    select: { id: true, email: true, status: true },
+    select: { id: true, email: true },
     orderBy: { createdAt: "asc" },
   });
 
   const reports: StudentMigrationReport[] = [];
-  let skipped = 0;
+  let untouched = 0;
   for (const student of students) {
-    if (student.status !== "active" && student.status !== "expired") {
-      skipped += 1;
-      continue;
-    }
     const report = await migrateStudentAccess(db, {
       userId: student.id,
       email: student.email,
@@ -172,6 +187,7 @@ export async function migrateAllStudents(
       commit: options.commit,
     });
     if (report.opened.length > 0) reports.push(report);
+    else untouched += 1;
   }
-  return { reports, skipped };
+  return { reports, untouched };
 }

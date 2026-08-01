@@ -180,15 +180,21 @@ describe("student migration (2v2.5)", () => {
     expect(rows.find((r) => r.courseId === python.course.id)!.state).toBe("locked_admin");
   });
 
-  it("skips blocked and invited students", async () => {
+  it("migrates blocked students too — reinstating one must not wipe their access", async () => {
     await makeCourse("welcome", "Знакомство", 0);
+    const python = await makeCourse("python-pytorch", "Python + PyTorch", 1);
     const active = await createTestUser({ email: "migrate-active@test.local" });
     const blocked = await createTestUser({ email: "migrate-blocked@test.local" });
+    // Blocking only flips a status — the progress stays.
+    await testDb.lessonProgress.create({
+      data: { userId: blocked.id, lessonId: python.lesson.id, status: "in_progress" },
+    });
     await testDb.user.update({ where: { id: blocked.id }, data: { status: "blocked" } });
 
     const summary = await migrateAllStudents(testDb as never);
-    expect(summary.skipped).toBe(1);
-    expect(summary.reports.map((r) => r.userId)).toEqual([active.id]);
-    expect(await testDb.courseAccess.count({ where: { userId: blocked.id } })).toBe(0);
+    expect(summary.reports.map((r) => r.userId).sort()).toEqual([active.id, blocked.id].sort());
+
+    const rows = await listCourseAccess(testDb as never, blocked.id);
+    expect(rows.find((r) => r.courseId === python.course.id)!.state).toBe("open_system");
   });
 });
