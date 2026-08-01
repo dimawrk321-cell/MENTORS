@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { ContentStatus } from "@prisma/client";
-import { testDb, resetDb } from "./helpers/db";
+import { testDb, resetDb, createTestUser } from "./helpers/db";
 import { search, renderSnippet } from "@/lib/services/search";
 
 // Stage 8 search service (spec 7.11 / 6 «FTS»): morphology, published filter,
@@ -9,6 +9,9 @@ import { search, renderSnippet } from "@/lib/services/search";
 // pg_trgm handles Cyrillic — see tests/global-setup.ts).
 
 let moduleId = "";
+// Block 2v2: the lesson group is scoped to the courses this viewer may open.
+let viewerId = "";
+let viewerSeq = 0;
 let categoryId = "";
 
 async function seedContainers() {
@@ -27,6 +30,9 @@ async function seedContainers() {
     data: { title: "Classic ML", slug: "cml", colorIndex: 0, order: 0 },
   });
   categoryId = cat.id;
+  // The only published course is the chain's first link, so it is open to this
+  // viewer — the lesson group behaves exactly as it did before the chain.
+  viewerId = (await createTestUser({ email: `search-viewer-${++viewerSeq}@test.local` })).id;
 }
 
 let lessonSeq = 0;
@@ -92,7 +98,11 @@ describe("search — FTS morphology & filters (spec 7.11)", () => {
 
   it("matches Russian morphology: «регуляризация» finds «регуляризации»", async () => {
     await makeLesson("Обучение", "Здесь мы применяем регуляризации к модели для устойчивости.");
-    const res = await search(testDb, { q: "регуляризация", libraryEnabled: true });
+    const res = await search(testDb, {
+      q: "регуляризация",
+      userId: viewerId,
+      libraryEnabled: true,
+    });
     const lessons = res.groups.find((g) => g.type === "lessons");
     expect(lessons?.items.length).toBe(1);
     expect(res.fuzzy).toBe(false);
@@ -103,7 +113,7 @@ describe("search — FTS morphology & filters (spec 7.11)", () => {
     await makeQuestion("Что такое трансформер?", "Архитектура на внимании.");
     await makeGuide("Трансформеры на практике", "Гайд по трансформерам.");
     await makeRecording("Собеседование про трансформеры");
-    const res = await search(testDb, { q: "трансформер", libraryEnabled: true });
+    const res = await search(testDb, { q: "трансформер", userId: viewerId, libraryEnabled: true });
     expect(res.groups.map((g) => g.type).sort()).toEqual([
       "guides",
       "lessons",
@@ -116,15 +126,23 @@ describe("search — FTS morphology & filters (spec 7.11)", () => {
     await makeLesson("Градиентный спуск", "оптимизация градиентным спуском", "draft");
     await makeQuestion("Что такое градиент?", "производная", "draft");
     await makeGuide("Градиенты", "про градиенты", "draft");
-    const res = await search(testDb, { q: "градиент", libraryEnabled: true });
+    const res = await search(testDb, { q: "градиент", userId: viewerId, libraryEnabled: true });
     expect(res.groups.length).toBe(0);
   });
 
   it("includes recordings only when library_enabled", async () => {
     await makeRecording("Мок про эмбеддинги");
-    const withLib = await search(testDb, { q: "эмбеддинги", libraryEnabled: true });
+    const withLib = await search(testDb, {
+      q: "эмбеддинги",
+      userId: viewerId,
+      libraryEnabled: true,
+    });
     expect(withLib.groups.some((g) => g.type === "recordings")).toBe(true);
-    const noLib = await search(testDb, { q: "эмбеддинги", libraryEnabled: false });
+    const noLib = await search(testDb, {
+      q: "эмбеддинги",
+      userId: viewerId,
+      libraryEnabled: false,
+    });
     expect(noLib.groups.some((g) => g.type === "recordings")).toBe(false);
   });
 
@@ -132,7 +150,11 @@ describe("search — FTS morphology & filters (spec 7.11)", () => {
     for (let i = 0; i < 7; i += 1) {
       await makeLesson(`Урок про кластеризацию ${i}`, "кластеризация данных методом k-means");
     }
-    const res = await search(testDb, { q: "кластеризация", libraryEnabled: true });
+    const res = await search(testDb, {
+      q: "кластеризация",
+      userId: viewerId,
+      libraryEnabled: true,
+    });
     const lessons = res.groups.find((g) => g.type === "lessons");
     expect(lessons?.items.length).toBe(5);
   });
@@ -140,14 +162,14 @@ describe("search — FTS morphology & filters (spec 7.11)", () => {
   it("ranks a title match above a body-only match (weighted tsvector)", async () => {
     await makeLesson("Введение", "мимоходом упоминаем валидацию где-то в тексте урока");
     await makeLesson("Валидация моделей", "как правильно делить выборку");
-    const res = await search(testDb, { q: "валидация", libraryEnabled: true });
+    const res = await search(testDb, { q: "валидация", userId: viewerId, libraryEnabled: true });
     const lessons = res.groups.find((g) => g.type === "lessons");
     expect(lessons?.items[0]!.title).toBe("Валидация моделей");
   });
 
   it("builds correct urls and meta per type", async () => {
     const guide = await makeGuide("Резюме", "как писать резюме");
-    const res = await search(testDb, { q: "резюме", libraryEnabled: true });
+    const res = await search(testDb, { q: "резюме", userId: viewerId, libraryEnabled: true });
     const item = res.groups.find((g) => g.type === "guides")!.items[0]!;
     expect(item.url).toBe(`/guides/${guide.slug}`);
     expect(item.meta).toBe("Инструменты индустрии");
@@ -172,7 +194,7 @@ describe("search — snippet escaping (spec 7.11)", () => {
 
   it("never emits raw HTML from lesson content in a snippet", async () => {
     await makeLesson("Безопасность", "перед словом дропаут стоит <img src=x onerror=alert(1)> тег");
-    const res = await search(testDb, { q: "дропаут", libraryEnabled: true });
+    const res = await search(testDb, { q: "дропаут", userId: viewerId, libraryEnabled: true });
     const snippet = res.groups.find((g) => g.type === "lessons")!.items[0]!.snippet;
     // Only <mark> tags may appear — any other tag would be an XSS hole.
     expect(snippet).not.toMatch(/<(?!\/?mark>)[^>]*>/);
@@ -231,7 +253,7 @@ describe("search — clean snippets, no raw markdown (spec 13.1/A2)", () => {
       "Тема урока: **дропаут** описан в [статье](https://example.com/dropout) подробно; " +
         ':::callout{type="tip"} не забывай про дропаут в проде :::',
     );
-    const res = await search(testDb, { q: "дропаут", libraryEnabled: true });
+    const res = await search(testDb, { q: "дропаут", userId: viewerId, libraryEnabled: true });
     const snippet = res.groups.find((g) => g.type === "lessons")!.items[0]!.snippet;
     expect(snippet).toContain("<mark>");
     expect(snippet).not.toContain("**");
@@ -253,7 +275,12 @@ describe("search — role-aware result routing (spec 13.1/A1)", () => {
     const question = await makeQuestion("Что такое трансформер?", "архитектура внимания");
     const guide = await makeGuide("Трансформеры-гайд", "про трансформеры");
     const recording = await makeRecording("Мок про трансформеры");
-    const res = await search(testDb, { q: "трансформер", libraryEnabled: true, staff: true });
+    const res = await search(testDb, {
+      q: "трансформер",
+      userId: viewerId,
+      libraryEnabled: true,
+      staff: true,
+    });
     const url = (t: string) => res.groups.find((g) => g.type === t)!.items[0]!.url;
     expect(url("lessons")).toBe(`/admin/content/lessons/${lesson.id}`);
     expect(url("questions")).toBe(`/admin/questions/${question.id}`);
@@ -267,7 +294,7 @@ describe("search — role-aware result routing (spec 13.1/A1)", () => {
   it("keeps student-facing URLs for students (default)", async () => {
     const lesson = await makeLesson("Трансформеры", "внимание в трансформерах");
     const guide = await makeGuide("Трансформеры-гайд", "про трансформеры");
-    const res = await search(testDb, { q: "трансформер", libraryEnabled: true });
+    const res = await search(testDb, { q: "трансформер", userId: viewerId, libraryEnabled: true });
     expect(res.groups.find((g) => g.type === "lessons")!.items[0]!.url).toBe(
       `/lessons/${lesson.id}`,
     );
@@ -292,15 +319,100 @@ describe("search — trgm typo fallback (spec 7.11)", () => {
     await makeLesson("Регуляризация", "L1 и L2 регуляризация");
     // A ROOT misspelling (р→ж), not a suffix: the russian stemmer can't normalise
     // it to the same lexeme, so FTS misses — but it stays trgm-close to the title.
-    const res = await search(testDb, { q: "регуляжизация", libraryEnabled: true });
+    const res = await search(testDb, {
+      q: "регуляжизация",
+      userId: viewerId,
+      libraryEnabled: true,
+    });
     expect(res.fuzzy).toBe(true);
     expect(res.groups.find((g) => g.type === "lessons")?.items.length).toBe(1);
   });
 
   it("returns empty (not fuzzy) when nothing is even close", async () => {
     await makeLesson("Регуляризация", "текст");
-    const res = await search(testDb, { q: "zzqwmnbvx", libraryEnabled: true });
+    const res = await search(testDb, { q: "zzqwmnbvx", userId: viewerId, libraryEnabled: true });
     expect(res.groups.length).toBe(0);
     expect(res.fuzzy).toBe(false);
+  });
+});
+
+describe("search — locked courses are excluded (block 2v2)", () => {
+  let lockedModuleId = "";
+  let openLessonId = "";
+
+  beforeEach(async () => {
+    await resetDb();
+    lessonSeq = 0;
+    await seedContainers();
+
+    // A SECOND published course, later in the chain → locked for a newcomer.
+    const locked = await testDb.course.create({
+      data: {
+        slug: "locked-course",
+        title: "Запертый курс",
+        gating: "free",
+        status: "published",
+        order: 5,
+        modules: { create: [{ title: "Модуль", order: 0, status: "published" }] },
+      },
+      include: { modules: true },
+    });
+    lockedModuleId = locked.modules[0]!.id;
+    openLessonId = (await makeLesson("Открытый трансформер", "Внимание в трансформерах.")).id;
+    await testDb.lesson.create({
+      data: {
+        moduleId: lockedModuleId,
+        slug: "locked-lesson",
+        title: "Запертый трансформер",
+        order: 0,
+        status: "published",
+        contentMd: "Секретный текст про трансформеры за замком.",
+      },
+    });
+  });
+
+  it("hides a locked course's lesson — title AND snippet", async () => {
+    const res = await search(testDb, { q: "трансформер", userId: viewerId, libraryEnabled: true });
+    const lessons = res.groups.find((g) => g.type === "lessons");
+    expect(lessons?.items.map((i) => i.id)).toEqual([openLessonId]);
+    // The whole payload must not carry the locked lesson's content anywhere.
+    expect(JSON.stringify(res)).not.toContain("Секретный текст");
+    expect(JSON.stringify(res)).not.toContain("Запертый трансформер");
+  });
+
+  it("shows it as soon as the chain opens the course", async () => {
+    const locked = await testDb.course.findUniqueOrThrow({ where: { slug: "locked-course" } });
+    await testDb.courseAccess.create({
+      data: { userId: viewerId, courseId: locked.id, unlockedAt: new Date(), unlockedBy: "system" },
+    });
+    const res = await search(testDb, { q: "трансформер", userId: viewerId, libraryEnabled: true });
+    const titles = res.groups.find((g) => g.type === "lessons")!.items.map((i) => i.title);
+    expect(titles).toContain("Запертый трансформер");
+  });
+
+  it("staff search is NOT filtered — the studio must see everything", async () => {
+    const res = await search(testDb, {
+      q: "трансформер",
+      userId: viewerId,
+      libraryEnabled: true,
+      staff: true,
+    });
+    const titles = res.groups.find((g) => g.type === "lessons")!.items.map((i) => i.title);
+    expect(titles).toContain("Запертый трансформер");
+  });
+
+  it("the typo fallback is filtered too", async () => {
+    if (!(await trgmHandlesCyrillic())) return;
+    const res = await search(testDb, { q: "трансфомрер", userId: viewerId, libraryEnabled: true });
+    const titles = res.groups.find((g) => g.type === "lessons")?.items.map((i) => i.title) ?? [];
+    expect(titles).not.toContain("Запертый трансформер");
+  });
+
+  it("questions and guides stay untouched by the course filter", async () => {
+    await makeQuestion("Что такое трансформер?", "Архитектура на внимании.");
+    await makeGuide("Трансформеры на практике", "Гайд по трансформерам.");
+    const res = await search(testDb, { q: "трансформер", userId: viewerId, libraryEnabled: true });
+    expect(res.groups.some((g) => g.type === "questions")).toBe(true);
+    expect(res.groups.some((g) => g.type === "guides")).toBe(true);
   });
 });

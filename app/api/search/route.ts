@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
   const startedAt = performance.now();
   const result = await search(prisma, {
     q,
+    userId: auth.user.id,
     libraryEnabled: auth.user.libraryEnabled,
     guidesResumeEnabled: auth.user.guidesResumeEnabled,
     guidesLegendEnabled: auth.user.guidesLegendEnabled,

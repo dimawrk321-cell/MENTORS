@@ -53,3 +53,6 @@ coverage
 
 # app-generated session thumbnail
 .thumbnail
+
+# Notion export used by scripts/autolink-questions.ts — source data, not code
+notion-export.md

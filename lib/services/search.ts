@@ -1,5 +1,6 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import type { Db } from "@/lib/db";
+import { isOpen, listCourseAccess } from "@/lib/services/course-access";
 import {
   GUIDE_SECTION_LABEL,
   LESSON_DIFFICULTY_LABEL,
@@ -15,9 +16,16 @@ import { stripMarkdown } from "@/lib/utils/text";
 // guides/recordings with a pg_trgm title fallback for typos. Ranking ts_rank,
 // 5 per group, ts_headline highlighting.
 //
-// DECISION (spec 7.11): lessons are searchable regardless of course gating —
-// everything published is findable; the lock only bites on navigation to a
-// still-locked lesson. This is intentional so search never hides content.
+// DECISION (spec 7.11, revised in walk 13.6 block 2v2): lessons of a course the
+// student may not open are EXCLUDED from search. The old rule («search never
+// hides content») was written when course order was a soft hint — with the hard
+// chain a ts_headline snippet of a locked course's lesson is a content leak, and
+// the result was unclickable anyway (the page redirects). In-course gating is
+// still NOT a search filter: a locked-but-reachable lesson stays findable, which
+// is what the original decision was really about. Questions and guides are
+// untouched — they do not belong to a course.
+//
+// Staff (mentor/admin/owner) are never filtered: they search the content studio.
 //
 // DECISION (spec 7.11): the library group is included only when the caller's
 // user has library_enabled — the per-student toggle (spec 7.9) gates search too.
@@ -46,6 +54,12 @@ export interface SearchResult {
 
 export interface SearchInput {
   q: string;
+  /**
+   * Whose search this is. Required (not optional) on purpose: the lesson group
+   * is filtered to the courses this user may open, and an optional field would
+   * let a future caller silently opt out of that filter.
+   */
+  userId: string;
   /** Per-student library toggle (spec 7.9); false hides the recordings group. */
   libraryEnabled: boolean;
   /**
@@ -163,18 +177,34 @@ interface LessonRow {
   difficulty: string;
 }
 
-async function searchLessons(db: Db, q: string): Promise<SearchItem[]> {
-  const rows = await db.$queryRaw<LessonRow[]>`
+/**
+ * `null` — no course filtering (staff). An array — only lessons of these
+ * courses; an EMPTY array therefore means «no course is open», which must
+ * return nothing rather than degrade into an unfiltered query.
+ */
+type CourseScope = string[] | null;
+
+function courseScopeSql(scope: CourseScope): Prisma.Sql {
+  if (scope === null) return Prisma.empty;
+  return Prisma.sql`AND m.status = 'published' AND m.course_id IN (${Prisma.join(scope)})`;
+}
+
+async function searchLessons(db: Db, q: string, scope: CourseScope): Promise<SearchItem[]> {
+  if (scope !== null && scope.length === 0) return [];
+  const rows = await db.$queryRaw<LessonRow[]>(Prisma.sql`
     SELECT l.id,
            l.title,
            ts_headline('russian', l.content_md, query, ${HEADLINE_OPTS}) AS snippet,
            l.reading_minutes AS reading,
            l.difficulty::text AS difficulty,
            ts_rank(l.search_vector, query) AS rank
-    FROM lessons l, websearch_to_tsquery('russian', ${q}) query
+    FROM lessons l
+    JOIN modules m ON m.id = l.module_id,
+         websearch_to_tsquery('russian', ${q}) query
     WHERE l.status = 'published' AND l.search_vector @@ query
+      ${courseScopeSql(scope)}
     ORDER BY rank DESC, l.id
-    LIMIT ${SEARCH_GROUP_LIMIT}`;
+    LIMIT ${SEARCH_GROUP_LIMIT}`);
   return rows.map((r) => ({
     id: r.id,
     title: r.title,
@@ -302,13 +332,16 @@ interface TitleTrgmRow {
   slug?: string;
 }
 
-async function fuzzyLessons(db: Db, q: string): Promise<SearchItem[]> {
-  const rows = await db.$queryRaw<TitleTrgmRow[]>`
+async function fuzzyLessons(db: Db, q: string, scope: CourseScope): Promise<SearchItem[]> {
+  if (scope !== null && scope.length === 0) return [];
+  const rows = await db.$queryRaw<TitleTrgmRow[]>(Prisma.sql`
     SELECT l.id, l.title
     FROM lessons l
+    JOIN modules m ON m.id = l.module_id
     WHERE l.status = 'published' AND ${q} <% l.title AND word_similarity(${q}, l.title) > 0.3
+      ${courseScopeSql(scope)}
     ORDER BY word_similarity(${q}, l.title) DESC, l.id
-    LIMIT ${SEARCH_GROUP_LIMIT}`;
+    LIMIT ${SEARCH_GROUP_LIMIT}`);
   return rows.map((r) => ({
     id: r.id,
     title: r.title,
@@ -410,9 +443,16 @@ export async function search(db: PrismaClient, input: SearchInput): Promise<Sear
     resume: input.guidesResumeEnabled ?? true,
     legend: input.guidesLegendEnabled ?? true,
   };
+  // Block 2v2: the lesson group is scoped to the courses this student may open.
+  // Computed here rather than at the call site so no caller can skip it.
+  const scope: CourseScope = input.staff
+    ? null
+    : (await listCourseAccess(db, input.userId))
+        .filter((row) => isOpen(row.state))
+        .map((row) => row.courseId);
 
   const [lessons, questions, guides, recordings] = await Promise.all([
-    searchLessons(db, q),
+    searchLessons(db, q, scope),
     searchQuestions(db, q),
     searchGuides(db, q, allow),
     input.libraryEnabled ? searchRecordings(db, q) : Promise.resolve<SearchItem[]>([]),
@@ -428,7 +468,7 @@ export async function search(db: PrismaClient, input: SearchInput): Promise<Sear
   // queries run sequentially — they share the tx's single connection.
   const fuzzyGroups = await db.$transaction(async (tx) => {
     await tx.$executeRawUnsafe("SET LOCAL pg_trgm.word_similarity_threshold = 0.3");
-    const fl = await fuzzyLessons(tx, q);
+    const fl = await fuzzyLessons(tx, q, scope);
     const fq = await fuzzyQuestions(tx, q);
     const fg = await fuzzyGuides(tx, q, allow);
     const fr = input.libraryEnabled ? await fuzzyRecordings(tx, q) : [];
