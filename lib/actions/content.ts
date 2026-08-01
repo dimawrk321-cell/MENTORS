@@ -53,7 +53,14 @@ export async function completeLessonAction(lessonId: string): Promise<
       lessonId: parseInput(z.string().min(1), lessonId),
     });
     if (!res.ok) {
-      throw new ActionError(res.code, res.code === "locked" ? "Урок ещё закрыт" : "Урок не найден");
+      const messages: Record<typeof res.code, string> = {
+        locked: "Урок ещё закрыт",
+        // Block 2v2: the chain is enforced in the service, so a crafted request
+        // cannot complete a lesson inside a course the student may not open.
+        course_locked: "Курс ещё закрыт",
+        not_found: "Урок не найден",
+      };
+      throw new ActionError(res.code, messages[res.code]);
     }
     return {
       nextLessonId: res.nextLessonId,

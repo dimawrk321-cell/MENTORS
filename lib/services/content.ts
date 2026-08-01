@@ -5,6 +5,7 @@ import { writeAudit } from "@/lib/services/audit";
 import { markRecommendedPath } from "@/lib/services/course-order";
 import { addSrsCardsForLessonCompletion } from "@/lib/services/srs";
 import {
+  canOpenCourse,
   isCourseComplete,
   isOpen,
   listCourseAccess,
@@ -434,7 +435,7 @@ export type CompleteLessonResult =
       leveledUpTo: number | null;
       earnedAchievements: EarnedAchievement[];
     }
-  | { ok: false; code: "not_found" | "locked" };
+  | { ok: false; code: "not_found" | "locked" | "course_locked" };
 
 const NO_GAMIFICATION: EmitResult = {
   recorded: true,
@@ -448,12 +449,27 @@ const NO_GAMIFICATION: EmitResult = {
 /** Explicit, idempotent completion (spec 7.3); returns the next open lesson. */
 export async function completeLesson(
   db: PrismaClient,
-  input: { userId: string; lessonId: string; now?: Date },
+  input: {
+    userId: string;
+    lessonId: string;
+    now?: Date;
+    /**
+     * Block 2v2: the course chain is enforced here, not only on the page — a
+     * page guard is cosmetic, the action is the real boundary. The ONE caller
+     * that opts out is the mock-interview auto-completion (mocks.ts): that is a
+     * system action closing a lesson the student earned by sitting the mock,
+     * and it must not depend on where their chain currently stands.
+     */
+    systemAction?: boolean;
+  },
 ): Promise<CompleteLessonResult> {
   const now = input.now ?? new Date();
   const view = await getLessonView(db, input.lessonId, input.userId);
   if (!view) return { ok: false, code: "not_found" };
   if (!view.unlocked) return { ok: false, code: "locked" };
+  if (!input.systemAction && !(await canOpenCourse(db, input.userId, view.course.id))) {
+    return { ok: false, code: "course_locked" };
+  }
 
   let gamification = NO_GAMIFICATION;
   if (view.progress.completedAt === null) {

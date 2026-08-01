@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { answerQuizQuestion } from "@/lib/services/questions";
 import { answerTestQuestion, finishTestAttempt, startTestAttempt } from "@/lib/services/tests";
 import { getCourseView } from "@/lib/services/content";
+import { canOpenCourse } from "@/lib/services/course-access";
 import {
   ActionError,
   assertActiveAccess,
@@ -73,6 +74,12 @@ export async function startTestAction(
     const courseView = await getCourseView(prisma, mod.course.slug, auth.user.id);
     const moduleState = courseView?.state.modules.get(mod.id);
     if (!moduleState) throw new ActionError("not_found", "Модуль не найден");
+    // Block 2v2: the chain gates the whole course. Test-out matters most here —
+    // it is deliberately available WITHOUT finishing the lessons, so without
+    // this check a locked strict course could be closed straight from a URL.
+    if (!(await canOpenCourse(prisma, auth.user.id, courseView!.course.id))) {
+      throw new ActionError("locked", "Курс ещё закрыт");
+    }
     const lessonsDone = moduleState.completedRequired === moduleState.totalRequired;
 
     if (parsed.kind === "module" && !lessonsDone) {

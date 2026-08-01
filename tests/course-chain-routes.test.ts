@@ -64,7 +64,7 @@ async function makeChain() {
       contentMd: "текст",
     },
   });
-  return { welcome, python, lesson };
+  return { welcome, python, mod, lesson };
 }
 
 describe("locked course is not reachable by URL", () => {
@@ -124,6 +124,58 @@ describe("locked course is not reachable by URL", () => {
       CoursePage({ params: Promise.resolve({ slug: welcome.slug }) }),
     ).resolves.toBeTruthy();
     expect(redirectSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("the lock is enforced BELOW the page, not only on it", () => {
+  beforeEach(async () => {
+    await resetDb();
+    redirectSpy.mockClear();
+  });
+
+  it("/tests/[moduleId] of a locked course redirects to the catalog", async () => {
+    const { mod } = await makeChain();
+    const user = await createTestUser({ email: "chain-test-route@test.local" });
+    currentUser.id = user.id;
+
+    const { default: TestPage } = await import("@/app/(focused)/tests/[moduleId]/page");
+    await expect(
+      TestPage({
+        params: Promise.resolve({ moduleId: mod.id }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+    expect(redirectSpy).toHaveBeenCalledWith(
+      `/courses?locked=${encodeURIComponent("Python + PyTorch")}`,
+    );
+  });
+
+  it("completeLesson refuses a lesson inside a locked course", async () => {
+    const { python, lesson } = await makeChain();
+    const user = await createTestUser({ email: "chain-complete@test.local" });
+
+    const { completeLesson } = await import("@/lib/services/content");
+    const denied = await completeLesson(testDb as never, { userId: user.id, lessonId: lesson.id });
+    expect(denied).toEqual({ ok: false, code: "course_locked" });
+    expect(await testDb.lessonProgress.count({ where: { userId: user.id } })).toBe(0);
+
+    // …and accepts it the moment the chain opens the course.
+    await unlockCourse(testDb as never, { userId: user.id, courseId: python.id, by: "system" });
+    const allowed = await completeLesson(testDb as never, { userId: user.id, lessonId: lesson.id });
+    expect(allowed.ok).toBe(true);
+  });
+
+  it("the mock auto-completion opts out of the chain check", async () => {
+    const { lesson } = await makeChain();
+    const user = await createTestUser({ email: "chain-mock-complete@test.local" });
+
+    const { completeLesson } = await import("@/lib/services/content");
+    const result = await completeLesson(testDb as never, {
+      userId: user.id,
+      lessonId: lesson.id,
+      systemAction: true,
+    });
+    expect(result.ok).toBe(true);
   });
 });
 

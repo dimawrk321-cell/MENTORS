@@ -182,6 +182,27 @@ describe("course chain access", () => {
     const rows = await listCourseAccess(testDb as never, user.id);
     expect(rows[0]!.state).toBe("open_welcome");
   });
+
+  it("unpublishing welcome does not strand everyone — the new first link opens", async () => {
+    const { welcome, python } = await makeChain();
+    const user = await makeStudent();
+    await testDb.course.update({ where: { id: welcome.id }, data: { status: "draft" } });
+
+    const rows = await listCourseAccess(testDb as never, user.id);
+    expect(rows[0]!.slug).toBe("python");
+    expect(rows[0]!.state).toBe("open_welcome");
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(true);
+  });
+
+  it("the entry point follows the chain order, not the welcome slug", async () => {
+    const { welcome, python } = await makeChain();
+    const user = await makeStudent();
+    // An admin drags Python to the front in the studio.
+    await testDb.course.update({ where: { id: python.id }, data: { order: -1 } });
+
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(true);
+    expect(await canOpenCourse(testDb as never, user.id, welcome.id)).toBe(false);
+  });
 });
 
 describe("admin handles (block 2v2.4)", () => {

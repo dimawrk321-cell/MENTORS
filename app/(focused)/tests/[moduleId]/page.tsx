@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Check, CircleOff, Sparkles, Trophy, X, Zap } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getCourseView } from "@/lib/services/content";
+import { canOpenCourse } from "@/lib/services/course-access";
 import {
   getAttemptForRunner,
   getAttemptReview,
@@ -59,6 +60,11 @@ export default async function TestPage({ params, searchParams }: TestPageProps) 
   const courseView = await getCourseView(prisma, mod.course.slug, user.id);
   const moduleState = courseView?.state.modules.get(mod.id);
   if (!moduleState) notFound();
+  // Block 2v2: a module test belongs to its course — a locked course's test is
+  // not reachable by URL either (startTestAction enforces the same server-side).
+  if (!(await canOpenCourse(prisma, user.id, courseView!.course.id))) {
+    redirect(`/courses?locked=${encodeURIComponent(mod.course.title)}`);
+  }
 
   const overview = await getTestOverview(prisma, { userId: user.id, moduleId: mod.id });
 

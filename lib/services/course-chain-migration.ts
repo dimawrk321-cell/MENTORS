@@ -120,7 +120,9 @@ export async function migrateStudentAccess(
   for (const [index, course] of chain.entries()) {
     const view = await getCourseView(db, course.slug, input.userId);
     if (!view) continue;
-    if (course.slug === WELCOME_COURSE_SLUG || touchedCourses.has(course.id)) {
+    // index 0 is the chain's entry point (welcome after the order pass) — same
+    // rule `resolve` uses, so the migration cannot disagree with live access.
+    if (index === 0 || touchedCourses.has(course.id)) {
       await open(course.id, course.title);
     }
 

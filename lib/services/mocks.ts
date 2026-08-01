@@ -1033,7 +1033,12 @@ async function closeMockLessonsForType(
     });
     if (progress?.status === "completed") continue;
     // completeLesson идемпотентен и сам решает гейтинг (Soft Skills — free).
-    await completeLesson(db, { userId: input.userId, lessonId: lesson.id, now: input.now });
+    await completeLesson(db, {
+      userId: input.userId,
+      lessonId: lesson.id,
+      now: input.now,
+      systemAction: true,
+    });
   }
 }
 

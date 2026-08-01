@@ -1,5 +1,4 @@
 import type { Db } from "@/lib/db";
-import { WELCOME_COURSE_SLUG } from "@/lib/services/welcome-course";
 import { writeAudit } from "@/lib/services/audit";
 
 // Hard course chain (changelog 13.6, block 2v2). Courses open one after another
@@ -7,10 +6,15 @@ import { writeAudit } from "@/lib/services/audit";
 // tracks are only a label now and no longer reorder anything.
 //
 // Resolution precedence, highest first:
-//   1. locked_by_admin  — an admin lock outranks the chain entirely;
-//   2. unlocked_at      — unlocked by the system (chain) or by an admin;
-//   3. welcome course   — always open, so a new student always has a way in;
-//   4. otherwise        — locked.
+//   1. locked_by_admin   — an admin lock outranks the chain entirely;
+//   2. unlocked_at       — unlocked by the system (chain) or by an admin;
+//   3. FIRST in the chain — always open, so a student always has a way in;
+//   4. otherwise         — locked.
+//
+// Rule 3 keys on the chain POSITION, not on the welcome slug: keying on the slug
+// meant that unpublishing or renaming the welcome course locked every student
+// out of the entire catalog with no way back. After the order migration the
+// first link IS welcome, so the visible behaviour is the same.
 //
 // In-course gating (strict|recommended|free, spec 7.3) is untouched: this layer
 // only decides whether the course itself is reachable.
@@ -39,13 +43,10 @@ interface AccessRecord {
   unlockedBy: "system" | "admin" | null;
 }
 
-function resolve(
-  slug: string,
-  record: AccessRecord | undefined,
-): Exclude<CourseAccessState, "locked_chain"> | "locked_chain" {
+function resolve(isFirstInChain: boolean, record: AccessRecord | undefined): CourseAccessState {
   if (record?.lockedByAdmin) return "locked_admin";
   if (record?.unlockedAt) return record.unlockedBy === "admin" ? "open_admin" : "open_system";
-  if (slug === WELCOME_COURSE_SLUG) return "open_welcome";
+  if (isFirstInChain) return "open_welcome";
   return "locked_chain";
 }
 
@@ -88,7 +89,7 @@ export async function listCourseAccess(db: Db, userId: string): Promise<CourseAc
   const byCourse = new Map(records.map((r) => [r.courseId, r as AccessRecord]));
 
   return courses.map((course, index) => {
-    const state = resolve(course.slug, byCourse.get(course.id));
+    const state = resolve(index === 0, byCourse.get(course.id));
     return {
       courseId: course.id,
       slug: course.slug,
@@ -101,17 +102,22 @@ export async function listCourseAccess(db: Db, userId: string): Promise<CourseAc
   });
 }
 
-/** Single-course check used by the course page guard. */
+/** Single-course check used by the page guards and the student actions. */
 export async function canOpenCourse(db: Db, userId: string, courseId: string): Promise<boolean> {
-  const [course, record] = await Promise.all([
-    db.course.findUnique({ where: { id: courseId }, select: { slug: true } }),
+  const [course, first, record] = await Promise.all([
+    db.course.findUnique({ where: { id: courseId }, select: { id: true } }),
+    db.course.findFirst({
+      where: { status: "published" },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { id: true },
+    }),
     db.courseAccess.findUnique({
       where: { userId_courseId: { userId, courseId } },
       select: { courseId: true, unlockedAt: true, lockedByAdmin: true, unlockedBy: true },
     }),
   ]);
   if (!course) return false;
-  return isOpen(resolve(course.slug, record ?? undefined));
+  return isOpen(resolve(first?.id === course.id, record ?? undefined));
 }
 
 /**
@@ -138,22 +144,37 @@ export async function unlockCourse(
   if (existing?.lockedByAdmin && !input.force) return { changed: false };
   if (existing?.unlockedAt && !existing.lockedByAdmin) return { changed: false };
 
-  await db.courseAccess.upsert({
-    where: { userId_courseId: { userId: input.userId, courseId: input.courseId } },
-    create: {
-      userId: input.userId,
-      courseId: input.courseId,
-      unlockedAt: now,
-      unlockedBy: input.by,
-      lockedByAdmin: false,
-    },
-    update: {
-      unlockedAt: now,
-      unlockedBy: input.by,
-      ...(input.force ? { lockedByAdmin: false } : {}),
-    },
-  });
+  try {
+    await db.courseAccess.upsert({
+      where: { userId_courseId: { userId: input.userId, courseId: input.courseId } },
+      create: {
+        userId: input.userId,
+        courseId: input.courseId,
+        unlockedAt: now,
+        unlockedBy: input.by,
+        lockedByAdmin: false,
+      },
+      update: {
+        unlockedAt: now,
+        unlockedBy: input.by,
+        ...(input.force ? { lockedByAdmin: false } : {}),
+      },
+    });
+  } catch (error) {
+    // Two lessons finished at the same instant can both close the course and race
+    // to open the next one; Prisma's upsert is not atomic, so the loser hits the
+    // unique index. The row exists either way — report «no change» so the student
+    // gets one notification, not an error on a lesson that did complete.
+    if (isUniqueViolation(error)) return { changed: false };
+    throw error;
+  }
   return { changed: true };
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002"
+  );
 }
 
 /** Admin lock — outranks the chain; the course stays shut even if earned. */
@@ -198,9 +219,14 @@ export async function adminSetCourseAccess(
     now?: Date;
   },
 ): Promise<{ ok: true; state: CourseAccessState } | { ok: false; code: "not_found" }> {
-  const [user, course] = await Promise.all([
+  const [user, course, first] = await Promise.all([
     db.user.findUnique({ where: { id: input.userId }, select: { id: true, role: true } }),
-    db.course.findUnique({ where: { id: input.courseId }, select: { id: true, slug: true } }),
+    db.course.findUnique({ where: { id: input.courseId }, select: { id: true } }),
+    db.course.findFirst({
+      where: { status: "published" },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { id: true },
+    }),
   ]);
   if (!user || user.role !== "student" || !course) return { ok: false, code: "not_found" };
 
@@ -251,7 +277,7 @@ export async function adminSetCourseAccess(
   });
   return {
     ok: true,
-    state: resolve(course.slug, {
+    state: resolve(first?.id === course.id, {
       courseId: input.courseId,
       unlockedAt: after.unlockedAt ? new Date(after.unlockedAt) : null,
       lockedByAdmin: after.lockedByAdmin,
