@@ -1,6 +1,12 @@
 import type { Db } from "@/lib/db";
 import { getCourseView } from "@/lib/services/content";
-import { chainCourses, isCourseComplete, unlockCourse } from "@/lib/services/course-access";
+import {
+  chainCourses,
+  chainTargetsAfter,
+  isCourseComplete,
+  requiredLessonCounts,
+  unlockCourse,
+} from "@/lib/services/course-access";
 import { WELCOME_COURSE_SLUG } from "@/lib/services/welcome-course";
 
 // One-off migration onto the hard chain (walk 13.6, block 2v2.2 + 2v2.5), kept in
@@ -81,7 +87,7 @@ export async function migrateStudentAccess(
   input: { userId: string; email?: string; now?: Date; commit?: boolean },
 ): Promise<StudentMigrationReport> {
   const commit = input.commit ?? true;
-  const chain = await chainCourses(db);
+  const [chain, counts] = await Promise.all([chainCourses(db), requiredLessonCounts(db)]);
   const opened: string[] = [];
   const wouldOpen = new Set<string>();
 
@@ -126,9 +132,11 @@ export async function migrateStudentAccess(
       await open(course.id, course.title);
     }
 
-    const next = chain[index + 1];
-    if (next && isCourseComplete(view.state.modules, view.state.totalRequired)) {
-      await open(next.id, `${next.title} (после «${course.title}»)`);
+    if (isCourseComplete(view.state.modules, view.state.totalRequired)) {
+      // Same walk the live chain does, empty links included (chainTargetsAfter).
+      for (const next of chainTargetsAfter(chain, counts, index)) {
+        await open(next.id, `${next.title} (после «${course.title}»)`);
+      }
     }
   }
   return { userId: input.userId, email: input.email ?? "", opened };

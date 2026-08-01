@@ -291,23 +291,84 @@ export async function adminSetCourseAccess(
 // is nothing to backfill when a student is created.
 
 /**
- * Called after a course is completed: opens the next link in the chain.
- * Returns the course that was opened (for the notification), or null.
+ * Required published lessons per published course. A course with none of them
+ * can never be «completed» (isCourseComplete refuses), so it must not be able to
+ * hold the chain shut — see hasContent below.
+ */
+export async function requiredLessonCounts(db: Db): Promise<Map<string, number>> {
+  const rows = await db.lesson.groupBy({
+    by: ["moduleId"],
+    where: {
+      status: "published",
+      isOptional: false,
+      module: { status: "published", course: { status: "published" } },
+    },
+    _count: { _all: true },
+  });
+  const modules = await db.module.findMany({
+    where: { id: { in: rows.map((r) => r.moduleId) } },
+    select: { id: true, courseId: true },
+  });
+  const courseOf = new Map(modules.map((m) => [m.id, m.courseId]));
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const courseId = courseOf.get(row.moduleId);
+    if (!courseId) continue;
+    counts.set(courseId, (counts.get(courseId) ?? 0) + row._count._all);
+  }
+  return counts;
+}
+
+/**
+ * Called after a course is completed: opens the next link(s) in the chain.
+ *
+ * An EMPTY course (no required published lessons) is opened but never blocks:
+ * it has nothing to finish, so it can never fire the completion that would open
+ * what follows, and a student would sit behind it forever. The stand has four
+ * such published shells today, one of them mid-chain — so the walk continues
+ * past them up to and including the first course that actually has content.
+ *
+ * Returns the first course WITH content that this call opened (that is the one
+ * worth a notification), or null when nothing new was opened.
  */
 export async function unlockNextAfter(
   db: Db,
   input: { userId: string; completedCourseId: string; now?: Date },
 ): Promise<{ id: string; title: string } | null> {
-  const courses = await chainCourses(db);
+  const [courses, counts] = await Promise.all([chainCourses(db), requiredLessonCounts(db)]);
   const index = courses.findIndex((c) => c.id === input.completedCourseId);
-  if (index === -1 || index === courses.length - 1) return null;
+  if (index === -1) return null;
 
-  const next = courses[index + 1]!;
-  const { changed } = await unlockCourse(db, {
-    userId: input.userId,
-    courseId: next.id,
-    by: "system",
-    now: input.now,
-  });
-  return changed ? { id: next.id, title: next.title } : null;
+  let announced: { id: string; title: string } | null = null;
+  for (const course of chainTargetsAfter(courses, counts, index)) {
+    const { changed } = await unlockCourse(db, {
+      userId: input.userId,
+      courseId: course.id,
+      by: "system",
+      now: input.now,
+    });
+    if (changed && (counts.get(course.id) ?? 0) > 0 && !announced) {
+      announced = { id: course.id, title: course.title };
+    }
+  }
+  return announced;
+}
+
+/**
+ * The courses to open once the course at `fromIndex` is finished: every empty
+ * link that follows plus the first one with content. Pure, so the migration's
+ * dry run can promise exactly what the live chain would do.
+ */
+export function chainTargetsAfter<T extends { id: string }>(
+  courses: T[],
+  counts: Map<string, number>,
+  fromIndex: number,
+): T[] {
+  const targets: T[] = [];
+  for (let i = fromIndex + 1; i < courses.length; i += 1) {
+    const course = courses[i]!;
+    targets.push(course);
+    if ((counts.get(course.id) ?? 0) > 0) break;
+  }
+  return targets;
 }

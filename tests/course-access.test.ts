@@ -16,17 +16,37 @@ import {
 
 const NOW = new Date("2026-08-01T10:00:00.000Z");
 
+/**
+ * A published course with one required published lesson. The lesson matters:
+ * a course with nothing to finish is a pass-through link in the chain (see
+ * «empty courses never hold the chain shut»), so a fixture without lessons
+ * would not model a real chain at all.
+ */
+async function makeCourse(slug: string, title: string, order: number) {
+  const course = await testDb.course.create({
+    data: { slug, title, order, status: "published", gating: "free" },
+  });
+  const mod = await testDb.module.create({
+    data: { courseId: course.id, title: `${title}: модуль`, order: 0, status: "published" },
+  });
+  await testDb.lesson.create({
+    data: {
+      moduleId: mod.id,
+      title: `${title}: урок`,
+      slug: `${slug}-lesson`,
+      order: 0,
+      status: "published",
+      contentMd: "текст",
+    },
+  });
+  return course;
+}
+
 async function makeChain() {
   // welcome must be first in the chain; the rest follow by `order`.
-  const welcome = await testDb.course.create({
-    data: { slug: "welcome", title: "Добро пожаловать", order: 0, status: "published" },
-  });
-  const python = await testDb.course.create({
-    data: { slug: "python", title: "Python + PyTorch", order: 1, status: "published" },
-  });
-  const classic = await testDb.course.create({
-    data: { slug: "classic-ml", title: "Classic ML", order: 2, status: "published" },
-  });
+  const welcome = await makeCourse("welcome", "Добро пожаловать", 0);
+  const python = await makeCourse("python", "Python + PyTorch", 1);
+  const classic = await makeCourse("classic-ml", "Classic ML", 2);
   return { welcome, python, classic };
 }
 
@@ -202,6 +222,73 @@ describe("course chain access", () => {
 
     expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(true);
     expect(await canOpenCourse(testDb as never, user.id, welcome.id)).toBe(false);
+  });
+});
+
+describe("empty courses never hold the chain shut", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  /** A course with one published, required lesson — i.e. something to finish. */
+  async function withContent(slug: string, title: string, order: number) {
+    const course = await testDb.course.create({
+      data: { slug, title, order, status: "published", gating: "free" },
+    });
+    const mod = await testDb.module.create({
+      data: { courseId: course.id, title: `${title}: модуль`, order: 0, status: "published" },
+    });
+    await testDb.lesson.create({
+      data: {
+        moduleId: mod.id,
+        title: `${title}: урок`,
+        slug: `${slug}-lesson`,
+        order: 0,
+        status: "published",
+        contentMd: "текст",
+      },
+    });
+    return course;
+  }
+
+  it("walks past a content-less link to the next real course", async () => {
+    // Exactly the stand's shape: Classic ML sits mid-chain with no lessons.
+    const welcome = await withContent("welcome", "Знакомство", 0);
+    const shell = await testDb.course.create({
+      data: { slug: "classic-ml", title: "Classic ML", order: 1, status: "published" },
+    });
+    const nlp = await withContent("nlp-basic", "NLP: базовый", 2);
+    const later = await withContent("nlp-advanced", "NLP: продвинутый", 3);
+    const user = await makeStudent();
+
+    const opened = await unlockNextAfter(testDb as never, {
+      userId: user.id,
+      completedCourseId: welcome.id,
+      now: NOW,
+    });
+
+    // The shell opens silently; the notification names the course with content.
+    expect(opened?.title).toBe("NLP: базовый");
+    expect(await canOpenCourse(testDb as never, user.id, shell.id)).toBe(true);
+    expect(await canOpenCourse(testDb as never, user.id, nlp.id)).toBe(true);
+    // …and it does not run away to the end of the chain.
+    expect(await canOpenCourse(testDb as never, user.id, later.id)).toBe(false);
+  });
+
+  it("a trailing shell still opens, with nothing to announce", async () => {
+    const welcome = await withContent("welcome", "Знакомство", 0);
+    const shell = await testDb.course.create({
+      data: { slug: "soft-skills", title: "Soft Skills", order: 1, status: "published" },
+    });
+    const user = await makeStudent();
+
+    const opened = await unlockNextAfter(testDb as never, {
+      userId: user.id,
+      completedCourseId: welcome.id,
+      now: NOW,
+    });
+    expect(opened).toBeNull();
+    expect(await canOpenCourse(testDb as never, user.id, shell.id)).toBe(true);
   });
 });
 
