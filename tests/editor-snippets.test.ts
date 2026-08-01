@@ -42,11 +42,23 @@ describe("stripPlaceholderBlocks", () => {
     expect(removed.find((r) => r.block === "Предупреждение")!.count).toBe(2);
   });
 
-  it("removes the placeholder video / practice / mock blocks", () => {
+  it("removes the placeholder video / practice blocks", () => {
     const md =
-      'A\n\n:::video{url="https://youtu.be/..." title="Название"}\n:::\n\n:::practice\n\n- [Задание](https://)\n:::\n\n:::mock{type="legend"}\n:::\n\nB';
+      'A\n\n:::video{url="https://youtu.be/..." title="Название"}\n:::\n\n:::practice\n\n- [Задание](https://)\n:::\n\nB';
     const { content } = stripPlaceholderBlocks(md);
     expect(content).toBe("A\n\nB\n");
+  });
+
+  it("NEVER removes a :::mock block — it is real content, not a placeholder", () => {
+    // The importer prepends this exact block to soft-skills lessons and
+    // mocks.ts greps contentMd for it to auto-complete the lesson after a
+    // booking; an empty mock directive has no placeholder body, so it cannot be
+    // told apart from a deliberate one. A stand dry-run caught the cleaner
+    // trying to delete three real mock lessons.
+    const md = ':::mock{type="legend"}\n:::\n\n### Просмотр интервью\n';
+    const { content, removed } = stripPlaceholderBlocks(md);
+    expect(content).toContain(':::mock{type="legend"}');
+    expect(removed).toHaveLength(0);
   });
 
   it("KEEPS a real video block with a real url", () => {

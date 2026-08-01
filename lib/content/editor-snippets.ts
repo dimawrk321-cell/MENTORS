@@ -121,7 +121,16 @@ function escapeRe(text: string): string {
  */
 function placeholderMatchers(): Array<{ label: string; re: RegExp }> {
   const rendered = SNIPPETS.filter(
-    (s) => s.snippet.startsWith("\n:::") || s.snippet.includes("```"),
+    (s) =>
+      (s.snippet.startsWith("\n:::") || s.snippet.includes("```")) &&
+      // «Мок-интервью» is EXCLUDED. Every other template is recognisable because
+      // its body is still the placeholder text; an empty `:::mock{type="legend"}`
+      // has no body, so an accidental insert is byte-identical to a deliberate
+      // one — and the importer prepends exactly that block to soft-skills lessons
+      // (notion-import/plan.ts), where mocks.ts greps for it to auto-complete the
+      // lesson after a booking. A stand dry-run caught this trying to delete
+      // three real mock lessons.
+      s.label !== "Мок-интервью",
   ).map((s) => ({ label: s.label, text: s.snippet.replace("%s", s.placeholder).trim() }));
 
   // Legacy: an earlier «Формула» button inserted a $$-block with this sample
