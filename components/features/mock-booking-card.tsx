@@ -63,10 +63,13 @@ export function MockBookingCard(props: MockBookingCardProps) {
             <p className="text-text-3 truncate text-[13px]">
               Мок · {MOCK_TYPE_LABEL[props.type] ?? props.type} · {props.interviewerName}
             </p>
-            <p className="text-[17px] font-semibold" aria-live="polite">
+            <p className="text-[17px] font-semibold">
               {props.whenLabel}
               {countdown && (
-                <span className="text-text-2 text-[13px] font-normal"> · {countdown}</span>
+                <span className="text-text-2 text-[13px] font-normal" aria-live="polite">
+                  {" · "}
+                  {countdown}
+                </span>
               )}
             </p>
           </div>

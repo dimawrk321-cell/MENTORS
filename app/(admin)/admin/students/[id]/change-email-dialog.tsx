@@ -19,7 +19,13 @@ import { changeStudentEmailAction } from "@/lib/actions/students";
  * Change a student's login email (spec 13.1/D2) — owner-only (the button is only
  * rendered for the owner; the action re-checks). Active sessions are NOT reset.
  */
-export function ChangeEmailDialog({ userId, currentEmail }: { userId: string; currentEmail: string }) {
+export function ChangeEmailDialog({
+  userId,
+  currentEmail,
+}: {
+  userId: string;
+  currentEmail: string;
+}) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState(currentEmail);
   const [pending, startTransition] = useTransition();

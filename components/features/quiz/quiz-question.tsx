@@ -77,7 +77,7 @@ export function QuizQuestion({
       <p className="text-text-3 mb-2 text-[12px]">
         Вопрос {index} из {total}
       </p>
-      <div className="lesson-prose mb-3 text-[15px] font-medium">{questionNode}</div>
+      <div className="lesson-prose mb-3 font-medium">{questionNode}</div>
 
       {type === "short_text" ? (
         <div className="flex max-w-md gap-2">
@@ -146,7 +146,7 @@ export function QuizQuestion({
             )}
           </p>
           {explanationNode && (
-            <div className="lesson-prose text-text-2 mt-2 text-[14px]">{explanationNode}</div>
+            <div className="lesson-prose text-text-2 mt-2">{explanationNode}</div>
           )}
         </div>
       )}

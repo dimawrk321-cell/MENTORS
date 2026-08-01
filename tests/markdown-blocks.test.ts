@@ -237,3 +237,42 @@ describe("editing", () => {
     }
   });
 });
+
+describe("audit fixes over the block core", () => {
+  it("escapes a quote in a video title so the block survives a reload", () => {
+    const md = ':::video{url="https://x/y"}\n:::\n';
+    const [block] = parse(md);
+    const edited = withEdit(block!, { title: 'Лекция "про GIL" {важно}' });
+    const round = parse(serialize([edited]));
+
+    expect(round).toHaveLength(1);
+    expect(round[0]!.kind).toBe("video");
+    // The escaped form must decode back to exactly what was typed.
+    expect(round[0]!.title).toBe('Лекция "про GIL" {важно}');
+  });
+
+  it("does not glue a new block onto a document that ended without a newline", () => {
+    const md = "Абзац без перевода строки.";
+    const blocks = parse(md);
+    expect(blocks[blocks.length - 1]!.eol).toBe("");
+
+    const added = {
+      ...blocks[0]!,
+      id: "new",
+      kind: "callout" as const,
+      variant: "info",
+      body: "Совет.",
+      raw: "",
+      eol: "\n",
+      dirty: true,
+    };
+    const out = serialize([...blocks, added]);
+    expect(out).toContain("Абзац без перевода строки.\n\n:::callout");
+    expect(out).not.toContain("строки.:::");
+  });
+
+  it("an untouched document still serialises byte-for-byte", () => {
+    const md = "# Заголовок\n\nАбзац.\n\n```py\nx = 1\n```\n\nХвост без перевода";
+    expect(serialize(parse(md))).toBe(md);
+  });
+});

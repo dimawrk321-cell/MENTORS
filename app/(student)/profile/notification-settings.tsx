@@ -78,7 +78,7 @@ export function NotificationSettings({ matrix, telegramLinked, ...initial }: Pro
   };
 
   const cell = (row: MatrixRow, channel: Channel, mobileLabel: string) => (
-    <div className="flex w-24 items-center justify-between gap-2 sm:justify-center">
+    <div className="flex w-full items-center justify-between gap-2 sm:w-24 sm:justify-center">
       <span className="text-text-2 text-[12px] sm:hidden">{mobileLabel}</span>
       {row[channel].shown ? (
         <Switch
@@ -144,7 +144,7 @@ export function NotificationSettings({ matrix, telegramLinked, ...initial }: Pro
                 <p className="text-[14px] font-medium">{row.label}</p>
                 <p className="text-text-3 text-[12px]">{row.description}</p>
               </div>
-              <div className="flex items-center gap-6">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
                 {cell(row, "inapp", "В приложении")}
                 {cell(row, "email", "Почта")}
                 {telegramLinked && cell(row, "telegram", "Telegram")}

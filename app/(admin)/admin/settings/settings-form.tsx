@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { updateSettingsAction } from "@/lib/actions/settings";
+import { NATIVE_FIELD_CLASS } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils/cn";
 
-const fieldClass =
-  "rounded-control border-border text-text-1 ease-app hover:border-border-strong h-9 w-full border bg-transparent px-3 text-[14px] transition-colors duration-150";
+const fieldClass = cn(NATIVE_FIELD_CLASS, "w-full");
 
 const GATING_LABEL: Record<string, string> = {
   strict: "Строгий (уроки открываются по порядку)",

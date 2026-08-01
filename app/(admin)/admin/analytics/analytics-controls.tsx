@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
 import { ANALYTICS_PERIODS } from "@/lib/constants";
+import { NATIVE_FIELD_CLASS } from "@/components/ui/native-field";
 
 // Course + period selectors for /admin/analytics — они пишут выбор в searchParams,
 // страница (server) перезагружает агрегаты. Никакого клиентского состояния данных.
@@ -31,7 +32,7 @@ export function CourseSelect({
       aria-label="Курс"
       value={courseId}
       onChange={(e) => update("course", e.target.value)}
-      className="rounded-control border-border text-text-1 ease-app hover:border-border-strong h-9 border bg-transparent px-3 text-[14px] transition-colors duration-150"
+      className={NATIVE_FIELD_CLASS}
     >
       {courses.map((c) => (
         <option key={c.id} value={c.id}>

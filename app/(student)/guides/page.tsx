@@ -214,7 +214,7 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
   const sectionsBlock =
     hubCards.length > 0 ? (
       <section key="sections" className="flex flex-col gap-3">
-        <h2 className="text-[15px] font-semibold">Разделы</h2>
+        <h2 className="text-[18px] font-semibold">Разделы</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {hubCards.map((card) => (
             <HubCardTile key={card.key} card={card} />
@@ -234,7 +234,7 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
 
   const bookmarksBlock = (
     <section key="bookmarks" className="flex flex-col gap-3">
-      <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+      <h2 className="flex items-center gap-2 text-[18px] font-semibold">
         <Bookmark size={16} strokeWidth={1.75} aria-hidden="true" />
         Закладки
       </h2>

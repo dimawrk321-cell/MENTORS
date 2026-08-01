@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
+// Route-scoped: the editor renders KaTeX itself, and the styled live preview is
+// a separate document (iframe), so its stylesheet cannot reach this page.
+import "katex/dist/katex.min.css";
 import katex from "katex";
 import {
   ChevronDown,
@@ -90,35 +93,52 @@ function textareaClass(extra?: string): string {
   );
 }
 
-/** Markdown table ↔ cell grid. */
-function tableToGrid(md: string): string[][] {
-  return md
-    .split("\n")
-    .filter((line) => line.trim().startsWith("|"))
-    .filter((line) => !/^\s*\|[\s:|-]+\|\s*$/.test(line))
-    .map((line) =>
-      line
-        .trim()
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split("|")
-        .map((cell) => cell.trim()),
-    );
+// --- Markdown table ↔ cell grid ---
+//
+// The delimiter row must be recognised by its DASHES. The old pattern
+// `\|[\s:|-]+\|` had space inside the character class, so `|  |  |` — what an
+// all-blank row serialises to — was classified as structure and silently
+// deleted. That made «+ Строка» a no-op and made clearing a row destroy it.
+const DELIMITER_ROW = /^\s*\|(?:\s*:?-{2,}:?\s*\|)+\s*$/;
+
+/** Split on unescaped pipes only: `P(A\|B)` is one cell, not two (GFM). */
+function splitCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim().replace(/\\\|/g, "|"));
 }
 
-function gridToTable(grid: string[][]): string {
+interface ParsedTable {
+  grid: string[][];
+  /** The delimiter row verbatim — alignment colons are the mentor's, not ours. */
+  delimiter: string | null;
+}
+
+function tableToGrid(md: string): ParsedTable {
+  const lines = md.split("\n").filter((line) => line.trim().startsWith("|"));
+  const delimiter = lines.find((line) => DELIMITER_ROW.test(line)) ?? null;
+  return {
+    grid: lines.filter((line) => !DELIMITER_ROW.test(line)).map(splitCells),
+    delimiter: delimiter ? delimiter.trim() : null,
+  };
+}
+
+function gridToTable(grid: string[][], delimiter: string | null, eol: string): string {
   if (grid.length === 0) return "";
   const cols = Math.max(...grid.map((row) => row.length));
   const pad = (row: string[]) =>
-    `| ${Array.from({ length: cols }, (_, i) => row[i] ?? "").join(" | ")} |`;
+    `| ${Array.from({ length: cols }, (_, i) => (row[i] ?? "").replace(/\|/g, "\\|")).join(" | ")} |`;
+
+  // Re-emit the original delimiter so column alignment survives an edit; pad it
+  // out only if the mentor added columns.
+  const existing = delimiter ? splitCells(delimiter) : [];
+  const delimiterRow = `| ${Array.from({ length: cols }, (_, i) => existing[i] ?? "---").join(" | ")} |`;
+
   const [header, ...body] = grid;
-  return (
-    [
-      pad(header!),
-      `| ${Array.from({ length: cols }, () => "---").join(" | ")} |`,
-      ...body.map(pad),
-    ].join("\n") + "\n"
-  );
+  return [pad(header!), delimiterRow, ...body.map(pad)].join("\n") + (eol === "" ? "" : "\n");
 }
 
 function BlockCard({
@@ -146,11 +166,25 @@ function BlockCard({
         ? `Код · ${block.lang || "text"}`
         : meta.label;
   const tone = callout?.tone;
+  const [confirming, setConfirming] = useState(false);
+
+  // Deleting a block autosaves a second later and the editor has no undo, so the
+  // action asks first. Two clicks, in place — a dialog here would fight the
+  // card's own layout, and the second click is the confirmation.
+  const confirmRemove = () => {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
+    onRemove();
+  };
 
   return (
     <div
       className="rounded-card border-border bg-surface-1 border"
       style={tone ? { borderLeft: `2px solid ${tone}` } : undefined}
+      onMouseLeave={() => setConfirming(false)}
     >
       <div className="border-border flex items-center gap-2 border-b px-3 py-2">
         <Icon
@@ -166,7 +200,7 @@ function BlockCard({
           aria-label="Выше"
           disabled={index === 0}
           onClick={() => onMove(-1)}
-          className="text-text-3 hover:text-text-1 disabled:opacity-30"
+          className="text-text-3 hover:text-text-1 ease-app flex size-11 shrink-0 items-center justify-center rounded-[6px] transition-colors duration-150 disabled:opacity-30 md:size-8"
         >
           <ChevronUp size={14} strokeWidth={1.75} />
         </button>
@@ -175,15 +209,21 @@ function BlockCard({
           aria-label="Ниже"
           disabled={index === total - 1}
           onClick={() => onMove(1)}
-          className="text-text-3 hover:text-text-1 disabled:opacity-30"
+          className="text-text-3 hover:text-text-1 ease-app flex size-11 shrink-0 items-center justify-center rounded-[6px] transition-colors duration-150 disabled:opacity-30 md:size-8"
         >
           <ChevronDown size={14} strokeWidth={1.75} />
         </button>
+        {confirming && (
+          <span className="text-danger shrink-0 text-[12px] font-medium">Удалить?</span>
+        )}
         <button
           type="button"
-          aria-label="Удалить блок"
-          onClick={onRemove}
-          className="text-text-3 hover:text-danger"
+          aria-label={confirming ? "Подтвердить удаление блока" : "Удалить блок"}
+          onClick={confirmRemove}
+          className={cn(
+            "text-text-3 hover:text-danger ease-app flex size-11 shrink-0 items-center justify-center rounded-[6px] transition-colors duration-150 md:size-8",
+            confirming && "text-danger bg-danger/12",
+          )}
         >
           <Trash2 size={14} strokeWidth={1.75} />
         </button>
@@ -227,7 +267,11 @@ function BlockCard({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CODE_LANGS.map((lang) => (
+                {(CODE_LANGS.includes(block.lang) || !block.lang
+                  ? CODE_LANGS
+                  : // Keep whatever the fence actually says, or the trigger renders empty.
+                    [block.lang, ...CODE_LANGS]
+                ).map((lang) => (
                   <SelectItem key={lang} value={lang}>
                     {lang}
                   </SelectItem>
@@ -339,10 +383,11 @@ function BlockCard({
 }
 
 function TableGrid({ block, onChange }: { block: Block; onChange: (next: Block) => void }) {
-  const grid = tableToGrid(block.body);
+  const { grid, delimiter } = tableToGrid(block.body);
   const cols = grid.length ? Math.max(...grid.map((r) => r.length)) : 0;
 
-  const push = (next: string[][]) => onChange(withEdit(block, { body: gridToTable(next) }));
+  const push = (next: string[][]) =>
+    onChange(withEdit(block, { body: gridToTable(next, delimiter, block.eol) }));
 
   return (
     <div className="flex flex-col gap-2">

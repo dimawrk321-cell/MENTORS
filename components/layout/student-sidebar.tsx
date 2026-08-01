@@ -62,11 +62,7 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
           : "text-text-2 hover:text-text-1",
       )}
     >
-      <Icon
-        size={18}
-        strokeWidth={1.75}
-        className={cn("shrink-0", active && "text-accent")}
-      />
+      <Icon size={18} strokeWidth={1.75} className={cn("shrink-0", active && "text-accent")} />
       {/* Tablet (md) shows an icon-only rail; labels return on lg. */}
       <span className="truncate md:hidden lg:inline">{item.label}</span>
     </Link>

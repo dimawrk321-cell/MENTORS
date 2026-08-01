@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, Clock } from "lucide-react";
+import { BookOpen, CalendarX2, Clock } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { BackButton } from "@/components/ui/back-button";
@@ -16,7 +16,9 @@ import {
   MOCK_VERDICT_LABEL,
 } from "@/lib/constants";
 import { formatDateTimeRu, MINUTE_MS } from "@/lib/utils/dates";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { MockBookingCard } from "@/components/features/mock-booking-card";
@@ -61,7 +63,9 @@ export default async function BookingDetailPage({
   if (!detail) notFound();
 
   const { booking } = detail;
-  const isUpcoming = booking.status === "booked" && booking.startsAt > now;
+  // «Предстоит» covers the mock while it is RUNNING too — the connect window
+  // closes at endsAt, not at startsAt (audit 13.6).
+  const isUpcoming = booking.status === "booked" && booking.endsAt > now;
   const late = booking.startsAt.getTime() - now.getTime() < CANCEL_FREE_HOURS * HOUR_MS;
   const feedback =
     detail.feedbackStatus === "published"
@@ -99,6 +103,35 @@ export default async function BookingDetailPage({
           <CancelBookingControls bookingId={booking.id} late={late} />
         </section>
       ) : null}
+
+      {/* Отменённый мок / неявка: страница была пустым листом — только заголовок
+          и ничего больше (audit 13.6). */}
+      {(booking.status === "cancelled_student" ||
+        booking.status === "cancelled_interviewer" ||
+        booking.status === "no_show") && (
+        <Card>
+          <EmptyState
+            icon={CalendarX2}
+            title={
+              booking.status === "no_show"
+                ? "Ты не пришёл на мок"
+                : booking.status === "cancelled_student"
+                  ? "Ты отменил эту бронь"
+                  : "Интервьюер отменил эту бронь"
+            }
+            description={
+              booking.status === "no_show"
+                ? "За неявку начислен страйк. Забронируй новое окно, когда будешь готов."
+                : "Слот освободился. Можно выбрать другое время."
+            }
+            action={
+              <Button asChild>
+                <Link href="/mocks">Забронировать снова</Link>
+              </Button>
+            }
+          />
+        </Card>
+      )}
 
       {/* Фидбек (spec 7.8): опубликованный — рубрика; иначе «Ожидает фидбека» */}
       {booking.status === "completed" && (

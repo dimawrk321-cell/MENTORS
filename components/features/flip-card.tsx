@@ -19,8 +19,13 @@ export function FlipCard({ front, back }: { front: ReactNode; back: ReactNode })
           className="ease-app relative grid transition-transform duration-250 [transform-style:preserve-3d] motion-reduce:transition-none"
           style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
         >
-          <div className="col-start-1 row-start-1 [backface-visibility:hidden]">{front}</div>
-          <div className="col-start-1 row-start-1 [transform:rotateY(180deg)] [backface-visibility:hidden]">
+          <div className="col-start-1 row-start-1 [backface-visibility:hidden]" inert={flipped}>
+            {front}
+          </div>
+          <div
+            className="col-start-1 row-start-1 [transform:rotateY(180deg)] [backface-visibility:hidden]"
+            inert={!flipped}
+          >
             {back}
           </div>
         </div>

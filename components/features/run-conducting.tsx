@@ -279,7 +279,7 @@ export function RunConducting({ data }: { data: RunScreenData }) {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-semibold">Проведение мока</h1>
+          <h1 className="text-[24px] font-semibold tracking-[-0.02em]">Проведение мока</h1>
           <p className="text-text-2 text-[14px]">
             {MOCK_TYPE_LABEL[data.booking.type]} · {data.student.studentName}
           </p>

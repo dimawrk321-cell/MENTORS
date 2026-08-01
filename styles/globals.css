@@ -172,10 +172,13 @@
     font-size: var(--reading-font, 16px);
     line-height: 1.65;
   }
-  .lesson-prose[data-reading-size="s"] {
+  /* The size variable is set on the reading COLUMN, not on .lesson-prose itself,
+     and inherits down — so it reaches the key questions and the quiz, which are
+     prose blocks of their own further down the page (audit 13.6). */
+  [data-reading-size="s"] {
     --reading-font: 15px;
   }
-  .lesson-prose[data-reading-size="l"] {
+  [data-reading-size="l"] {
     --reading-font: 18px;
   }
   .lesson-prose > :first-child {

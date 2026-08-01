@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { createAnnouncementAction } from "@/lib/actions/announcements";
+import { NATIVE_FIELD_CLASS } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils/cn";
 
 // Create form for /admin/announcements (spec 8.5). Controlled state → server
 // action with a plain object (no FormData/Select plumbing). Segment picker is
 // built from published courses + the two fixed segments.
 
-const fieldClass =
-  "rounded-control border-border text-text-1 ease-app hover:border-border-strong h-9 w-full border bg-transparent px-3 text-[14px] transition-colors duration-150";
+const fieldClass = cn(NATIVE_FIELD_CLASS, "w-full");
 
 export function AnnouncementForm({ courses }: { courses: { id: string; title: string }[] }) {
   const router = useRouter();

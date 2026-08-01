@@ -25,7 +25,7 @@ export function LevelBadge({ level, progress, toNext, title }: LevelBadgeProps) 
       >
         {level}
       </span>
-      {title && <span className="whitespace-nowrap">{title}</span>}
+      {title && <span className="min-w-0 truncate">{title}</span>}
       <span
         role="progressbar"
         aria-valuenow={pct}

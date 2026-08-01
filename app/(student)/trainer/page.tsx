@@ -22,6 +22,14 @@ export const metadata: Metadata = {
   title: "Тренажёр",
 };
 
+/** Accuracy is a score, so it gets a score colour — green only when it is good. */
+function accuracyTone(accuracy: number | null): string {
+  if (accuracy === null) return "";
+  if (accuracy >= 0.8) return "text-success";
+  if (accuracy >= 0.5) return "text-warning";
+  return "text-danger";
+}
+
 /** Хаб тренажёра (spec 8.3): очередь, статистика, западающие темы, каталог. */
 export default async function TrainerPage() {
   const { user } = await requireStudentZone();
@@ -98,10 +106,9 @@ export default async function TrainerPage() {
           <CardContent className="p-4">
             <p className="text-text-3 text-[13px]">Точность за 30 дней</p>
             <p
-              className={cn(
-                "text-[24px] font-semibold",
-                stats.accuracy30 !== null && "text-success",
-              )}
+              // The tint follows the VALUE, not the mere presence of data —
+              // 12% used to render in success green (audit 13.6).
+              className={cn("text-[24px] font-semibold", accuracyTone(stats.accuracy30))}
             >
               {stats.accuracy30 === null ? "—" : `${Math.round(stats.accuracy30 * 100)}%`}
             </p>

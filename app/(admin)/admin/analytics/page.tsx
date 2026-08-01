@@ -42,6 +42,7 @@ function Widget({ rows, children }: { rows?: number; children: React.ReactNode }
 
 async function FunnelBody({ courseId }: { courseId: string | undefined }) {
   const funnel = courseId ? await getCourseFunnel(courseId) : null;
+  if (!courseId) return <ChartEmpty>Нет опубликованных курсов.</ChartEmpty>;
   if (!funnel || funnel.steps.length === 0) return <ChartEmpty>Нет уроков в курсе.</ChartEmpty>;
   if (funnel.started === 0) return <ChartEmpty>Курс ещё никто не начал.</ChartEmpty>;
   return (

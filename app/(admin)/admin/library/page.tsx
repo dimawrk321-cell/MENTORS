@@ -109,7 +109,7 @@ function FilterRow({
 
 /** /admin/library (spec 8.5): таблица записей + форма с чеклист-гейтом. */
 export default async function AdminLibraryPage({ searchParams }: AdminLibraryPageProps) {
-  await requirePermission("content.manage");
+  const { user: viewer } = await requirePermission("content.manage");
   const raw = await searchParams;
   const filters = {
     stage: pick(raw.stage, RECORDING_STAGES),
@@ -150,7 +150,7 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
       complete,
       checklistCount: (["faces", "voice", "names", "consent"] as const).filter((k) => checklist[k])
         .length,
-      linkUpdatedText: formatDateRu(recording.linkUpdatedAt, "Europe/Moscow"),
+      linkUpdatedText: formatDateRu(recording.linkUpdatedAt, viewer.timezone),
       stale: isLinkStale(recording.linkUpdatedAt, now),
       views: recording._count.views,
       formValue: {

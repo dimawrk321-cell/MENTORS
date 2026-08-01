@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { NATIVE_FIELD_CLASS } from "@/components/ui/native-field";
 import { prisma } from "@/lib/db";
 import { requireOwnerZone } from "@/lib/auth/guards";
 import { auditDateBounds, getAuditFilterOptions, listAuditLog } from "@/lib/services/audit";
@@ -9,8 +10,7 @@ import { AuditTable } from "./audit-table";
 
 export const metadata: Metadata = { title: "Аудит" };
 
-const fieldClass =
-  "rounded-control border-border text-text-1 ease-app hover:border-border-strong h-9 border bg-transparent px-3 text-[14px] transition-colors duration-150";
+const fieldClass = NATIVE_FIELD_CLASS;
 
 interface PageProps {
   searchParams: Promise<{ actor?: string; entity?: string; from?: string; to?: string }>;

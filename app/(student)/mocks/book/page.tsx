@@ -468,6 +468,11 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
         </h1>
       </div>
       <SlotPicker
+        emptyDescription={
+          isReschedule
+            ? "У этого интервьюера нет свободных окон — выбери другого или другое время"
+            : undefined
+        }
         days={days}
         showInterviewer={interviewerId === null}
         hrefForSlot={(slotId) =>

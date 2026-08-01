@@ -164,7 +164,8 @@ export async function getMocksPageData(
 ): Promise<MocksPageData> {
   const [booking, lock, offerEntries] = await Promise.all([
     db.booking.findFirst({
-      where: { userId, status: "booked", slot: { startsAt: { gt: now } } },
+      // Live-until-end, same rule as getActiveBooking (audit 13.6).
+      where: { userId, status: "booked", slot: { endsAt: { gt: now } } },
       orderBy: { slot: { startsAt: "asc" } },
       include: { slot: { include: { interviewer: { select: { name: true } } } } },
     }),

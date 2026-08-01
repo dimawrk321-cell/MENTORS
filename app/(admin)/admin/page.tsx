@@ -59,7 +59,11 @@ export default async function AdminDashboardPage() {
           empty="Все ученики на связи."
         >
           {flags.missing.map((s) => (
-            <FlagRowLink key={s.id} href={`/admin/students/${s.id}?tab=events`} label={s.name}>
+            <FlagRowLink
+              key={s.id}
+              href={`/admin/students/${s.id}?tab=events`}
+              label={s.name || s.email}
+            >
               {s.lastSeenAt
                 ? `не заходил ${s.daysMissing} ${pluralRu(s.daysMissing, "день", "дня", "дней")}`
                 : "не заходил ни разу"}
@@ -74,7 +78,11 @@ export default async function AdminDashboardPage() {
           empty="Нет учеников с серией провалов."
         >
           {flags.failingThree.map((s) => (
-            <FlagRowLink key={s.id} href={`/admin/students/${s.id}?tab=tests`} label={s.name}>
+            <FlagRowLink
+              key={s.id}
+              href={`/admin/students/${s.id}?tab=tests`}
+              label={s.name || s.email}
+            >
               {s.email}
             </FlagRowLink>
           ))}
@@ -114,7 +122,7 @@ export default async function AdminDashboardPage() {
           empty="Ни у кого не истекает в ближайшие 2 недели."
         >
           {flags.expiring.map((s) => (
-            <FlagRowLink key={s.id} href={`/admin/students/${s.id}`} label={s.name}>
+            <FlagRowLink key={s.id} href={`/admin/students/${s.id}`} label={s.name || s.email}>
               до {formatDateRu(s.accessUntil, user.timezone)} · {s.daysLeft}{" "}
               {pluralRu(s.daysLeft, "день", "дня", "дней")}
             </FlagRowLink>
@@ -148,7 +156,7 @@ export default async function AdminDashboardPage() {
                   {r.type === "error" ? "Ошибка" : "Непонятно"} · {r.target}
                 </span>
                 {r.text && <span className="text-text-3 mt-0.5 block truncate">«{r.text}»</span>}
-                <span className="text-text-3 block">{r.authorName}</span>
+                <span className="text-text-3 block">{r.authorName || r.authorEmail}</span>
               </>
             );
             return (
@@ -218,13 +226,15 @@ function FlagWidget({
           className={count > 0 ? "text-warning" : "text-text-3"}
           aria-hidden="true"
         />
-        {href ? (
-          <Link href={href} className="hover:text-accent flex-1 text-[14px] font-semibold">
-            {title}
-          </Link>
-        ) : (
-          <h2 className="flex-1 text-[14px] font-semibold">{title}</h2>
-        )}
+        <h2 className="flex-1 text-[14px] font-semibold">
+          {href ? (
+            <Link href={href} className="hover:text-accent">
+              {title}
+            </Link>
+          ) : (
+            title
+          )}
+        </h2>
         <span className="text-text-3 shrink-0 text-[12px] tabular-nums">{count}</span>
       </div>
       {count === 0 ? (

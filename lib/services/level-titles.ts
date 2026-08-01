@@ -88,7 +88,7 @@ export function parseStoredLevelTitles(value: unknown): LevelTitle[] | null {
       Number.isInteger((e as { minLevel: number }).minLevel) &&
       (e as { minLevel: number }).minLevel >= 1 &&
       typeof (e as { title?: unknown }).title === "string" &&
-      ((e as { title: string }).title.trim().length > 0)
+      (e as { title: string }).title.trim().length > 0
     ) {
       out.push({
         minLevel: (e as { minLevel: number }).minLevel,

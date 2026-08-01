@@ -42,7 +42,7 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
       <BackButton href="/library" label="Библиотека" />
 
       <div>
-        <h1 className="text-[24px] font-semibold tracking-[-0.02em]">
+        <h1 className="text-[24px] font-semibold tracking-[-0.02em] first-letter:uppercase">
           {recordingCardTitle(recording)}
         </h1>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">

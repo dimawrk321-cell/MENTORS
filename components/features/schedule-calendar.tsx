@@ -111,7 +111,12 @@ export function ScheduleCalendar({ days }: { days: CalendarDay[] }) {
                 {day.dayNum}
               </span>
               {day.isDayOff ? (
-                <span className="text-warning text-[11px]">выходной</span>
+                <span
+                  className="text-warning w-full truncate text-[10px] leading-tight"
+                  title="выходной"
+                >
+                  вых.
+                </span>
               ) : day.slotTimes.length > 0 ? (
                 <span className="text-text-3 text-[11px]">{day.slotTimes.length} сл.</span>
               ) : null}
@@ -158,10 +163,16 @@ function DayDialog({ day, onClose }: { day: CalendarDay; onClose: () => void }) 
     }
   };
 
+  // The most destructive action on this screen used a native window.confirm
+  // inside a styled dialog (audit 13.6). Confirm in place instead — an
+  // ActionButton would drop the onClose + refresh this screen needs.
+  const [confirmingClose, setConfirmingClose] = useState(false);
   const closeDay = () => {
-    if (!window.confirm("Закрыть день? Открытые слоты закроются, брони этого дня отменятся.")) {
+    if (!confirmingClose) {
+      setConfirmingClose(true);
       return;
     }
+    setConfirmingClose(false);
     run(() => closeDayAction({ date: day.dateStr }), "День закрыт", onClose);
   };
 
@@ -267,6 +278,16 @@ function DayDialog({ day, onClose }: { day: CalendarDay; onClose: () => void }) 
         <Button type="button" variant="ghost" onClick={toggleDayOff} loading={pending}>
           {day.isDayOff ? "Снять выходной" : "Отметить выходным"}
         </Button>
+        {confirmingClose && (
+          <p className="text-text-2 w-full text-[13px]">
+            Открытые слоты закроются, брони этого дня отменятся. Подтвердить?
+          </p>
+        )}
+        {confirmingClose && (
+          <Button type="button" variant="ghost" onClick={() => setConfirmingClose(false)}>
+            Отмена
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -274,7 +295,7 @@ function DayDialog({ day, onClose }: { day: CalendarDay; onClose: () => void }) 
           onClick={closeDay}
           loading={pending}
         >
-          Закрыть день
+          {confirmingClose ? "Да, закрыть день" : "Закрыть день"}
         </Button>
       </DialogFooter>
     </>

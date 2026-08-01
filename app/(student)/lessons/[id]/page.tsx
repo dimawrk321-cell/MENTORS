@@ -92,7 +92,12 @@ export default async function LessonPage({ params }: LessonPageProps) {
           chips, key questions, quiz) — a long unbreakable title burst the page at
           390px (changelog 13.6). Inside the article the stricter
           `overflow-wrap: anywhere` rule still wins. */}
-      <div className="mx-auto w-full max-w-[680px] min-w-0 break-words">
+      {/* data-reading-size lives on the whole reading COLUMN, not just the
+          article: the key questions and the quiz are prose too (audit 13.6). */}
+      <div
+        className="mx-auto w-full max-w-[680px] min-w-0 break-words"
+        data-reading-size={user.readingFontSize}
+      >
         {/* Header: breadcrumbs, title, chips (spec 7.3) */}
         <nav
           aria-label="Хлебные крошки"
@@ -148,9 +153,7 @@ export default async function LessonPage({ params }: LessonPageProps) {
           {/* Reading column with the always-present watermark layer (spec 5.7). */}
           <div className="relative">
             <Watermark email={session.user.email} />
-            <article className="lesson-prose" data-reading-size={user.readingFontSize}>
-              {content}
-            </article>
+            <article className="lesson-prose">{content}</article>
           </div>
         </LessonReader>
 

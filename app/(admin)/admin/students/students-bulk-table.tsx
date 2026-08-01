@@ -110,7 +110,7 @@ export function StudentsBulkTable({
         </Card>
       )}
 
-      <Card>
+      <Card className="overflow-hidden">
         {/* Spec 13: admin tables are desktop-first; on mobile the card scrolls horizontally. */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-[14px]">

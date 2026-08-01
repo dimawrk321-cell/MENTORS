@@ -35,7 +35,7 @@ export function KeyQuestions({ questions }: { questions: Question[] }) {
                 aria-hidden="true"
               />
             </summary>
-            <div className="lesson-prose border-border border-t px-4 py-3.5 text-[15px]">
+            <div className="lesson-prose border-border border-t px-4 py-3.5">
               <QuestionAnswerBody question={question} />
             </div>
           </details>

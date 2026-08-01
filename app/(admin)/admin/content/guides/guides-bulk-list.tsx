@@ -49,7 +49,12 @@ export function GuidesBulkList({ guides }: { guides: GuideRow[] }) {
       {selection.size > 0 && (
         <Card className="sticky top-2 z-10 flex flex-wrap items-center gap-3 p-3">
           <span className="text-text-2 text-[13px]">Выбрано: {selection.size}</span>
-          <Button variant="secondary" size="sm" loading={pending} onClick={() => runBulk("published")}>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={pending}
+            onClick={() => runBulk("published")}
+          >
             Опубликовать
           </Button>
           <Button variant="secondary" size="sm" loading={pending} onClick={() => runBulk("draft")}>
@@ -111,7 +116,9 @@ export function GuidesBulkList({ guides }: { guides: GuideRow[] }) {
                       <span className="text-text-1 group-hover:text-accent min-w-0 flex-1 truncate text-[14px]">
                         {guide.title}
                       </span>
-                      <span className="text-text-3 hidden text-[12px] sm:inline">/{guide.slug}</span>
+                      <span className="text-text-3 hidden text-[12px] sm:inline">
+                        /{guide.slug}
+                      </span>
                       {guide.status === "published" ? (
                         <Badge variant="success">опубликован</Badge>
                       ) : (

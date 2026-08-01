@@ -13,13 +13,14 @@ import {
 } from "@/lib/actions/settings";
 import { serializeLevelTitles, DEFAULT_LEVEL_TITLES } from "@/lib/services/level-titles";
 import { OWNER_SIGNAL_KINDS, OWNER_SIGNAL_LABELS, type OwnerSignalKind } from "@/lib/constants";
+import { NATIVE_FIELD_CLASS } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils/cn";
 
 // Editable XP map (spec 12.1/C1) + operational rules (C2). Both persist to
 // app_settings; services read them live. «Сбросить к умолчанию» fills the code
 // defaults into the form (a Save then removes the override in practice).
 
-const numInputClass =
-  "rounded-control border-border text-text-1 ease-app hover:border-border-strong h-9 w-24 border bg-transparent px-3 text-right text-[14px] tabular-nums transition-colors duration-150";
+const numInputClass = cn(NATIVE_FIELD_CLASS, "w-24 text-right tabular-nums");
 
 interface XpItem {
   key: string;

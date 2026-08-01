@@ -21,17 +21,35 @@ export function StartTestButton({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [now, setNow] = useState(() => Date.now());
+  // Pre-hydration the client cannot know the time without disagreeing with the
+  // server's render — stay neutral until mounted (same shape as MockBookingCard).
+  const [now, setNow] = useState<number | null>(null);
 
   const until = cooldownUntil ? new Date(cooldownUntil).getTime() : null;
-  const remainingMs = until !== null ? until - now : 0;
+  // `now === null` until mounted. A cooldown that the SERVER already knows about
+  // still renders as a disabled button — just without a live countdown — so the
+  // pre-hydration markup never claims the test is startable when it is not.
+  const remainingMs = until !== null && now !== null ? until - now : 0;
   const onCooldown = remainingMs > 0;
+  const cooldownPending = until !== null && now === null;
+
+  useEffect(() => {
+    setNow(Date.now());
+  }, []);
 
   useEffect(() => {
     if (!onCooldown) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [onCooldown]);
+
+  if (cooldownPending) {
+    return (
+      <Button size="lg" disabled>
+        Пересдача на кулдауне
+      </Button>
+    );
+  }
 
   function start(): void {
     startTransition(async () => {

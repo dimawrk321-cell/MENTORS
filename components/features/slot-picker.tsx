@@ -12,15 +12,26 @@ interface SlotPickerProps {
   hrefForSlot: (slotId: string) => string;
   /** Показывать имя интервьюера на чипе (объединённый календарь «Первый свободный»). */
   showInterviewer?: boolean;
+  /**
+   * Empty-state copy. The default points at the waitlist, but that button only
+   * exists on the NEW-booking step — in reschedule mode it promised something
+   * the screen does not offer (audit 13.6).
+   */
+  emptyDescription?: string;
 }
 
-export function SlotPicker({ days, hrefForSlot, showInterviewer = false }: SlotPickerProps) {
+export function SlotPicker({
+  days,
+  hrefForSlot,
+  showInterviewer = false,
+  emptyDescription = "Встань в лист ожидания — сообщим, как только появится окно",
+}: SlotPickerProps) {
   if (days.length === 0) {
     return (
       <EmptyState
         icon={CalendarX}
         title="Свободных слотов пока нет"
-        description="Встань в лист ожидания — сообщим, как только появится окно"
+        description={emptyDescription}
       />
     );
   }

@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
+import { cn } from "@/lib/utils/cn";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getActivityBarData, getContinueTarget } from "@/lib/services/dashboard";
 import { getSrsQueue, getNextReviewDate, getLaggingCategories } from "@/lib/services/srs";
@@ -190,7 +191,13 @@ export default async function DashboardPage() {
               toNext={xp.level.toNext}
               title={levelTitle}
             />
-            <span className="rounded-pill bg-success/12 text-success inline-flex items-center gap-1.5 px-3 py-[5px] text-[13px] font-medium">
+            <span
+              className={cn(
+                "rounded-pill inline-flex items-center gap-1.5 px-3 py-[5px] text-[13px] font-medium",
+                // Nothing earned yet is neutral, not a success (audit 13.6).
+                todayXp > 0 ? "bg-success/12 text-success" : "bg-surface-2 text-text-2",
+              )}
+            >
               <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />
               {todayXp > 0 ? `+${todayXp}` : todayXp} XP сегодня
             </span>
@@ -221,10 +228,10 @@ export default async function DashboardPage() {
           <div className="relative flex flex-col gap-[18px] p-7 break-words">
             <div className="flex flex-col gap-1.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-pill inline-flex items-center bg-white/16 px-2.5 py-[3px] text-[12px] font-medium text-white">
+                <span className="rounded-pill inline-flex items-center bg-white/25 px-2.5 py-[3px] text-[12px] font-medium text-white">
                   {cont.courseTitle}
                 </span>
-                <span className="truncate text-[13px] text-white/75">{cont.moduleTitle}</span>
+                <span className="truncate text-[13px] text-white/90">{cont.moduleTitle}</span>
               </div>
               <p className="text-[22px] leading-[1.3] font-bold tracking-[-0.01em] text-white">
                 {cont.lessonTitle}
@@ -246,7 +253,7 @@ export default async function DashboardPage() {
                       style={{ width: `${heroPct}%` }}
                     />
                   </span>
-                  <span className="text-[12px] font-medium whitespace-nowrap text-white/85">
+                  <span className="text-[12px] font-medium whitespace-nowrap text-white">
                     {cont.moduleDone}/{cont.moduleTotal} уроков
                   </span>
                 </div>

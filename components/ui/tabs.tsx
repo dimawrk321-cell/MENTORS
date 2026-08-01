@@ -21,7 +21,7 @@ export function TabsTrigger({
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        "text-text-2 relative -mb-px border-b-2 border-transparent pb-2.5 text-[14px]",
+        "text-text-2 relative -mb-px shrink-0 border-b-2 border-transparent pb-2.5 text-[14px] whitespace-nowrap",
         "ease-app hover:text-text-1 transition-colors duration-150",
         "data-[state=active]:border-accent data-[state=active]:text-text-1",
         className,

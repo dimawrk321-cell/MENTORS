@@ -1158,7 +1158,9 @@ export async function getActiveBooking(
   now: Date = new Date(),
 ): Promise<ActiveBookingCard | null> {
   const booking = await db.booking.findFirst({
-    where: { userId, status: "booked", slot: { startsAt: { gt: now } } },
+    // Until the session ENDS, not until it starts: the card stays live through
+    // the mock («идёт сейчас») and a reload must not lose it (audit 13.6).
+    where: { userId, status: "booked", slot: { endsAt: { gt: now } } },
     orderBy: { slot: { startsAt: "asc" } },
     include: { slot: { include: { interviewer: { select: { name: true } } } } },
   });
@@ -1218,7 +1220,7 @@ export async function getMyMocks(
   const history: MockListItem[] = [];
   for (const booking of bookings) {
     const item = await toListItem(booking);
-    if (booking.status === "booked" && booking.slot.startsAt > now) upcoming.push(item);
+    if (booking.status === "booked" && booking.slot.endsAt > now) upcoming.push(item);
     else history.push(item);
   }
   upcoming.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());

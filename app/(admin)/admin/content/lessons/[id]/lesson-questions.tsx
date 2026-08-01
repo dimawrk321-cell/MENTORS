@@ -67,6 +67,10 @@ export function LessonQuestions({
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const linkedIds = new Set(links.map((link) => link.questionId));
+  // The server search does not exclude already-linked questions, so filter once
+  // and gate BOTH the list and the fallback on the filtered set — otherwise the
+  // panel renders an empty <ul> and suppresses the explanation.
+  const available = results.filter((row) => !linkedIds.has(row.id));
 
   useEffect(() => {
     // A category alone is a valid filter — browsing without typing is the point.
@@ -223,42 +227,42 @@ export function LessonQuestions({
             />
           </label>
           {searching && <p className="text-text-3 text-[12px]">Ищу…</p>}
-          {results.length > 0 && (
+          {available.length > 0 && (
             <ul className="flex flex-col gap-1.5">
-              {results
-                .filter((row) => !linkedIds.has(row.id))
-                .map((row) => (
-                  <li key={row.id} className="flex items-center gap-3 text-[13px]">
-                    <span className="min-w-0 flex-1 truncate">
-                      {row.textMd.slice(0, 120) || "— без текста —"}
-                      <span className="text-text-3 ml-2">· {row.category}</span>
-                    </span>
-                    {row.status === "draft" && <Badge>черновик</Badge>}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      loading={pending}
-                      onClick={() =>
-                        run(
-                          () =>
-                            upsertQuestionLinkAction({
-                              questionId: row.id,
-                              lessonId,
-                              ...flagsFromRole(attachRole),
-                            }),
-                          "Привязано",
-                        )
-                      }
-                    >
-                      Привязать
-                    </Button>
-                  </li>
-                ))}
+              {available.map((row) => (
+                <li key={row.id} className="flex items-center gap-3 text-[13px]">
+                  <span className="min-w-0 flex-1 truncate">
+                    {row.textMd.slice(0, 120) || "— без текста —"}
+                    <span className="text-text-3 ml-2">· {row.category}</span>
+                  </span>
+                  {row.status === "draft" && <Badge>черновик</Badge>}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={pending}
+                    onClick={() =>
+                      run(
+                        () =>
+                          upsertQuestionLinkAction({
+                            questionId: row.id,
+                            lessonId,
+                            ...flagsFromRole(attachRole),
+                          }),
+                        "Привязано",
+                      )
+                    }
+                  >
+                    Привязать
+                  </Button>
+                </li>
+              ))}
             </ul>
           )}
-          {!searching && results.length === 0 && (query.trim() || categoryId) && (
+          {!searching && available.length === 0 && (query.trim() || categoryId) && (
             <p className="text-text-3 text-[12px]">
-              Ничего не нашлось — измени запрос или категорию.
+              {results.length === 0
+                ? "Ничего не нашлось — измени запрос или категорию."
+                : "Все найденные вопросы уже привязаны к уроку."}
             </p>
           )}
         </div>

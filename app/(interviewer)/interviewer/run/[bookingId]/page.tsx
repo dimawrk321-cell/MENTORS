@@ -63,7 +63,7 @@ export default async function RunPage({ params }: { params: Promise<{ bookingId:
     if (form && form.draft?.status === "published") {
       return (
         <div className="flex flex-col gap-4">
-          <h1 className="text-[22px] font-semibold">Мок проведён</h1>
+          <h1 className="text-[24px] font-semibold tracking-[-0.02em]">Мок проведён</h1>
           <Card>
             <CardContent className="flex flex-col gap-1">
               <p className="text-[15px] font-medium">Фидбек опубликован</p>

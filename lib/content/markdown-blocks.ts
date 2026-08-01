@@ -83,12 +83,21 @@ function base(kind: BlockKind, raw: string): Block {
 }
 
 /** Reads `{a="b" c="d"}` or `{a=b}` into a map. */
+/** Inverse of `attr()` — must round-trip exactly, or the block gets demoted. */
+function unattr(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#125;/g, "}")
+    .replace(/&#123;/g, "{")
+    .replace(/&amp;/g, "&");
+}
+
 function parseAttrs(attrs: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!attrs) return out;
   const inner = attrs.slice(1, -1);
   for (const m of inner.matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s}]+))/g)) {
-    out[m[1]!] = m[2] ?? m[3] ?? m[4] ?? "";
+    out[m[1]!] = unattr(m[2] ?? m[3] ?? m[4] ?? "");
   }
   return out;
 }
@@ -105,23 +114,41 @@ function bare(line: string): string {
 
 // ——— re-serialisers (only used for blocks that proved round-trip safe) ———
 
+/**
+ * Escapes a directive attribute value.
+ *
+ * A raw `"` closes the attribute early and a raw `}` closes the whole directive,
+ * so a video title containing either used to corrupt the block — on reload it
+ * was no longer recognised as a video at all. Backslash escaping does NOT work
+ * in remark-directive; character references do, and they decode back to the
+ * original text when the directive is parsed.
+ */
+function attr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/\{/g, "&#123;")
+    .replace(/\}/g, "&#125;")
+    .replace(/\r?\n/g, " ");
+}
+
 export function renderBlock(block: Block): string {
   // `eol` reproduces the block's own trailing terminator (see the field docs).
   const end = block.eol === "" ? "" : block.eol;
   switch (block.kind) {
     case "callout":
-      return `:::callout{type="${block.variant}"}\n${block.body}\n:::${end}`;
+      return `:::callout{type="${attr(block.variant)}"}\n${block.body}\n:::${end}`;
     case "video":
       // Omit `title` when empty: the importer emitted `{url="…"}` alone for
       // several NLP lessons, and always writing a title would fail their
       // round-trip and demote those blocks to raw text.
       return block.title
-        ? `:::video{url="${block.url}" title="${block.title}"}\n:::${end}`
-        : `:::video{url="${block.url}"}\n:::${end}`;
+        ? `:::video{url="${attr(block.url)}" title="${attr(block.title)}"}\n:::${end}`
+        : `:::video{url="${attr(block.url)}"}\n:::${end}`;
     case "practice":
       return `:::practice\n${block.body}\n:::${end}`;
     case "mock":
-      return `:::mock{type="${block.variant}"}\n:::${end}`;
+      return `:::mock{type="${attr(block.variant)}"}\n:::${end}`;
     case "code":
       return `\`\`\`${block.lang}\n${block.body}\n\`\`\`${end}`;
     case "math":
@@ -310,7 +337,17 @@ export function parse(markdown: string): Block[] {
 
 /** Emits raw for untouched blocks and re-renders only what changed. */
 export function serialize(blocks: Block[]): string {
-  return blocks.map((b) => (b.dirty ? renderBlock(b) : b.raw)).join("");
+  const chunks = blocks.map((b) => (b.dirty ? renderBlock(b) : b.raw));
+  // Guard the seam. A block that sat at EOF has `eol: ""`, so appending after it
+  // — or moving it up — used to glue the next block's opening fence onto its last
+  // line (`:::Абзац.`). Only the join is touched: a chunk that already ends in a
+  // newline, and the final chunk, are left exactly as they were, so the
+  // byte-fidelity contract still holds for an untouched document.
+  return chunks
+    .map((chunk, index) =>
+      chunk !== "" && index < chunks.length - 1 && !/\n$/.test(chunk) ? `${chunk}\n\n` : chunk,
+    )
+    .join("");
 }
 
 /** Marks a block dirty after an edit, refreshing its raw from the fields. */

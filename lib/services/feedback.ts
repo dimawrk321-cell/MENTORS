@@ -1,5 +1,6 @@
 import { Prisma, type FeedbackVerdict, type MockType, type PrismaClient } from "@prisma/client";
 import type { Db } from "@/lib/db";
+import { stripMarkdown } from "@/lib/utils/text";
 import { emitEvent } from "@/lib/services/events";
 import { notify } from "@/lib/services/notifications";
 
@@ -308,7 +309,8 @@ export async function getPublishedFeedback(
     }),
     questionMarks: marks.map((m) => ({
       questionId: m.questionId,
-      textMd: m.question.textMd,
+      // One truncated line — strip the markup rather than render it (audit 13.6).
+      textMd: stripMarkdown(m.question.textMd, 120),
       mark: m.mark,
     })),
   };

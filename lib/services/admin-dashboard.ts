@@ -104,6 +104,7 @@ export interface OpenReport {
   id: string;
   type: string;
   authorName: string;
+  authorEmail: string;
   target: string;
   // null when the report targets neither a lesson nor a question (general report):
   // the row is then rendered as plain text, not a dead «#» link (spec 12.1/A2).
@@ -194,14 +195,15 @@ export async function computeRedFlags(db: Db, now: Date): Promise<RedFlags> {
           id: true,
           type: true,
           createdAt: true,
-          user: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true, email: true } },
         },
         orderBy: { createdAt: "desc" },
       })
       .then((flags) =>
         flags.map((f) => ({
           id: f.id,
-          label: f.user.name,
+          // A student can be active with an empty name (onboarding abandoned).
+          label: f.user.name || f.user.email,
           href: `/admin/students/${f.user.id}`,
           meta: f.type,
         })),
@@ -260,7 +262,7 @@ export async function computeRedFlags(db: Db, now: Date): Promise<RedFlags> {
           id: true,
           type: true,
           text: true,
-          user: { select: { name: true } },
+          user: { select: { name: true, email: true } },
           lesson: { select: { id: true, title: true } },
           question: { select: { id: true } },
         },
@@ -271,6 +273,7 @@ export async function computeRedFlags(db: Db, now: Date): Promise<RedFlags> {
           id: r.id,
           type: r.type,
           authorName: r.user.name,
+          authorEmail: r.user.email,
           text: r.text,
           target: r.lesson ? r.lesson.title : r.question ? "Вопрос" : "—",
           href: r.lesson

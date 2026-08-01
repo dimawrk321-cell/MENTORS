@@ -8,7 +8,7 @@ export default function QuestionLoading() {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
       <Skeleton className="rounded-pill h-6 w-24" />
-      <div className="rounded-card border-border bg-surface flex min-h-[300px] flex-col gap-4 border p-6">
+      <div className="rounded-card border-border bg-surface-1 flex min-h-[300px] flex-col gap-4 border p-6">
         <div className="flex flex-wrap items-center gap-1.5">
           <Skeleton className="rounded-pill h-6 w-32" />
           <Skeleton className="rounded-pill h-6 w-20" />

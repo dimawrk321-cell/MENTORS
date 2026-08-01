@@ -117,7 +117,14 @@ function CatalogRow({ question, inSrs }: { question: CatalogGroupQuestion; inSrs
                 dangerouslySetInnerHTML={{ __html: state.questionHtml }}
               />
             )}
-            <div dangerouslySetInnerHTML={{ __html: state.answerHtml }} />
+            {/* Injected HTML comes from renderMarkdownHtml, which has neither
+                Shiki nor the TableWrap mapping the lesson pipeline uses — so wide
+                code and tables would be clipped by the details' overflow-hidden.
+                Scroll them here (audit 13.6). */}
+            <div
+              className="[&_pre]:rounded-control [&_pre]:border-border [&_pre]:bg-surface-2 [&_pre]:overflow-x-auto [&_pre]:border [&_pre]:p-3 [&_table]:block [&_table]:overflow-x-auto"
+              dangerouslySetInnerHTML={{ __html: state.answerHtml }}
+            />
             {question.lessonId && (
               <Link
                 href={`/lessons/${question.lessonId}`}

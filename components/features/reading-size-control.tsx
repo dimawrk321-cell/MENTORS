@@ -19,7 +19,11 @@ const SIZES: { key: Size; label: string }[] = [
 ];
 
 function applyToProse(size: Size) {
-  document.querySelector<HTMLElement>(".lesson-prose")?.setAttribute("data-reading-size", size);
+  // The whole reading column carries the attribute (lessons AND guides), so a
+  // change reaches the article, the key questions and the quiz together.
+  for (const el of document.querySelectorAll<HTMLElement>("[data-reading-size]")) {
+    el.setAttribute("data-reading-size", size);
+  }
 }
 
 export function ReadingSizeControl({ initial }: { initial: Size }) {

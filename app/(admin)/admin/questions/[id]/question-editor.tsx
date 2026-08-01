@@ -212,7 +212,7 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
         </div>
       </div>
 
-      <div className="grid [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))] items-start gap-4">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         {/* Левая колонка — поля */}
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 sm:grid-cols-2">

@@ -19,6 +19,8 @@ import {
   unblockTeamMemberAction,
 } from "@/lib/actions/team";
 import { ResetMemberPasswordDialog } from "./reset-member-password-dialog";
+import { NATIVE_FIELD_CLASS } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils/cn";
 
 export interface TeamMemberView {
   id: string;
@@ -39,8 +41,7 @@ const ROLE_LABEL: Record<string, string> = {
   owner: "Владелец",
 };
 
-const fieldClass =
-  "rounded-control border-border text-text-1 ease-app hover:border-border-strong h-9 w-full max-w-[200px] border bg-transparent px-3 text-[14px] transition-colors duration-150";
+const fieldClass = cn(NATIVE_FIELD_CLASS, "w-full max-w-[200px]");
 
 function Avatar({ color, label }: { color: number; label: string }) {
   return (
