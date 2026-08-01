@@ -50,3 +50,6 @@ coverage
 /fonts/
 /uploads/
 /Дизайн платформы MENTORS.zip
+
+# app-generated session thumbnail
+.thumbnail

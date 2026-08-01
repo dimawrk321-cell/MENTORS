@@ -1,4 +1,3 @@
-import type { Track } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import {
   addDays,
@@ -8,7 +7,7 @@ import {
   zonedDayUtcRange,
 } from "@/lib/utils/dates";
 import { getCourseView } from "@/lib/services/content";
-import { sortByRecommendedPath, trackCourseOrder } from "@/lib/services/course-order";
+import { isOpen, listCourseAccess } from "@/lib/services/course-access";
 
 // Дашборд-агрегаторы (spec 8.3): «Продолжить» (текущий/первый открытый урок) и
 // Heatmap активности. Курсы-прогресс дашборд берёт из listCoursesForStudent,
@@ -34,15 +33,16 @@ const publishedLessonFilter = {
 };
 
 /** Упорядоченные опубликованные курсы: сперва по треку, затем остальные (spec 8.3). */
-/** Recommended path (changelog 13.6) — shared with the /courses catalog so the
- *  hero's «next» course and the catalog's «Начни отсюда» badge always agree. */
-async function orderedCourses(db: Db, track: Track | null) {
-  const courses = await db.course.findMany({
-    where: { status: "published" },
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: { id: true, slug: true, order: true },
-  });
-  return sortByRecommendedPath(courses, await trackCourseOrder(db, track));
+/**
+ * Block 2v2: the hero walks the SAME chain the catalog does — one global order
+ * by `courses.order` — and only over courses the student may actually open, so
+ * «Продолжить» can never point into a locked course.
+ */
+async function orderedCourses(db: Db, userId: string) {
+  const access = await listCourseAccess(db, userId);
+  return access
+    .filter((row) => isOpen(row.state))
+    .map((row) => ({ id: row.courseId, slug: row.slug }));
 }
 
 type CourseViewResult = NonNullable<Awaited<ReturnType<typeof getCourseView>>>;
@@ -73,24 +73,26 @@ function buildTarget(
  * Hero «Продолжить» (spec 8.3): текущий урок — последний in_progress; иначе
  * первый открытый по порядку трека. null — начатого нет и открытых нет.
  */
-export async function getContinueTarget(
-  db: Db,
-  userId: string,
-  track: Track | null,
-): Promise<ContinueTarget | null> {
+export async function getContinueTarget(db: Db, userId: string): Promise<ContinueTarget | null> {
+  // Block 2v2: `track` no longer participates — the chain is global. Access is
+  // re-checked here too, so an admin lock applied mid-course immediately stops
+  // «Продолжить» from pointing into that course.
+  const openCourses = await orderedCourses(db, userId);
+  const openIds = new Set(openCourses.map((c) => c.id));
+
   const inProgress = await db.lessonProgress.findFirst({
     where: { userId, status: "in_progress", lesson: publishedLessonFilter },
     orderBy: { updatedAt: "desc" },
     include: { lesson: { include: { module: { include: { course: true } } } } },
   });
-  if (inProgress) {
+  if (inProgress && openIds.has(inProgress.lesson.module.course.id)) {
     const view = await getCourseView(db, inProgress.lesson.module.course.slug, userId);
     const target = view && buildTarget("continue", view, inProgress.lessonId);
     if (target) return target;
   }
 
-  // Первый открытый (unlocked, не завершённый) урок по треку.
-  for (const course of await orderedCourses(db, track)) {
+  // Первый открытый (unlocked, не завершённый) урок по цепи.
+  for (const course of openCourses) {
     const view = await getCourseView(db, course.slug, userId);
     if (view?.state.nextLessonId) {
       const target = buildTarget("start", view, view.state.nextLessonId);

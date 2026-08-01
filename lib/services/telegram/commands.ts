@@ -133,7 +133,7 @@ export async function buildTodayCard(
     getTodayXp(db, userId, now, user.timezone),
     getSrsQueue(db, { userId, now }),
     getActiveBooking(db, userId, now),
-    getContinueTarget(db, userId, user.track),
+    getContinueTarget(db, userId),
   ]);
 
   const streakLine =
@@ -238,7 +238,7 @@ async function buildMock(db: PrismaClient, user: CommandUser, now: Date): Promis
 }
 
 async function buildProgress(db: PrismaClient, user: CommandUser): Promise<OutgoingMessage> {
-  const cont = await getContinueTarget(db, user.id, user.track);
+  const cont = await getContinueTarget(db, user.id);
   if (!cont) {
     return {
       text: messageBlock("Прогресс", ["Пока нет начатых уроков — начни первый на платформе."]),

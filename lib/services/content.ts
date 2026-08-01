@@ -9,6 +9,13 @@ import {
 } from "@/lib/services/course-order";
 import { addSrsCardsForLessonCompletion } from "@/lib/services/srs";
 import {
+  isCourseComplete,
+  isOpen,
+  listCourseAccess,
+  unlockNextAfter,
+} from "@/lib/services/course-access";
+import { notify } from "@/lib/services/notifications";
+import {
   getModuleTestStates,
   makeModuleTestHook,
   type ModuleTestState,
@@ -202,9 +209,13 @@ export async function listCoursesForStudent(db: Db, userId: string, track: Track
     include: { modules: publishedModulesArg },
   });
 
-  // Recommended path (changelog 13.6): welcome first, then track, then order —
-  // the same helper the dashboard hero uses, so the two never disagree.
-  const ordered = sortByRecommendedPath(courses, await trackCourseOrder(db, track));
+  // Block 2v2: ONE global chain by `order` — tracks no longer reorder anything
+  // (they stayed a label). Access state rides along so the catalog can draw locks.
+  const access = await listCourseAccess(db, userId);
+  const accessByCourse = new Map(access.map((row) => [row.courseId, row]));
+  const ordered = [...courses].sort(
+    (a, b) => a.order - b.order || a.createdAt.getTime() - b.createdAt.getTime(),
+  );
 
   const allLessonIds = ordered.flatMap((course) =>
     course.modules.flatMap((module) => module.lessons.map((lesson) => lesson.id)),
@@ -214,11 +225,13 @@ export async function listCoursesForStudent(db: Db, userId: string, track: Track
   const testStates = await getModuleTestStates(db, userId, allModuleIds);
   const testHook = makeModuleTestHook(testStates);
 
-  // markRecommendedPath adds isCompleted (all required lessons done) and isNext
-  // (first not-yet-complete course) — badges only, no gating.
-  return markRecommendedPath(
+  // markRecommendedPath keeps «Начни отсюда» and the completed check ON TOP of
+  // the chain (block 2v2.6): «next» is the first OPEN course still unfinished,
+  // so it never points at a locked card.
+  const rows = markRecommendedPath(
     ordered.map((course) => {
       const state = computeCourseState(course.gating, course.modules, progress, testHook);
+      const accessRow = accessByCourse.get(course.id);
       return {
         id: course.id,
         slug: course.slug,
@@ -231,9 +244,19 @@ export async function listCoursesForStudent(db: Db, userId: string, track: Track
           state.totalRequired === 0
             ? 0
             : Math.round((state.completedRequired / state.totalRequired) * 100),
+        accessState: accessRow?.state ?? "locked_chain",
+        unlocksAfter: accessRow?.unlocksAfter ?? null,
+        locked: !isOpen(accessRow?.state ?? "locked_chain"),
       };
     }),
   );
+  // A locked course must never be the «Начни отсюда» target.
+  let nextTaken = false;
+  return rows.map((row) => {
+    const isNext = !row.locked && !row.isCompleted && !nextTaken;
+    if (isNext) nextTaken = true;
+    return { ...row, isNext };
+  });
 }
 
 export async function getCourseView(db: Db, slug: string, userId: string) {
@@ -408,6 +431,8 @@ export type CompleteLessonResult =
       ok: true;
       nextLessonId: string | null;
       courseSlug: string;
+      /** Название курса, который цепь открыла этим завершением (блок 2v2). */
+      unlockedCourseTitle: string | null;
       /** Геймификация завершения — для ритуалов/тостов на странице урока (spec 5.4). */
       xpAwarded: number;
       leveledUpTo: number | null;
@@ -469,8 +494,39 @@ export async function completeLesson(
 
   // Recompute after the write — the completion may have opened the next slot.
   const courseView = await getCourseView(db, view.course.slug, input.userId);
+
+  // Block 2v2: finishing a course opens the next link of the chain. A module is
+  // `closed` only when its required lessons AND its module test are done, so
+  // «every module closed» is exactly the spec's «все обязательные уроки +
+  // модульные тесты». unlockNextAfter is idempotent, so replays are harmless.
+  let unlockedCourseTitle: string | null = null;
+  if (courseView && isCourseComplete(courseView.state.modules)) {
+    const opened = await unlockNextAfter(db, {
+      userId: input.userId,
+      completedCourseId: view.course.id,
+      now,
+    });
+    if (opened) {
+      unlockedCourseTitle = opened.title;
+      const next = await db.course.findUnique({
+        where: { id: opened.id },
+        select: { slug: true },
+      });
+      if (next) {
+        await notify(
+          db,
+          input.userId,
+          "course_unlocked",
+          { courseSlug: next.slug, courseTitle: opened.title },
+          { now },
+        );
+      }
+    }
+  }
+
   return {
     ok: true,
+    unlockedCourseTitle,
     nextLessonId: courseView?.state.nextLessonId ?? null,
     courseSlug: view.course.slug,
     xpAwarded: gamification.xpAwarded,

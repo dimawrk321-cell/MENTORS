@@ -69,6 +69,8 @@ export const NOTIFICATION_TYPES = {
   level_title: { inapp: ALWAYS_ON, email: OFF, telegram: OFF },
   lesson_new: { inapp: ON_TOGGLEABLE, email: OFF, telegram: OFF },
   lesson_updated: { inapp: ON_TOGGLEABLE, email: OFF, telegram: OFF },
+  // Block 2v2: the chain opened the next course.
+  course_unlocked: { inapp: ALWAYS_ON, email: OFF, telegram: ON_TOGGLEABLE },
   access_14d: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
   access_3d: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
   access_0d: { inapp: ALWAYS_ON, email: ALWAYS_ON, telegram: ALWAYS_ON },
@@ -126,6 +128,7 @@ export interface NotifyPayloads {
   level_title: { level: number; title: string };
   lesson_new: { lessonId: string; lessonTitle: string; courseTitle: string };
   lesson_updated: { lessonId: string; lessonTitle: string };
+  course_unlocked: { courseSlug: string; courseTitle: string };
   access_14d: { untilText: string; contact: string };
   access_3d: { untilText: string; contact: string };
   access_0d: { untilText: string; contact: string };
@@ -280,6 +283,14 @@ export function renderNotification<T extends NotificationType>(
         title: "Урок обновлён",
         body: `«${p.lessonTitle}» — материал дополнен, загляни.`,
         url: `/lessons/${p.lessonId}`,
+      };
+    }
+    case "course_unlocked": {
+      const p = payload as NotifyPayloads["course_unlocked"];
+      return {
+        title: `Открыт курс «${p.courseTitle}»`,
+        body: "Предыдущий курс пройден — следующий уже ждёт.",
+        url: `/courses/${p.courseSlug}`,
       };
     }
     case "access_14d": {
@@ -570,6 +581,10 @@ const MATRIX_META: Record<string, { label: string; description: string }> = {
     label: "Обновления уроков",
     description: "Когда обновляется урок, который ты уже прошёл.",
   },
+  course_unlocked: {
+    label: "Открытие курса",
+    description: "Когда пройден предыдущий курс и открывается следующий.",
+  },
   mock_24h: { label: "Напоминание о моке за 24 часа", description: "За сутки до мок-интервью." },
   mock_1h: { label: "Напоминание о моке за час", description: "За час до мок-интервью." },
   streak_risk: {
@@ -583,6 +598,7 @@ export const MATRIX_ORDER: NotificationType[] = [
   "digest",
   "lesson_new",
   "lesson_updated",
+  "course_unlocked",
   "mock_24h",
   "mock_1h",
   "streak_risk",

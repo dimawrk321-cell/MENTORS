@@ -158,6 +158,7 @@ model User {
   auditEntries         AuditLog[]          @relation("AuditActor")
   analyticsEvents      AnalyticsEvent[]
   lessonProgress       LessonProgress[]
+  courseAccess         CourseAccess[]
   contentReports       ContentReport[]     @relation("ReportAuthor")
   resolvedReports      ContentReport[]     @relation("ReportResolvedBy")
   testAttempts         TestAttempt[]
@@ -442,8 +443,38 @@ model Course {
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
   modules     Module[]
+  access      CourseAccess[]
 
   @@map("courses")
+}
+
+/**
+ * Кто чей курс открыл (changelog 13.6, блок 2v2). Курсы идут единой цепью по
+ * `courses.order`; отсутствие строки = курс заперт. Приоритет разрешения:
+ * locked_by_admin → unlocked_at → welcome (всегда открыт) → заперт.
+ */
+model CourseAccess {
+  id            String              @id @default(cuid())
+  userId        String              @map("user_id")
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId      String              @map("course_id")
+  course        Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  unlockedAt    DateTime?           @map("unlocked_at")
+  /** Кто открыл: цепь (system) или админ вручную (admin). */
+  unlockedBy    CourseUnlockSource? @map("unlocked_by")
+  /** Админский замок — сильнее цепи: курс заперт, даже если предыдущий пройден. */
+  lockedByAdmin Boolean             @default(false) @map("locked_by_admin")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@map("course_access")
+}
+
+enum CourseUnlockSource {
+  system
+  admin
 }
 
 model Module {

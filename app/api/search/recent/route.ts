@@ -29,7 +29,7 @@ export async function GET() {
   }
 
   const [target, recent] = await Promise.all([
-    getContinueTarget(prisma, auth.user.id, auth.user.track),
+    getContinueTarget(prisma, auth.user.id),
     getRecentItems(prisma, {
       userId: auth.user.id,
       libraryEnabled: auth.user.libraryEnabled,
