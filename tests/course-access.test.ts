@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createTestUser, resetDb, testDb } from "./helpers/db";
 import {
+  adminSetCourseAccess,
   canOpenCourse,
-  ensureInitialAccess,
   isCourseComplete,
   listCourseAccess,
   setAdminLock,
@@ -175,32 +175,130 @@ describe("course chain access", () => {
     expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(true);
   });
 
-  it("ensureInitialAccess is idempotent and only touches welcome", async () => {
+  it("a newcomer needs no rows at all — welcome is open by default", async () => {
     await makeChain();
     const user = await makeStudent();
-    await ensureInitialAccess(testDb as never, user.id, NOW);
-    await ensureInitialAccess(testDb as never, user.id, NOW);
+    expect(await testDb.courseAccess.count({ where: { userId: user.id } })).toBe(0);
+    const rows = await listCourseAccess(testDb as never, user.id);
+    expect(rows[0]!.state).toBe("open_welcome");
+  });
+});
 
-    const rows = await testDb.courseAccess.findMany({ where: { userId: user.id } });
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.unlockedBy).toBe("system");
+describe("admin handles (block 2v2.4)", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  async function makeAdmin() {
+    return createTestUser({ email: `chain-admin@test.local`, role: "owner" });
+  }
+
+  it("«открыть досрочно» opens the course and writes an audit entry", async () => {
+    const { classic } = await makeChain();
+    const user = await makeStudent();
+    const admin = await makeAdmin();
+
+    const res = await adminSetCourseAccess(testDb as never, {
+      actorId: admin.id,
+      userId: user.id,
+      courseId: classic.id,
+      action: "unlock",
+      now: NOW,
+    });
+    expect(res).toEqual({ ok: true, state: "open_admin" });
+
+    const audit = await testDb.auditLog.findMany({ where: { entityId: user.id } });
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.action).toBe("user.course_access_unlock");
+    expect(audit[0]!.actorId).toBe(admin.id);
+  });
+
+  it("«вернуть в цепь» after an early open re-locks the course", async () => {
+    const { classic } = await makeChain();
+    const user = await makeStudent();
+    const admin = await makeAdmin();
+
+    await adminSetCourseAccess(testDb as never, {
+      actorId: admin.id,
+      userId: user.id,
+      courseId: classic.id,
+      action: "unlock",
+      now: NOW,
+    });
+    const res = await adminSetCourseAccess(testDb as never, {
+      actorId: admin.id,
+      userId: user.id,
+      courseId: classic.id,
+      action: "unlock_reset",
+    });
+    expect(res).toEqual({ ok: true, state: "locked_chain" });
+    expect(await canOpenCourse(testDb as never, user.id, classic.id)).toBe(false);
+  });
+
+  it("lifting an admin lock does NOT erase a course the student earned", async () => {
+    const { welcome, python } = await makeChain();
+    const user = await makeStudent();
+    const admin = await makeAdmin();
+
+    // Earned by finishing welcome…
+    await unlockNextAfter(testDb as never, {
+      userId: user.id,
+      completedCourseId: welcome.id,
+      now: NOW,
+    });
+    // …then locked and unlocked by an admin.
+    await adminSetCourseAccess(testDb as never, {
+      actorId: admin.id,
+      userId: user.id,
+      courseId: python.id,
+      action: "lock",
+    });
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(false);
+
+    const res = await adminSetCourseAccess(testDb as never, {
+      actorId: admin.id,
+      userId: user.id,
+      courseId: python.id,
+      action: "unlock_reset",
+    });
+    expect(res).toEqual({ ok: true, state: "open_system" });
+  });
+
+  it("refuses an unknown student or course", async () => {
+    const { python } = await makeChain();
+    const admin = await makeAdmin();
+    expect(
+      await adminSetCourseAccess(testDb as never, {
+        actorId: admin.id,
+        userId: "nope",
+        courseId: python.id,
+        action: "lock",
+      }),
+    ).toEqual({ ok: false, code: "not_found" });
   });
 });
 
 describe("isCourseComplete", () => {
   it("needs every module closed (lessons AND module test)", () => {
-    expect(isCourseComplete(new Map([["m1", { closed: true }]]))).toBe(true);
+    expect(isCourseComplete(new Map([["m1", { closed: true }]]), 3)).toBe(true);
     expect(
       isCourseComplete(
         new Map([
           ["m1", { closed: true }],
           ["m2", { closed: false }],
         ]),
+        3,
       ),
     ).toBe(false);
   });
 
   it("an empty course is not complete", () => {
-    expect(isCourseComplete(new Map())).toBe(false);
+    expect(isCourseComplete(new Map(), 0)).toBe(false);
+  });
+
+  it("a course with published-but-empty modules is not complete", () => {
+    // Every module is trivially «closed», but there was nothing to finish — this
+    // must not cascade the chain open (caught on the local stand dry-run).
+    expect(isCourseComplete(new Map([["m1", { closed: true }]]), 0)).toBe(false);
   });
 });

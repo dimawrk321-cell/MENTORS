@@ -2,11 +2,7 @@ import type { CourseGating, PrismaClient, Track } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { emitEvent, type EarnedAchievement, type EmitResult } from "@/lib/services/events";
 import { writeAudit } from "@/lib/services/audit";
-import {
-  markRecommendedPath,
-  sortByRecommendedPath,
-  trackCourseOrder,
-} from "@/lib/services/course-order";
+import { markRecommendedPath } from "@/lib/services/course-order";
 import { addSrsCardsForLessonCompletion } from "@/lib/services/srs";
 import {
   isCourseComplete,
@@ -201,8 +197,8 @@ async function getProgressMap(db: Db, userId: string, lessonIds: string[]) {
   );
 }
 
-/** Track-aware course ordering (spec 8.3): track courses first, then the rest. */
-export async function listCoursesForStudent(db: Db, userId: string, track: Track | null) {
+/** The catalog as the student sees it: chain order + per-course access state. */
+export async function listCoursesForStudent(db: Db, userId: string) {
   const courses = await db.course.findMany({
     where: { status: "published" },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -500,7 +496,7 @@ export async function completeLesson(
   // «every module closed» is exactly the spec's «все обязательные уроки +
   // модульные тесты». unlockNextAfter is idempotent, so replays are harmless.
   let unlockedCourseTitle: string | null = null;
-  if (courseView && isCourseComplete(courseView.state.modules)) {
+  if (courseView && isCourseComplete(courseView.state.modules, courseView.state.totalRequired)) {
     const opened = await unlockNextAfter(db, {
       userId: input.userId,
       completedCourseId: view.course.id,

@@ -471,6 +471,13 @@ export const sectionAccessSchema = z.object({
   enabled: z.boolean(),
 });
 
+/** Admin course-chain handles (block 2v2.4): open early / lock / back to chain. */
+export const courseAccessSchema = z.object({
+  userId: z.string().min(1),
+  courseId: z.string().min(1),
+  action: z.enum(["unlock", "lock", "unlock_reset"]),
+});
+
 /** Email verification code (spec 12.1/C8): exactly 6 digits. */
 export const verifyEmailSchema = z.object({
   code: z

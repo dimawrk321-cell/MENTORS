@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight, ChevronRight, Lock } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getLessonView } from "@/lib/services/content";
+import { canOpenCourse } from "@/lib/services/course-access";
 import { getKeyQuestionsForLesson, getQuizQuestionsForLesson } from "@/lib/services/questions";
 import { KeyQuestions } from "@/components/features/key-questions";
 import { QuizWidget } from "@/components/features/quiz/quiz-widget";
@@ -38,6 +39,12 @@ export default async function LessonPage({ params }: LessonPageProps) {
   const { id } = await params;
   const view = await getLessonView(prisma, id, user.id);
   if (!view) notFound();
+
+  // Block 2v2.3: the course chain gates the whole course, so its lessons are not
+  // reachable by URL either. In-course gating below is unchanged.
+  if (!(await canOpenCourse(prisma, user.id, view.course.id))) {
+    redirect(`/courses?locked=${encodeURIComponent(view.course.title)}`);
+  }
 
   // Locked lesson (strict gating) → «Урок откроется после …» (spec 8.3).
   if (!view.unlocked) {

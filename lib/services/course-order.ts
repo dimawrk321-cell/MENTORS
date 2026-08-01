@@ -1,41 +1,8 @@
-import type { Track } from "@prisma/client";
-import type { Db } from "@/lib/db";
-import { WELCOME_COURSE_SLUG } from "@/lib/services/welcome-course";
-
-// Recommended course path (changelog 13.6). ONE ordering used by both the catalog
-// (/courses) and the dashboard hero, so the «next» course can never disagree
-// between the two screens:
-//   1. the welcome course always first — for every student, track or no track;
-//   2. then the student's track order (tracks.course_ids);
-//   3. then the course's own `order`.
-// This is a navigation hint only: there is NO hard gating between courses
-// (tracks overlap, the student may go out of order). In-course gating
-// (strict|recommended|free, spec 7.3) is untouched.
-
-/** Sorts already-fetched courses in place-safe fashion; needs only id/slug/order. */
-export function sortByRecommendedPath<T extends { id: string; slug: string; order: number }>(
-  courses: T[],
-  trackOrder: string[],
-): T[] {
-  const rank = new Map(trackOrder.map((id, index) => [id, index]));
-  return [...courses].sort((a, b) => {
-    // Welcome outranks everything, including the track order.
-    const wa = a.slug === WELCOME_COURSE_SLUG ? 0 : 1;
-    const wb = b.slug === WELCOME_COURSE_SLUG ? 0 : 1;
-    if (wa !== wb) return wa - wb;
-    const ra = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-    const rb = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-    if (ra !== rb) return ra - rb;
-    return a.order - b.order;
-  });
-}
-
-/** Reads the track's course order (empty when the student has no track yet). */
-export async function trackCourseOrder(db: Db, track: Track | null): Promise<string[]> {
-  if (!track) return [];
-  const trackDef = await db.trackDef.findUnique({ where: { key: track } });
-  return (trackDef?.courseIds as string[] | undefined) ?? [];
-}
+// Course path badges (changelog 13.6). The soft ordering that used to live here
+// (welcome → track order → own order) was REPLACED by the hard chain in block
+// 2v2: courses are now ordered by one global `courses.order` and gated by
+// course_access. What survives is the «Начни отсюда» / «пройден» marking, which
+// rides on top of the chain (2v2.6) — see lib/services/course-access.ts.
 
 /**
  * Marks the recommended next step: the FIRST course in the given (already

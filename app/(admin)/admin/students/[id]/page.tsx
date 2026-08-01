@@ -16,7 +16,9 @@ import {
 } from "@/lib/services/admin-student";
 import { daysUntil, formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
 import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
+import { listCourseAccess } from "@/lib/services/course-access";
 import { StudentTabs } from "./student-tabs";
+import { CourseAccessControls } from "./course-access-controls";
 import { BackButton } from "@/components/ui/back-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,14 +67,16 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
   const canManage = hasPermission(viewer, "students.manage");
   const now = new Date();
   // Diagnostic tabs (spec 8.5): progress, tests, reviews, mocks, notifications, events.
-  const [notifications, progress, testAttempts, review, mocks, events] = await Promise.all([
-    getRecentSentNotifications(prisma, user.id, 30),
-    getStudentProgress(prisma, user.id),
-    getStudentTestAttempts(prisma, user.id),
-    getStudentReviewSummary(prisma, user.id, now),
-    getStudentMockHistory(prisma, user.id),
-    getStudentEvents(prisma, user.id, 50),
-  ]);
+  const [notifications, progress, testAttempts, review, mocks, events, courseAccess] =
+    await Promise.all([
+      getRecentSentNotifications(prisma, user.id, 30),
+      getStudentProgress(prisma, user.id),
+      getStudentTestAttempts(prisma, user.id),
+      getStudentReviewSummary(prisma, user.id, now),
+      getStudentMockHistory(prisma, user.id),
+      getStudentEvents(prisma, user.id, 50),
+      listCourseAccess(prisma, user.id),
+    ]);
   const daysLeft = user.accessUntil ? daysUntil(user.accessUntil, now) : null;
 
   return (
@@ -278,6 +282,29 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
           </CardContent>
         </Card>
       )}
+
+      {/* Курсы (block 2v2.4): состояние цепи для этого ученика + ручки админа. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Курсы</CardTitle>
+          <CardDescription>
+            Курсы открываются по цепи: следующий — после завершения предыдущего. Блокировка сильнее
+            цепи.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CourseAccessControls
+            userId={user.id}
+            courses={courseAccess.map((row) => ({
+              courseId: row.courseId,
+              title: row.title,
+              state: row.state,
+              unlocksAfter: row.unlocksAfter,
+            }))}
+            canManage={canManage && user.status !== "invited"}
+          />
+        </CardContent>
+      </Card>
 
       {/* Вкладки диагностики (spec 8.5): прогресс/тесты/повторения/моки/уведомления/события.
           Обёрнуты в карточку-секцию (прототип «Карточка ученика»). */}

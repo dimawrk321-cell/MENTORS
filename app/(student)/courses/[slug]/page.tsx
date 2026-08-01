@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { FileText } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getCourseView } from "@/lib/services/content";
+import { canOpenCourse } from "@/lib/services/course-access";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -35,6 +36,12 @@ export default async function CoursePage({ params }: CoursePageProps) {
   const { slug } = await params;
   const view = await getCourseView(prisma, slug, user.id);
   if (!view) notFound();
+
+  // Block 2v2.3: a locked course is not reachable by URL either — back to the
+  // catalog with a toast (notFound would lie: the course exists, it is shut).
+  if (!(await canOpenCourse(prisma, user.id, view.course.id))) {
+    redirect(`/courses?locked=${encodeURIComponent(view.course.title)}`);
+  }
 
   const { course, state } = view;
   const progressPct =

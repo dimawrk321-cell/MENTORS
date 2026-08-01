@@ -25,6 +25,7 @@ import {
   validateSessionToken,
 } from "@/lib/services/sessions";
 import { setSectionAccess } from "@/lib/services/library";
+import { adminSetCourseAccess, type CourseAccessState } from "@/lib/services/course-access";
 import { isApiRateLimited } from "@/lib/utils/rate-limit";
 import {
   clearedCookieOptions,
@@ -44,6 +45,7 @@ import {
   type ActionResult,
 } from "@/lib/auth/action-helpers";
 import {
+  courseAccessSchema,
   emailSchema,
   extendAccessSchema,
   issueCredentialsSchema,
@@ -330,6 +332,27 @@ export async function setSectionAccessAction(input: {
     if (!res.ok) throw new ActionError(res.code, "Ученик не найден");
     revalidateStudent(parsed.userId);
     return undefined;
+  });
+}
+
+/** Admin handles on the course chain (block 2v2.4) — each writes an audit entry. */
+export async function setCourseAccessAction(input: {
+  userId: string;
+  courseId: string;
+  action: "unlock" | "lock" | "unlock_reset";
+}): Promise<ActionResult<{ state: CourseAccessState }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("students.manage");
+    const parsed = parseInput(courseAccessSchema, input);
+    const res = await adminSetCourseAccess(prisma, {
+      actorId: auth.user.id,
+      userId: parsed.userId,
+      courseId: parsed.courseId,
+      action: parsed.action,
+    });
+    if (!res.ok) throw new ActionError(res.code, "Ученик или курс не найден");
+    revalidateStudent(parsed.userId);
+    return { state: res.state };
   });
 }
 

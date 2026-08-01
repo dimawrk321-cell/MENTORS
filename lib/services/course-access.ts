@@ -1,5 +1,6 @@
 import type { Db } from "@/lib/db";
 import { WELCOME_COURSE_SLUG } from "@/lib/services/welcome-course";
+import { writeAudit } from "@/lib/services/audit";
 
 // Hard course chain (changelog 13.6, block 2v2). Courses open one after another
 // along a SINGLE global order (courses.order, edited in the content studio);
@@ -52,9 +53,16 @@ function resolve(
  * A course counts as finished when EVERY module is closed. `ModuleState.closed`
  * already means «all required lessons completed AND the module test passed»
  * (computeCourseState), which is exactly the chain's completion rule.
+ *
+ * `totalRequired === 0` is NOT completion: an empty or lessons-less course has
+ * nothing to finish, and treating it as done would cascade the chain open for
+ * everyone (same rule markRecommendedPath uses for the «пройден» tick).
  */
-export function isCourseComplete(modules: Map<string, { closed: boolean }>): boolean {
-  if (modules.size === 0) return false;
+export function isCourseComplete(
+  modules: Map<string, { closed: boolean }>,
+  totalRequired: number,
+): boolean {
+  if (modules.size === 0 || totalRequired === 0) return false;
   for (const state of modules.values()) if (!state.closed) return false;
   return true;
 }
@@ -165,23 +173,96 @@ export async function setAdminLock(
   });
 }
 
-/** Ensures a brand-new student has the welcome course row (spec: only welcome). */
-export async function ensureInitialAccess(
+// --- Admin handles (block 2v2.4) ---
+
+export type AdminCourseAccessAction = "unlock" | "lock" | "unlock_reset";
+
+/**
+ * The three admin controls in the student card, each audited (block 2v2.4):
+ *   • unlock       — open the course early (unlocked_by=admin, lifts a lock too);
+ *   • lock         — admin lock, stronger than the chain;
+ *   • unlock_reset — undo the admin's own decisions and hand the course back to
+ *     the chain. Deliberately NOT a row delete: a course the student EARNED
+ *     (unlocked_by=system) must stay open after an admin lock is lifted, so only
+ *     the admin's own marks are cleared.
+ * Returns the resulting state so the UI shows the truth instead of a guess.
+ * No bulk variant by owner's decision — one student at a time.
+ */
+export async function adminSetCourseAccess(
   db: Db,
-  userId: string,
-  now: Date = new Date(),
-): Promise<void> {
-  const welcome = await db.course.findUnique({
-    where: { slug: WELCOME_COURSE_SLUG },
-    select: { id: true },
+  input: {
+    actorId: string;
+    userId: string;
+    courseId: string;
+    action: AdminCourseAccessAction;
+    now?: Date;
+  },
+): Promise<{ ok: true; state: CourseAccessState } | { ok: false; code: "not_found" }> {
+  const [user, course] = await Promise.all([
+    db.user.findUnique({ where: { id: input.userId }, select: { id: true, role: true } }),
+    db.course.findUnique({ where: { id: input.courseId }, select: { id: true, slug: true } }),
+  ]);
+  if (!user || user.role !== "student" || !course) return { ok: false, code: "not_found" };
+
+  const snapshot = async () => {
+    const row = await db.courseAccess.findUnique({
+      where: { userId_courseId: { userId: input.userId, courseId: input.courseId } },
+      select: { unlockedAt: true, unlockedBy: true, lockedByAdmin: true },
+    });
+    return {
+      courseId: input.courseId,
+      unlockedAt: row?.unlockedAt?.toISOString() ?? null,
+      unlockedBy: row?.unlockedBy ?? null,
+      lockedByAdmin: row?.lockedByAdmin ?? false,
+    };
+  };
+  const before = await snapshot();
+
+  if (input.action === "lock") {
+    await setAdminLock(db, { userId: input.userId, courseId: input.courseId, locked: true });
+  } else if (input.action === "unlock") {
+    await unlockCourse(db, {
+      userId: input.userId,
+      courseId: input.courseId,
+      by: "admin",
+      now: input.now,
+      force: true,
+    });
+  } else {
+    const undoEarlyOpen = before.unlockedBy === "admin";
+    await db.courseAccess.updateMany({
+      where: { userId: input.userId, courseId: input.courseId },
+      data: {
+        lockedByAdmin: false,
+        // A system unlock is the student's own progress — keep it.
+        ...(undoEarlyOpen ? { unlockedAt: null, unlockedBy: null } : {}),
+      },
+    });
+  }
+
+  const after = await snapshot();
+  await writeAudit(db, {
+    actorId: input.actorId,
+    action: `user.course_access_${input.action}`,
+    entityType: "user",
+    entityId: input.userId,
+    before,
+    after,
   });
-  if (!welcome) return;
-  await db.courseAccess.upsert({
-    where: { userId_courseId: { userId, courseId: welcome.id } },
-    create: { userId, courseId: welcome.id, unlockedAt: now, unlockedBy: "system" },
-    update: {},
-  });
+  return {
+    ok: true,
+    state: resolve(course.slug, {
+      courseId: input.courseId,
+      unlockedAt: after.unlockedAt ? new Date(after.unlockedAt) : null,
+      lockedByAdmin: after.lockedByAdmin,
+      unlockedBy: after.unlockedBy,
+    }),
+  };
 }
+
+// No «initialise a new student» step exists on purpose: `resolve` already treats
+// a rowless welcome course as open, so a newcomer needs no rows at all and there
+// is nothing to backfill when a student is created.
 
 /**
  * Called after a course is completed: opens the next link in the chain.

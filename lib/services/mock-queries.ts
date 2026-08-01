@@ -367,7 +367,7 @@ export async function getRunScreenData(
 
   const [courses, pastMocks, lagging, mocksCompleted, marks, categories, questions] =
     await Promise.all([
-      listCoursesForStudent(db, booking.userId, booking.user.track),
+      listCoursesForStudent(db, booking.userId),
       db.booking.findMany({
         where: { userId: booking.userId, status: "completed", id: { not: booking.id } },
         include: {

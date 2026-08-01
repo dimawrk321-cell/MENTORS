@@ -95,7 +95,7 @@ export default async function DashboardPage() {
     getTodayXp(prisma, user.id, now, user.timezone),
     getContinueTarget(prisma, user.id),
     getSrsQueue(prisma, { userId: user.id, now }),
-    listCoursesForStudent(prisma, user.id, user.track),
+    listCoursesForStudent(prisma, user.id),
     getLaggingCategories(prisma, { userId: user.id, now }),
     loadActivityBar(user.id, user.timezone, todayStr),
     getActiveBooking(prisma, user.id, now),

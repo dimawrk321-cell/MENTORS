@@ -1005,22 +1005,29 @@ export function ContentTree({ courses }: { courses: TreeCourse[] }) {
           />
         </Card>
       ) : (
-        <SortableList
-          ids={courses.map((c) => c.id)}
-          onReorder={(orderedIds) =>
-            act(() => reorderContentAction({ scope: { kind: "courses" }, orderedIds }))
-          }
-        >
-          <div className="flex flex-col gap-3">
-            {courses.map((course) => (
-              <SortableRow key={course.id} id={course.id} className="flex items-start gap-1.5">
-                <Card className="min-w-0 flex-1 p-4">
-                  <CourseCard course={course} />
-                </Card>
-              </SortableRow>
-            ))}
-          </div>
-        </SortableList>
+        <>
+          {/* Block 2v2.2: this order IS the unlock chain now — worth saying out loud. */}
+          <p className="text-text-3 -mt-1 text-[13px]">
+            Порядок курсов — цепь доступа: следующий курс открывается ученику после завершения
+            предыдущего.
+          </p>
+          <SortableList
+            ids={courses.map((c) => c.id)}
+            onReorder={(orderedIds) =>
+              act(() => reorderContentAction({ scope: { kind: "courses" }, orderedIds }))
+            }
+          >
+            <div className="flex flex-col gap-3">
+              {courses.map((course) => (
+                <SortableRow key={course.id} id={course.id} className="flex items-start gap-1.5">
+                  <Card className="min-w-0 flex-1 p-4">
+                    <CourseCard course={course} />
+                  </Card>
+                </SortableRow>
+              ))}
+            </div>
+          </SortableList>
+        </>
       )}
 
       <TitleDialog

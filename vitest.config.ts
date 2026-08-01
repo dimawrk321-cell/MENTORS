@@ -16,9 +16,13 @@ export default defineConfig({
       LOG_LEVEL: "silent",
     },
   },
+  // Route-guard tests (course-chain-routes) call RSC page functions directly;
+  // tsconfig keeps jsx:"preserve" for Next, so esbuild needs the runtime here.
+  esbuild: { jsx: "automatic" },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "."),
-    },
+    alias: [
+      { find: /^.*\.css$/, replacement: path.resolve(__dirname, "tests/helpers/style-stub.ts") },
+      { find: /^@\//, replacement: path.resolve(__dirname, ".").replace(/\\/g, "/") + "/" },
+    ],
   },
 });
