@@ -172,6 +172,11 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
         <BackButton href="/admin/questions" label="Вопросы" className="w-auto" />
         <Badge>{QUESTION_TYPE_LABEL[question.type]}</Badge>
         <Badge>{question.source === "import" ? "импорт" : "создан вручную"}</Badge>
+        {/* The question text is the page title; visually it stays the 13px
+            line the design prescribes, structurally it is the h1. */}
+        <h1 className="text-text-1 max-w-[320px] truncate text-[13px] font-medium">
+          {form.textMd.split("\n")[0] || "Вопрос"}
+        </h1>
         {question.status === "published" ? (
           <Badge variant="success">опубликован</Badge>
         ) : (

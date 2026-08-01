@@ -184,7 +184,9 @@ export default async function DashboardPage() {
             Привет, {firstName}
           </h1>
           <div className="flex flex-wrap items-center gap-2">
-            <StreakBadge current={streak.current} atRisk={streak.atRisk} freezes={streak.freezes} />
+            {/* Freezes are stated exactly once, on the «Активность» card below,
+                which also owns the big streak number (audit 13.6). */}
+            <StreakBadge current={streak.current} atRisk={streak.atRisk} />
             <LevelBadge
               level={xp.level.level}
               progress={xp.level.progress}

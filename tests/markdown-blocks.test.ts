@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  canUseBlockEditor,
-  parse,
-  renderBlock,
-  serialize,
-  withEdit,
-  type Block,
-} from "@/lib/content/markdown-blocks";
+import { parse, renderBlock, serialize, withEdit, type Block } from "@/lib/content/markdown-blocks";
 import { SNIPPETS } from "@/lib/content/editor-snippets";
 
 // Walk 13.6 block 1. The invariant that matters: an untouched document must be
@@ -116,8 +109,16 @@ describe("parse/serialize byte fidelity", () => {
       expect(serialize(parse(doc.md))).toBe(doc.md);
     });
 
-    it(`canUseBlockEditor accepts it: ${doc.name}`, () => {
-      expect(canUseBlockEditor(doc.md)).toBe(true);
+    // The REAL guarantee, per block — this is what canUseBlockEditor was
+    // supposed to be and never was (it compared an identity `parse` already
+    // guarantees for any input, so it was always true and gated nothing).
+    // Every block that gets a VISUAL editor must reproduce its own source from
+    // its fields; anything else is demoted to a raw `prose` textarea.
+    it(`every visual block re-renders to its own source: ${doc.name}`, () => {
+      for (const block of parse(doc.md)) {
+        if (block.kind === "prose") continue;
+        expect(renderBlock(block), `${block.kind} block in ${doc.name}`).toBe(block.raw);
+      }
     });
   }
 
@@ -274,5 +275,50 @@ describe("audit fixes over the block core", () => {
   it("an untouched document still serialises byte-for-byte", () => {
     const md = "# Заголовок\n\nАбзац.\n\n```py\nx = 1\n```\n\nХвост без перевода";
     expect(serialize(parse(md))).toBe(md);
+  });
+});
+
+describe("byte fidelity is per-block, not per-document", () => {
+  // The two mechanisms the removed canUseBlockEditor rail was meant to provide.
+  const MIXED =
+    "# Заголовок\n\n" +
+    ':::callout{type="tip"}\nСовет.\n:::\n\n' +
+    "Обычный абзац.\n\n" +
+    "```python\nx = 1\n```\n";
+
+  it("an edit changes ONLY the edited block's bytes", () => {
+    const blocks = parse(MIXED);
+    const callout = blocks.find((b) => b.kind === "callout")!;
+    const edited = blocks.map((b) =>
+      b.id === callout.id ? withEdit(b, { body: "Новый совет." }) : b,
+    );
+    const out = serialize(edited);
+
+    expect(out).toContain("Новый совет.");
+    // Every other block is byte-identical, including the fence and the heading.
+    expect(out).toContain("# Заголовок\n");
+    expect(out).toContain("```python\nx = 1\n```\n");
+    expect(out).toContain("Обычный абзац.\n");
+  });
+
+  it("a construct that would be normalised is demoted, not rewritten", () => {
+    // A callout written with single quotes: the fields parse fine, but
+    // re-rendering would normalise them to double quotes and change the bytes.
+    // So it must NOT become a visual callout card — it stays raw text.
+    const md = ":::callout{type='tip'}\nСовет.\n:::\n";
+    const [block] = parse(md);
+    expect(block!.kind).toBe("prose");
+    expect(block!.body).toBe(md);
+    expect(serialize(parse(md))).toBe(md);
+  });
+
+  it("the dirty flag is what selects re-rendering", () => {
+    const blocks = parse(MIXED);
+    expect(blocks.every((b) => !b.dirty)).toBe(true);
+    expect(serialize(blocks)).toBe(MIXED);
+
+    const touched = withEdit(blocks[0]!, {});
+    expect(touched.dirty).toBe(true);
+    expect(touched.raw).toBe(renderBlock(touched));
   });
 });

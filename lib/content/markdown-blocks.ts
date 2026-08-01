@@ -357,16 +357,26 @@ export function withEdit(block: Block, patch: Partial<Block>): Block {
   return next;
 }
 
-/**
- * Document-level rail (walk 13.6): the block editor may only be used when the
- * segmentation is provably lossless for this exact document. Callers fall back
- * to the plain textarea when this returns false.
- */
-export function canUseBlockEditor(markdown: string): boolean {
-  try {
-    const blocks = parse(markdown);
-    return blocks.map((b) => b.raw).join("") === markdown;
-  } catch {
-    return false;
-  }
-}
+// ——— WHERE BYTE FIDELITY ACTUALLY LIVES ———
+//
+// There used to be a document-level rail here, `canUseBlockEditor(md)`, which
+// returned `parse(md).map(b => b.raw).join("") === md`. An audit showed it was a
+// tautology: `parse` GUARANTEES that identity for any input (see the contract on
+// `parse` above), so the predicate was always true and gated nothing. It was
+// removed rather than redefined — the guarantee it was meant to provide is
+// already enforced, more precisely, one block at a time:
+//
+//   1. PER-BLOCK PROOF. A block is only offered a visual editor when re-rendering
+//      its own parsed fields reproduces its source character for character —
+//      `renderBlock(block) === block.raw`. A block that fails is demoted to
+//      `prose` with `editable: false` and shown as a raw textarea. So a construct
+//      the segmentation does not fully understand is never rewritten from fields.
+//
+//   2. DIRTY FLAG. `serialize` emits `b.raw` verbatim for every block the mentor
+//      did not touch, and `renderBlock(b)` only for blocks marked `dirty` by
+//      `withEdit`. An untouched document therefore round-trips byte-for-byte no
+//      matter what it contains, and an edit can only ever change the bytes of the
+//      block that was edited (plus the newline seam, see `serialize`).
+//
+// Both are pinned by tests in tests/markdown-blocks.test.ts, including a sweep
+// over every real lesson and guide in the database.

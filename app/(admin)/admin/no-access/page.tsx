@@ -18,13 +18,20 @@ export default async function NoAccessPage() {
   await requireAdminZone();
 
   return (
-    <Card>
-      <EmptyState
-        icon={ShieldOff}
-        tone="warning"
-        title="Нет доступа к разделам"
-        description="У тебя пока нет прав ни на один раздел админки. Обратись к владельцу платформы."
-      />
-    </Card>
+    <>
+      {/* The page IS an empty state, and EmptyState renders an h3 by contract
+          («empty states sit inside page sections, never as the page title»).
+          A visually hidden h1 gives the document an outline without touching
+          the prototype's look. */}
+      <h1 className="sr-only">Нет доступа</h1>
+      <Card>
+        <EmptyState
+          icon={ShieldOff}
+          tone="warning"
+          title="Нет доступа к разделам"
+          description="У тебя пока нет прав ни на один раздел админки. Обратись к владельцу платформы."
+        />
+      </Card>
+    </>
   );
 }

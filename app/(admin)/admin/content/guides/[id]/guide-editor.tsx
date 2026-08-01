@@ -19,7 +19,6 @@ import { ActionButton } from "@/components/features/action-button";
 import { cn } from "@/lib/utils/cn";
 import { applySnippet, type SnippetDef } from "@/lib/utils/editor-insert";
 import { BlockEditor } from "@/components/features/block-editor";
-import { canUseBlockEditor } from "@/lib/content/markdown-blocks";
 import {
   deleteGuideAction,
   saveGuideContentAction,
@@ -126,8 +125,7 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
   const [previewVersion, setPreviewVersion] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   // Walk 13.6 rail 1 — see the lesson editor for the rationale.
-  const [blockCapable] = useState(() => canUseBlockEditor(guide.contentMd));
-  const [mode, setMode] = useState<"blocks" | "text">(blockCapable ? "blocks" : "text");
+  const [mode, setMode] = useState<"blocks" | "text">("blocks");
   const [meta, setMeta] = useState({
     title: guide.title,
     slug: guide.slug,
@@ -295,6 +293,10 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
         <span className="text-text-3 text-[13px]">
           · {GUIDE_SECTION_LABEL[guide.section] ?? guide.section}
         </span>
+        {/* Same rule as the lesson editor: the guide name is the page title. */}
+        <h1 className="text-text-1 max-w-[220px] truncate text-[13px] font-medium">
+          {guide.title}
+        </h1>
         <span className="text-text-3 ml-auto text-[12px] tabular-nums" aria-live="polite">
           {saveLabel} · {wordCount} сл.
         </span>
@@ -418,7 +420,6 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
             <button
               key={value}
               type="button"
-              disabled={value === "blocks" && !blockCapable}
               onClick={() => setMode(value)}
               className={cn(
                 "ease-app rounded-[8px] px-3 py-1 text-[12px] font-medium transition-colors duration-150 disabled:opacity-40",
@@ -429,12 +430,6 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
             </button>
           ))}
         </div>
-        {!blockCapable && (
-          <span className="text-text-3 text-[12px]">
-            Разметка этого гайда нестандартная — блочный режим отключён, чтобы не переписать её
-            автоматически.
-          </span>
-        )}
       </div>
 
       {/* Directive panel + inline marks — text mode only. */}

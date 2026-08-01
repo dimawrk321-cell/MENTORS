@@ -19,7 +19,6 @@ import { BackButton } from "@/components/ui/back-button";
 import { cn } from "@/lib/utils/cn";
 import { applySnippet, type SnippetDef } from "@/lib/utils/editor-insert";
 import { BlockEditor } from "@/components/features/block-editor";
-import { canUseBlockEditor } from "@/lib/content/markdown-blocks";
 import {
   saveLessonContentAction,
   setLessonStatusAction,
@@ -167,8 +166,7 @@ export function LessonEditor({
   // provably lossless for this exact document. Computed once from the stored
   // markdown; a document that fails opens in plain text mode instead of having
   // its bytes silently rewritten.
-  const [blockCapable] = useState(() => canUseBlockEditor(lesson.contentMd));
-  const [mode, setMode] = useState<"blocks" | "text">(blockCapable ? "blocks" : "text");
+  const [mode, setMode] = useState<"blocks" | "text">("blocks");
   const [meta, setMeta] = useState({
     title: lesson.title,
     slug: lesson.slug,
@@ -365,9 +363,10 @@ export function LessonEditor({
         <Crumb>{courseTitle}</Crumb>
         <Crumb>{moduleTitle}</Crumb>
         <ChevronRight size={13} strokeWidth={1.75} className="text-text-3" aria-hidden="true" />
-        <span className="text-text-1 max-w-[220px] truncate text-[13px] font-medium">
-          {meta.title}
-        </span>
+        {/* The page title IS the lesson name. Kept at the breadcrumb size the
+            design prescribes — only the element changes, so the screen has an
+            h1 instead of a section h2 being its largest heading. */}
+        <h1 className="text-text-1 max-w-[220px] truncate text-[13px] font-medium">{meta.title}</h1>
         <span className="text-text-3 ml-auto text-[12px] tabular-nums" aria-live="polite">
           {saveLabel} · {readingMinutes} мин · {wordCount} сл.
         </span>
@@ -482,16 +481,18 @@ export function LessonEditor({
       )}
 
       {/* Mode switch (walk 13.6). «Блоки» is the default: visual cards, no raw
-          `:::`/`$$`/fences. «Текст» keeps the markdown source available, and is
-          the FORCED mode for any document whose segmentation is not provably
-          lossless (blockCapable === false) — bytes are never rewritten silently. */}
+          `:::`/`$$`/fences. «Текст» keeps the markdown source available for
+          anything the cards do not cover. Byte safety is per-BLOCK, not
+          per-document: a construct the segmentation cannot reproduce exactly is
+          demoted to a raw textarea, and untouched blocks are re-emitted verbatim
+          — see the «where byte fidelity actually lives» note in
+          lib/content/markdown-blocks.ts. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="border-border inline-flex rounded-[10px] border p-0.5">
           {(["blocks", "text"] as const).map((value) => (
             <button
               key={value}
               type="button"
-              disabled={value === "blocks" && !blockCapable}
               onClick={() => setMode(value)}
               className={cn(
                 "ease-app rounded-[8px] px-3 py-1 text-[12px] font-medium transition-colors duration-150 disabled:opacity-40",
@@ -502,12 +503,6 @@ export function LessonEditor({
             </button>
           ))}
         </div>
-        {!blockCapable && (
-          <span className="text-text-3 text-[12px]">
-            Разметка этого урока нестандартная — блочный режим отключён, чтобы не переписать её
-            автоматически.
-          </span>
-        )}
       </div>
 
       {/* Directive panel (grouped + hints) + inline marks — text mode only: in
