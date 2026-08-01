@@ -27,7 +27,9 @@
   --danger: #dd6363;
   /* violet: second gradient stop + «занятые» слоты моков (design handoff). */
   --violet: #8b5cf6;
-  --gradient-accent: linear-gradient(135deg, #5e6ad2, #8b5cf6);
+  --gradient-from: #5e6ad2;
+  --gradient-to: #8b5cf6;
+  --gradient-accent: linear-gradient(135deg, var(--gradient-from), var(--gradient-to));
   /* DECISION: light surface-2 carries a shadow per 5.1 — expressed as a token so
      components can apply it uniformly in both themes ("none" in dark). */
   --shadow-surface-2: none;
@@ -93,7 +95,9 @@
   --warning: #8f6a15;
   --danger: #c03e3e;
   --violet: #7c4fe0;
-  --gradient-accent: linear-gradient(135deg, #5e6ad2, #8b5cf6);
+  --gradient-from: #5e6ad2;
+  --gradient-to: #8b5cf6;
+  --gradient-accent: linear-gradient(135deg, var(--gradient-from), var(--gradient-to));
   --shadow-surface-2: 0 1px 3px rgb(0 0 0 / 0.06);
   --card-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
 

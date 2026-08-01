@@ -63,8 +63,11 @@ export function GoalRing({ value, goal, dayKey, size = 76 }: GoalRingProps) {
       >
         <defs>
           <linearGradient id="goalRingGradient" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#5e6ad2" />
-            <stop offset="100%" stopColor="#8b5cf6" />
+            {/* The brand gradient's own stops (audit 13.6) — NOT --accent/--violet,
+                which shift per theme: --gradient-accent is deliberately
+                theme-invariant, so the ring must match the hero in both themes. */}
+            <stop offset="0%" stopColor="var(--gradient-from)" />
+            <stop offset="100%" stopColor="var(--gradient-to)" />
           </linearGradient>
         </defs>
         <circle

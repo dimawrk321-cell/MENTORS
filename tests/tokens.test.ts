@@ -24,7 +24,11 @@ const darkTokens: Record<string, string> = {
   "--danger": "#dd6363",
   "--violet": "#8b5cf6",
   "--card-shadow": "0 1px 2px rgb(0 0 0 / 0.2)",
-  "--gradient-accent": "linear-gradient(135deg, #5e6ad2, #8b5cf6)",
+  // Stops are their own tokens so SVG gradients (GoalRing) can reference them;
+  // deliberately identical in both themes — see the light block below.
+  "--gradient-from": "#5e6ad2",
+  "--gradient-to": "#8b5cf6",
+  "--gradient-accent": "linear-gradient(135deg, var(--gradient-from), var(--gradient-to))",
   "--radius-card": "14px",
   "--radius-control": "10px",
   "--radius-pill": "999px",

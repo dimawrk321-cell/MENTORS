@@ -21,6 +21,7 @@ import { getActivityBarData, getContinueTarget } from "@/lib/services/dashboard"
 import { getSrsQueue, getNextReviewDate, getLaggingCategories } from "@/lib/services/srs";
 import { getActiveBooking } from "@/lib/services/mocks";
 import { listCoursesForStudent } from "@/lib/services/content";
+import { hasVisibleGuides } from "@/lib/services/guides";
 import { getStreakState, processStreakDay } from "@/lib/services/streak";
 import { getTodayXp, getXpSummary } from "@/lib/services/xp";
 import { getLevelTitles } from "@/lib/services/settings";
@@ -42,11 +43,13 @@ export const metadata: Metadata = {
   title: "Главная",
 };
 
-// Full gradient hero card backdrop (design handoff «Главная v2»).
+// Full gradient hero card backdrop (design handoff «Главная v2»). The brand
+// gradient comes from the token, not a copied hex pair, so a token change can
+// never leave the hero behind (audit 13.6).
 const HERO_GRADIENT =
   "radial-gradient(640px 220px at 88% -30%, rgb(255 255 255 / 0.28), transparent 70%)," +
   "radial-gradient(400px 180px at 8% 120%, rgb(255 255 255 / 0.12), transparent 70%)," +
-  "linear-gradient(135deg, #5e6ad2, #8b5cf6)";
+  "var(--gradient-accent)";
 
 // Course mini-cards have no colour/icon field — derive a category colour + icon by index.
 const COURSE_ICONS: LucideIcon[] = [BarChart3, Bot, Blocks, Braces, Database, Cpu];
@@ -69,24 +72,40 @@ export default async function DashboardPage() {
   // Ленивый «конец дня»: разрешаем пропущенные учебные дни до первого чтения серии.
   await processStreakDay(prisma, { userId: user.id, now });
 
-  const [streak, xp, todayXp, cont, queue, courses, lagging, activityBar, activeMock, levelTitles] =
-    await Promise.all([
-      getStreakState(prisma, {
-        userId: user.id,
-        now,
-        timezone: user.timezone,
-        studyDays: user.studyDays,
-      }),
-      getXpSummary(prisma, user.id),
-      getTodayXp(prisma, user.id, now, user.timezone),
-      getContinueTarget(prisma, user.id, user.track),
-      getSrsQueue(prisma, { userId: user.id, now }),
-      listCoursesForStudent(prisma, user.id, user.track),
-      getLaggingCategories(prisma, { userId: user.id, now }),
-      loadActivityBar(user.id, user.timezone, todayStr),
-      getActiveBooking(prisma, user.id, now),
-      getLevelTitles(prisma),
-    ]);
+  const [
+    streak,
+    xp,
+    todayXp,
+    cont,
+    queue,
+    courses,
+    lagging,
+    activityBar,
+    activeMock,
+    levelTitles,
+    guidesEnabled,
+  ] = await Promise.all([
+    getStreakState(prisma, {
+      userId: user.id,
+      now,
+      timezone: user.timezone,
+      studyDays: user.studyDays,
+    }),
+    getXpSummary(prisma, user.id),
+    getTodayXp(prisma, user.id, now, user.timezone),
+    getContinueTarget(prisma, user.id, user.track),
+    getSrsQueue(prisma, { userId: user.id, now }),
+    listCoursesForStudent(prisma, user.id, user.track),
+    getLaggingCategories(prisma, { userId: user.id, now }),
+    loadActivityBar(user.id, user.timezone, todayStr),
+    getActiveBooking(prisma, user.id, now),
+    getLevelTitles(prisma),
+    // Same D6 gate the layout applies to the sidebar and bottom nav.
+    hasVisibleGuides(prisma, {
+      resume: user.guidesResumeEnabled,
+      legend: user.guidesLegendEnabled,
+    }),
+  ]);
   const nextReview =
     queue.total === 0 ? await getNextReviewDate(prisma, { userId: user.id, now }) : null;
   const levelTitle = titleForLevel(xp.level.level, levelTitles);
@@ -197,7 +216,9 @@ export default async function DashboardPage() {
             aria-hidden="true"
             className="pointer-events-none absolute right-[120px] -bottom-[110px] size-[220px] rounded-full border-[26px] border-white/6"
           />
-          <div className="relative flex flex-col gap-[18px] p-7">
+          {/* break-words: a long lesson/course title was clipped mid-word by the
+              card's overflow-hidden (audit 13.6). */}
+          <div className="relative flex flex-col gap-[18px] p-7 break-words">
             <div className="flex flex-col gap-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-pill inline-flex items-center bg-white/16 px-2.5 py-[3px] text-[12px] font-medium text-white">
@@ -294,8 +315,10 @@ export default async function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[15px] font-semibold">{course.title}</p>
                         <p className="text-text-3 text-[12px]">
+                          {/* «из» requires the genitive — same set as /courses
+                              and ModuleTree, which render this exact counter. */}
                           {course.lessonsCompleted} из {course.lessonsTotal}{" "}
-                          {pluralRu(course.lessonsTotal, "урок", "урока", "уроков")}
+                          {pluralRu(course.lessonsTotal, "урока", "уроков", "уроков")}
                         </p>
                       </div>
                       <ProgressRing
@@ -323,7 +346,9 @@ export default async function DashboardPage() {
                   <li key={entry.categoryId} className="flex items-center gap-3 px-[18px] py-3.5">
                     <CategoryChip title={entry.title} colorIndex={entry.colorIndex} />
                     <span className="text-text-2 ml-auto shrink-0 text-[13px]">
-                      {Math.round(entry.againShare * 100)}% «не знаю»
+                      {/* Floor at 1%: a topic the service already judged lagging
+                          must not advertise «0% «не знаю»» (audit 13.6). */}
+                      {Math.max(1, Math.round(entry.againShare * 100))}% «не знаю»
                     </span>
                     <Link
                       href={`/questions?category=${entry.categoryId}`}
@@ -342,32 +367,37 @@ export default async function DashboardPage() {
         activitySection
       )}
 
-      {/* Тихая карточка-вход в справочник (spec 12.2/1.3), ведёт в хаб /guides */}
-      <Link href="/guides" className="group block min-w-0">
-        <Card interactive>
-          <CardContent className="flex items-center gap-4 px-[18px] py-4">
-            <IconTile icon={BookMarked} colorVar="var(--cat-1)" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-medium">Справочник</p>
-              <p className="text-text-3 truncate text-[13px]">
-                {[
-                  user.guidesResumeEnabled ? "Резюме" : null,
-                  user.guidesLegendEnabled ? "Легенда" : null,
-                  "Этапы собеседований",
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </div>
-            <ChevronRight
-              size={18}
-              strokeWidth={1.75}
-              className="text-text-3 group-hover:text-text-2 shrink-0"
-              aria-hidden="true"
-            />
-          </CardContent>
-        </Card>
-      </Link>
+      {/* Тихая карточка-вход в справочник (spec 12.2/1.3), ведёт в хаб /guides.
+          Гейт D6 (audit 13.6): сайдбар и нижняя навигация скрывают «Справочник»,
+          когда читать нечего, — карточка обязана следовать тому же правилу,
+          иначе она ведёт на заглушку. */}
+      {guidesEnabled && (
+        <Link href="/guides" className="group block min-w-0">
+          <Card interactive>
+            <CardContent className="flex items-center gap-4 px-[18px] py-4">
+              <IconTile icon={BookMarked} colorVar="var(--cat-1)" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-medium">Справочник</p>
+                <p className="text-text-3 truncate text-[13px]">
+                  {[
+                    user.guidesResumeEnabled ? "Резюме" : null,
+                    user.guidesLegendEnabled ? "Легенда" : null,
+                    "Этапы собеседований",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+              <ChevronRight
+                size={18}
+                strokeWidth={1.75}
+                className="text-text-3 group-hover:text-text-2 shrink-0"
+                aria-hidden="true"
+              />
+            </CardContent>
+          </Card>
+        </Link>
+      )}
     </div>
   );
 }
