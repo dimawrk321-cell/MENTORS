@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Link2, Plus, Search, Trash2 } from "lucide-react";
+import { CheckSquare, Link2, Plus, Search, Square, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import {
 } from "@/components/features/question-role-select";
 import type { ActionResult } from "@/lib/auth/action-helpers";
 import {
+  bulkQuestionLinkRoleAction,
   removeQuestionLinkAction,
   searchQuestionsAction,
   upsertQuestionLinkAction,
@@ -60,6 +61,7 @@ export function LessonQuestions({
   // Fresh lesson with nothing linked → the panel starts open, so the way in is
   // visible without a click (changelog 13.6).
   const [adding, setAdding] = useState(links.length === 0);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<SearchRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [attachRole, setAttachRole] = useState<QuestionLinkRole>("quiz");
@@ -104,6 +106,28 @@ export function LessonQuestions({
     });
   }
 
+  // Bulk role marking (walk 13.6, block 3v2). The category pass links whole
+  // categories at once, and re-picking a role on twelve rows one select at a
+  // time is not a workflow — «ключевой» in particular is an editorial decision
+  // made over a batch.
+  const toggleSelected = (questionId: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return next;
+    });
+
+  const allSelected = links.length > 0 && selected.size === links.length;
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(links.map((link) => link.questionId)));
+
+  function bulkRole(role: QuestionLinkRole, success: string): void {
+    const questionIds = [...selected];
+    run(() => bulkQuestionLinkRoleAction({ lessonId, questionIds, role }), success);
+    setSelected(new Set());
+  }
+
   return (
     <section
       id="lesson-questions"
@@ -141,43 +165,102 @@ export function LessonQuestions({
           Пока ничего не привязано — нажми «Добавить вопрос».
         </p>
       ) : (
-        <ul className="mb-4 flex flex-col gap-2">
-          {links.map((link) => (
-            <li key={link.questionId} className="flex flex-wrap items-center gap-3 text-[13px]">
-              <span className="min-w-0 flex-1 truncate">
-                {link.teaser}
-                <span className="text-text-3 ml-2">· {link.category}</span>
-              </span>
-              {link.status === "draft" && <Badge>черновик</Badge>}
-              {/* Changelog этапа 3: роль одна — ключевой ИЛИ в квизе. */}
-              <QuestionRoleSelect
-                value={roleFromFlags(link.isKey, link.inQuiz)}
-                onChange={(role) =>
-                  run(() =>
-                    upsertQuestionLinkAction({
-                      questionId: link.questionId,
-                      lessonId,
-                      ...flagsFromRole(role),
-                    }),
-                  )
-                }
-              />
-              <button
-                type="button"
-                aria-label="Отвязать вопрос"
-                onClick={() =>
-                  run(
-                    () => removeQuestionLinkAction({ questionId: link.questionId, lessonId }),
-                    "Отвязано",
-                  )
-                }
-                className="rounded-control text-text-3 hover:text-danger flex size-7 items-center justify-center"
-              >
-                <Trash2 size={13} strokeWidth={1.75} />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          {/* Bulk bar (walk 13.6, block 3v2). Appears only with a selection, so
+              the section looks unchanged for a lesson with three questions. */}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-text-2 hover:text-text-1 ease-app inline-flex items-center gap-1.5 text-[13px] transition-colors duration-150"
+            >
+              {allSelected ? (
+                <CheckSquare size={15} strokeWidth={1.75} className="text-accent" />
+              ) : (
+                <Square size={15} strokeWidth={1.75} />
+              )}
+              {allSelected ? "Снять выделение" : "Выбрать все"}
+            </button>
+            {selected.size > 0 && (
+              <>
+                <span className="text-text-3 text-[13px] tabular-nums">
+                  выбрано {selected.size}
+                </span>
+                <span className="bg-border mx-1 h-4 w-px" aria-hidden="true" />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() => bulkRole("key", `Отмечено ключевыми: ${selected.size}`)}
+                >
+                  Сделать ключевыми
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => bulkRole("quiz", `В квиз: ${selected.size}`)}
+                >
+                  В квиз
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => bulkRole("plain", `Снята роль: ${selected.size}`)}
+                >
+                  Снять роль
+                </Button>
+              </>
+            )}
+          </div>
+          {/* A whole linked category can be 60 rows — cap the height so the rest
+              of the editor stays reachable. */}
+          <ul className="mb-4 flex max-h-[420px] flex-col gap-2 overflow-y-auto pr-1">
+            {links.map((link) => (
+              <li key={link.questionId} className="flex flex-wrap items-center gap-3 text-[13px]">
+                <input
+                  type="checkbox"
+                  checked={selected.has(link.questionId)}
+                  onChange={() => toggleSelected(link.questionId)}
+                  aria-label={`Выбрать вопрос: ${link.teaser}`}
+                  className="accent-accent size-4 shrink-0"
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {link.teaser}
+                  <span className="text-text-3 ml-2">· {link.category}</span>
+                </span>
+                {link.status === "draft" && <Badge>черновик</Badge>}
+                {/* Changelog этапа 3: роль одна — ключевой ИЛИ в квизе. */}
+                <QuestionRoleSelect
+                  value={roleFromFlags(link.isKey, link.inQuiz)}
+                  onChange={(role) =>
+                    run(() =>
+                      upsertQuestionLinkAction({
+                        questionId: link.questionId,
+                        lessonId,
+                        ...flagsFromRole(role),
+                      }),
+                    )
+                  }
+                />
+                <button
+                  type="button"
+                  aria-label="Отвязать вопрос"
+                  onClick={() =>
+                    run(
+                      () => removeQuestionLinkAction({ questionId: link.questionId, lessonId }),
+                      "Отвязано",
+                    )
+                  }
+                  className="rounded-control text-text-3 hover:text-danger flex size-7 items-center justify-center"
+                >
+                  <Trash2 size={13} strokeWidth={1.75} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       {adding && (

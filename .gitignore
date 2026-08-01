@@ -56,3 +56,6 @@ coverage
 
 # Notion export used by scripts/autolink-questions.ts — source data, not code
 notion-export.md
+
+# Notion export / generated review files — source data, not code
+suggestions.md

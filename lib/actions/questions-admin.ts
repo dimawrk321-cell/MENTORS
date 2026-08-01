@@ -8,6 +8,7 @@ import {
   bulkLinkToLesson,
   bulkPublish,
   bulkSetCategory,
+  bulkSetQuestionLinkRole,
   bulkSetDraft,
   createCategory,
   createQuestion,
@@ -282,6 +283,28 @@ export async function upsertQuestionLinkAction(input: unknown): Promise<ActionRe
     revalidatePath(`/admin/content/lessons/${parsed.lessonId}`);
     revalidatePath(`/lessons/${parsed.lessonId}`);
     return undefined;
+  });
+}
+
+/** Bulk role change for selected links of one lesson (walk 13.6, block 3v2). */
+export async function bulkQuestionLinkRoleAction(
+  input: unknown,
+): Promise<ActionResult<{ updated: number }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(
+      z.object({
+        lessonId: idSchema,
+        questionIds: z.array(idSchema).min(1, "Выбери вопросы").max(BULK_MAX),
+        role: z.enum(["key", "quiz", "plain"]),
+      }),
+      input,
+    );
+    const result = await bulkSetQuestionLinkRole(prisma, { actorId: auth.user.id, ...parsed });
+    revalidateBank();
+    revalidatePath(`/admin/content/lessons/${parsed.lessonId}`);
+    revalidatePath(`/lessons/${parsed.lessonId}`);
+    return result;
   });
 }
 

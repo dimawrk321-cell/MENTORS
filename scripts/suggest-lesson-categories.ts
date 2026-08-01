@@ -23,7 +23,10 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { prisma } from "@/lib/db";
-import { linkCategoryToLesson, suggestLessonCategories } from "@/lib/services/lesson-category-match";
+import {
+  linkCategoryToLesson,
+  suggestLessonCategories,
+} from "@/lib/services/lesson-category-match";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
@@ -43,12 +46,13 @@ function renderTable(
     alreadyLinked: number;
     confidence: string;
     matchedOn: string;
+    because: string;
     lessonId: string;
     categoryId: string;
   }>,
 ): string {
   const head = [
-    "| взять | урок | курс · модуль | категория | вопросов | уже привязано | уверенность | по чему | lessonId | categoryId |",
+    "| взять | урок | курс · модуль | категория | вопросов | уже привязано | уверенность | почему | lessonId | categoryId |",
     "| :-: | --- | --- | --- | --: | --: | --- | --- | --- | --- |",
   ];
   const body = rows.map((r) =>
@@ -60,7 +64,7 @@ function renderTable(
       String(r.questionCount),
       String(r.alreadyLinked),
       r.confidence,
-      r.matchedOn,
+      `${r.because} (${r.matchedOn})`.replace(/\|/g, "\\|"),
       r.lessonId,
       r.categoryId,
     ]
@@ -77,7 +81,10 @@ function parseTicked(markdown: string): Array<{ lessonId: string; categoryId: st
   const out: Array<{ lessonId: string; categoryId: string }> = [];
   for (const line of markdown.split("\n")) {
     if (!line.trim().startsWith("|")) continue;
-    const cells = line.split("|").slice(1, -1).map((c) => c.trim());
+    const cells = line
+      .split("|")
+      .slice(1, -1)
+      .map((c) => c.trim());
     if (cells.length < 10) continue;
     if (cells[0]?.toLowerCase() !== "x") continue;
     const lessonId = cells[8];
@@ -105,6 +112,7 @@ async function main(): Promise<void> {
         alreadyLinked: s.alreadyLinked,
         confidence: s.confidence,
         matchedOn: s.matchedOn,
+        because: s.because,
         lessonId: lesson.lessonId,
         categoryId: s.categoryId,
       })),
@@ -134,8 +142,10 @@ async function main(): Promise<void> {
       `· строк: **${rows.length}** · заранее отмечено: **${preTicked}** (точное совпадение по названию урока)`,
       `· создалось бы связок: **${wouldCreate}**`,
       "",
-      "Уверенность: «высокая» — названия совпали после нормализации; «средняя» — совпали",
-      "без скобочных уточнений; «низкая» — совпал только префикс.",
+      "Уверенность: **высокая** — совпало название целиком, либо все значимые слова",
+      "категории есть в названии урока; **средняя** — совпало одно значимое слово целиком",
+      "или названия совпали без скобочных уточнений; **низкая** — совпала часть слов.",
+      "Колонка «почему» показывает, ЧТО совпало — по ней промах виден сразу.",
       "",
       renderTable(rows),
       "",

@@ -771,6 +771,44 @@ export async function upsertQuestionLessonLink(
   return { ok: true };
 }
 
+/**
+ * Bulk role change for a lesson's links (walk 13.6, block 3v2).
+ *
+ * The per-row select is fine for a handful of questions, but the category pass
+ * links whole categories at once — marking twelve of them «ключевой» one row at
+ * a time is not a workflow. Roles stay mutually exclusive (changelog stage 3):
+ * setting «ключевой» clears «в квизе» and vice versa.
+ *
+ * One audit entry for the batch, not one per question.
+ */
+export async function bulkSetQuestionLinkRole(
+  db: PrismaClient,
+  input: {
+    actorId: string;
+    lessonId: string;
+    questionIds: string[];
+    role: "key" | "quiz" | "plain";
+  },
+): Promise<{ updated: number }> {
+  if (input.questionIds.length === 0) return { updated: 0 };
+  const flags = {
+    isKey: input.role === "key",
+    inQuiz: input.role === "quiz",
+  };
+  const result = await db.questionLesson.updateMany({
+    where: { lessonId: input.lessonId, questionId: { in: input.questionIds } },
+    data: flags,
+  });
+  await writeAudit(db, {
+    actorId: input.actorId,
+    action: "question.links_bulk_role",
+    entityType: "lesson",
+    entityId: input.lessonId,
+    after: { count: result.count, role: input.role, ...flags },
+  });
+  return { updated: result.count };
+}
+
 export async function removeQuestionLessonLink(
   db: PrismaClient,
   input: { actorId: string; questionId: string; lessonId: string },
