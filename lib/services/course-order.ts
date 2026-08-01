@@ -6,18 +6,22 @@
 
 /**
  * Marks the recommended next step: the FIRST course in the given (already
- * ordered) list that is not yet complete. Completed courses are those whose
- * required lessons are all done; a course with no required lessons at all is
- * not treated as complete (nothing to finish yet, so nothing to tick).
+ * ordered) list that is not yet complete.
+ *
+ * Completion is supplied by the CALLER (`isCompleted`), not recomputed here.
+ * This function used to derive it from required-lesson counts, which disagreed
+ * with the chain's own rule (`isCourseComplete`: every module closed, i.e.
+ * lessons AND the module test) exactly when a course ends in an enabled unpassed
+ * test — so the catalog showed a green «пройден» tick next to «Откроется после
+ * {этот курс}» on the same screen. One rule, one owner.
  */
-export function markRecommendedPath<T extends { lessonsTotal: number; lessonsCompleted: number }>(
+export function markRecommendedPath<T extends { isCompleted: boolean }>(
   courses: T[],
-): Array<T & { isCompleted: boolean; isNext: boolean }> {
+): Array<T & { isNext: boolean }> {
   let nextTaken = false;
   return courses.map((course) => {
-    const isCompleted = course.lessonsTotal > 0 && course.lessonsCompleted >= course.lessonsTotal;
-    const isNext = !isCompleted && !nextTaken;
+    const isNext = !course.isCompleted && !nextTaken;
     if (isNext) nextTaken = true;
-    return { ...course, isCompleted, isNext };
+    return { ...course, isNext };
   });
 }

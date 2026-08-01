@@ -365,3 +365,99 @@ describe("the chain advances on a module test, not only on a lesson (audit block
     ).toBeNull();
   });
 });
+
+describe("an unpassable module test must not wall the chain (audit blocker)", () => {
+  beforeEach(async () => {
+    await resetDb();
+    redirectSpy.mockClear();
+  });
+
+  /** welcome with an ENABLED module test that has no questions at all. */
+  async function makeUnpassableChain() {
+    const welcome = await testDb.course.create({
+      data: { slug: "welcome", title: "Знакомство", order: 0, status: "published", gating: "free" },
+    });
+    const wMod = await testDb.module.create({
+      data: { courseId: welcome.id, title: "Модуль", order: 0, status: "published" },
+    });
+    const wLesson = await testDb.lesson.create({
+      data: {
+        moduleId: wMod.id,
+        slug: "w-lesson",
+        title: "Урок",
+        order: 0,
+        status: "published",
+        contentMd: "текст",
+      },
+    });
+    await testDb.moduleTest.create({
+      data: { moduleId: wMod.id, enabled: true, poolSize: 5, threshold: 70, cooldownMinutes: 0 },
+    });
+    const python = await testDb.course.create({
+      data: { slug: "python", title: "Python", order: 1, status: "published", gating: "free" },
+    });
+    const pMod = await testDb.module.create({
+      data: { courseId: python.id, title: "Модуль", order: 0, status: "published" },
+    });
+    await testDb.lesson.create({
+      data: {
+        moduleId: pMod.id,
+        slug: "p-lesson",
+        title: "Урок",
+        order: 0,
+        status: "published",
+        contentMd: "текст",
+      },
+    });
+    return { welcome, wMod, wLesson, python };
+  }
+
+  it("finishing the lessons opens the next course when the test has no questions", async () => {
+    const { wLesson, python } = await makeUnpassableChain();
+    const user = await createTestUser({ email: "unpassable-1@test.local" });
+
+    // startTestAttempt would refuse this test (`no_questions`), so treating it
+    // as a requirement would strand the whole cohort here forever.
+    const { completeLesson } = await import("@/lib/services/content");
+    const res = await completeLesson(testDb as never, { userId: user.id, lessonId: wLesson.id });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.unlockedCourseTitle).toBe("Python");
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(true);
+  });
+
+  it("a test WITH questions still gates the chain", async () => {
+    const { wMod, wLesson, python } = await makeUnpassableChain();
+    const user = await createTestUser({ email: "unpassable-2@test.local" });
+    const category = await testDb.questionCategory.create({
+      data: { title: "Кат", slug: "kat-u", colorIndex: 0, order: 0 },
+    });
+    const question = await testDb.question.create({
+      data: {
+        type: "single",
+        categoryId: category.id,
+        textMd: "2+2?",
+        answerMd: "4",
+        status: "published",
+        difficulty: 1,
+        options: [
+          { id: "a", text: "4", correct: true },
+          { id: "b", text: "5", correct: false },
+        ],
+      },
+    });
+    await testDb.questionLesson.create({
+      data: { questionId: question.id, lessonId: wLesson.id },
+    });
+
+    const { completeLesson } = await import("@/lib/services/content");
+    await completeLesson(testDb as never, { userId: user.id, lessonId: wLesson.id });
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(false);
+
+    // …and disabling that test must release the student, not leave them stuck.
+    const { releaseChainAfterTestChange } = await import("@/lib/services/content");
+    await testDb.moduleTest.update({ where: { moduleId: wMod.id }, data: { enabled: false } });
+    const swept = await releaseChainAfterTestChange(testDb as never, wMod.id);
+    expect(swept.advanced).toBe(1);
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(true);
+  });
+});

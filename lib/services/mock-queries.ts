@@ -315,7 +315,9 @@ export async function getInterviewerBookings(
 export interface RunStudentCard {
   studentId: string;
   studentName: string;
-  courses: Array<{ title: string; progressPct: number }>;
+  /** Block 2v2:  distinguishes «not started» from «the chain has not
+   * given them access» — a wall of 0% rows otherwise reads as slacking. */
+  courses: Array<{ title: string; progressPct: number; locked: boolean }>;
   pastMocks: Array<{ type: MockType; verdict: string | null; startsAt: Date }>;
   lagging: LaggingCategory[] | null;
   mocksCompleted: number;
@@ -417,7 +419,11 @@ export async function getRunScreenData(
     student: {
       studentId: booking.user.id,
       studentName: booking.user.name,
-      courses: courses.map((c) => ({ title: c.title, progressPct: c.progressPct })),
+      courses: courses.map((c) => ({
+        title: c.title,
+        progressPct: c.progressPct,
+        locked: c.locked,
+      })),
       pastMocks: pastMocks.map((m) => ({
         type: m.type,
         verdict: m.feedback?.status === "published" ? m.feedback.verdict : null,

@@ -57,10 +57,20 @@ function StudentCard({ student }: { student: RunScreenData["student"] }) {
             {student.courses.map((course) => (
               <div key={course.title} className="flex flex-col gap-1">
                 <div className="flex justify-between gap-2 text-[13px]">
-                  <span className="truncate">{course.title}</span>
-                  <span className="text-text-2 tabular-nums">{course.progressPct}%</span>
+                  <span className={cn("truncate", course.locked && "text-text-3")}>
+                    {course.title}
+                  </span>
+                  {/* Block 2v2: a chain-locked course is «ещё не открыт», not 0% —
+                      otherwise the interviewer reads the wall of zeroes as slacking. */}
+                  {course.locked ? (
+                    <span className="text-text-3 shrink-0">не открыт</span>
+                  ) : (
+                    <span className="text-text-2 tabular-nums">{course.progressPct}%</span>
+                  )}
                 </div>
-                <ProgressBar value={course.progressPct} aria-label={course.title} />
+                {!course.locked && (
+                  <ProgressBar value={course.progressPct} aria-label={course.title} />
+                )}
               </div>
             ))}
           </div>

@@ -244,6 +244,11 @@ export async function listCoursesForStudent(db: Db, userId: string) {
         accessState: accessRow?.state ?? "locked_chain",
         unlocksAfter: accessRow?.unlocksAfter ?? null,
         locked: !isOpen(accessRow?.state ?? "locked_chain"),
+        // The «пройден» tick uses the CHAIN's completion rule, not a lesson
+        // count. They disagree exactly when a course ends in an enabled unpassed
+        // module test — and the catalog was rendering the green check next to
+        // «Откроется после {этот курс}» on the same screen (audit finding).
+        isCompleted: isCourseComplete(state.modules, state.totalRequired),
       };
     }),
   );
@@ -490,6 +495,47 @@ export async function advanceChainIfCourseComplete(
     );
   }
   return opened.title;
+}
+
+/**
+ * Re-runs the chain for everyone standing in a course whose module test just
+ * changed (block 2v2, audit finding).
+ *
+ * The chain only ever moves on a live completion event. Disabling a module test
+ * can complete a course for students whose last outstanding requirement it was,
+ * and none of them can trigger that event any more — «Завершить урок» is
+ * disabled on lessons they already finished. So the admin's toggle has to do it.
+ *
+ * Scoped to students who have progress in the course and idempotent
+ * (advanceChainIfCourseComplete is), so a repeat toggle opens nothing twice.
+ */
+export async function releaseChainAfterTestChange(
+  db: PrismaClient,
+  moduleId: string,
+  now: Date = new Date(),
+): Promise<{ advanced: number }> {
+  const mod = await db.module.findUnique({
+    where: { id: moduleId },
+    select: { course: { select: { id: true, slug: true } } },
+  });
+  if (!mod) return { advanced: 0 };
+
+  const learners = await db.lessonProgress.findMany({
+    where: { lesson: { module: { courseId: mod.course.id } } },
+    select: { userId: true },
+    distinct: ["userId"],
+  });
+
+  let advanced = 0;
+  for (const learner of learners) {
+    const opened = await advanceChainIfCourseComplete(db, {
+      userId: learner.userId,
+      courseSlug: mod.course.slug,
+      now,
+    });
+    if (opened) advanced += 1;
+  }
+  return { advanced };
 }
 
 /** Explicit, idempotent completion (spec 7.3); returns the next open lesson. */

@@ -20,6 +20,7 @@ import {
   upsertQuestionLessonLink,
 } from "@/lib/services/questions";
 import { upsertModuleTestConfig } from "@/lib/services/tests";
+import { releaseChainAfterTestChange } from "@/lib/services/content";
 import { renderMarkdownHtml } from "@/lib/utils/markdown";
 import {
   isValidQuestionLinkFlags,
@@ -348,6 +349,11 @@ export async function upsertModuleTestAction(input: unknown): Promise<ActionResu
     const parsed = parseInput(moduleTestSchema, input);
     const result = await upsertModuleTestConfig(prisma, { actorId: auth.user.id, ...parsed });
     if (!result.ok) throw new ActionError(result.code, "Модуль не найден");
+    // Block 2v2: turning a test OFF can complete a course for students whose
+    // only outstanding requirement it was — and the chain otherwise never
+    // notices, because it only advances on a live completion event that those
+    // students can no longer trigger. Sweep them forward once, here.
+    if (!parsed.enabled) await releaseChainAfterTestChange(prisma, parsed.moduleId);
     revalidatePath("/admin/content");
     revalidatePath("/courses");
     return undefined;

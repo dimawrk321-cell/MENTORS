@@ -43,11 +43,53 @@ interface AccessRecord {
   unlockedBy: "system" | "admin" | null;
 }
 
-function resolve(isFirstInChain: boolean, record: AccessRecord | undefined): CourseAccessState {
+function resolve(reachable: boolean, record: AccessRecord | undefined): CourseAccessState {
   if (record?.lockedByAdmin) return "locked_admin";
   if (record?.unlockedAt) return record.unlockedBy === "admin" ? "open_admin" : "open_system";
-  if (isFirstInChain) return "open_welcome";
+  if (reachable) return "open_welcome";
   return "locked_chain";
+}
+
+/**
+ * Which courses are open WITHOUT a course_access row — the chain's reachable
+ * prefix, computed at READ time.
+ *
+ * A content-less course (no required published lessons) can never fire the
+ * completion event that is the chain's only forward motion, so it must be
+ * transparent rather than a wall. `chainTargetsAfter` already does that at WRITE
+ * time, but only for content that was already empty when the previous course was
+ * finished. Two audit findings came from the gap:
+ *   • a content-less course at the HEAD locked every student out of everything;
+ *   • a mid-chain course emptied AFTER a student reached it stranded them for
+ *     good, because nothing re-evaluates the chain when content changes.
+ *
+ * Doing it here fixes both and makes the rule self-healing: the walk starts at
+ * the head and steps forward through every course that is either open (row) or
+ * content-less, so the frontier moves as soon as the content does.
+ */
+function reachableWithoutRow(
+  courses: { id: string }[],
+  counts: Map<string, number>,
+  hasRow: (courseId: string) => boolean,
+): Set<string> {
+  // The deepest unlocked course is a watermark: the chain only ever grants a row
+  // once everything before it was earned, so nothing at or before it is a
+  // barrier any more.
+  let watermark = -1;
+  courses.forEach((course, index) => {
+    if (hasRow(course.id)) watermark = index;
+  });
+
+  const reachable = new Set<string>();
+  for (const [index, course] of courses.entries()) {
+    reachable.add(course.id);
+    const contentLess = (counts.get(course.id) ?? 0) === 0;
+    // Past the watermark, the first course with something to finish is the
+    // student's frontier — it gates everything after it. Content-less courses
+    // are transparent, whichever side of the watermark they fall on.
+    if (index >= watermark && !contentLess) break;
+  }
+  return reachable;
 }
 
 /**
@@ -88,9 +130,12 @@ export async function listCourseAccess(db: Db, userId: string): Promise<CourseAc
     requiredLessonCounts(db),
   ]);
   const byCourse = new Map(records.map((r) => [r.courseId, r as AccessRecord]));
+  const reachable = reachableWithoutRow(courses, counts, (id) =>
+    Boolean(byCourse.get(id)?.unlockedAt),
+  );
 
   return courses.map((course, index) => {
-    const state = resolve(index === 0, byCourse.get(course.id));
+    const state = resolve(reachable.has(course.id), byCourse.get(course.id));
     return {
       courseId: course.id,
       slug: course.slug,
@@ -120,22 +165,19 @@ function blockingCourseBefore(
   return null;
 }
 
-/** Single-course check used by the page guards and the student actions. */
+/**
+ * Single-course check used by the page guards and the student actions.
+ *
+ * Delegates to listCourseAccess on purpose. The two used to resolve the state
+ * independently — canOpenCourse compared against `findFirst`, listCourseAccess
+ * against `index === 0` — and an audit found them disagreeing about the chain's
+ * head. One computation, one answer.
+ */
 export async function canOpenCourse(db: Db, userId: string, courseId: string): Promise<boolean> {
-  const [course, first, record] = await Promise.all([
-    db.course.findUnique({ where: { id: courseId }, select: { id: true } }),
-    db.course.findFirst({
-      where: { status: "published" },
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: { id: true },
-    }),
-    db.courseAccess.findUnique({
-      where: { userId_courseId: { userId, courseId } },
-      select: { courseId: true, unlockedAt: true, lockedByAdmin: true, unlockedBy: true },
-    }),
-  ]);
-  if (!course) return false;
-  return isOpen(resolve(first?.id === course.id, record ?? undefined));
+  const rows = await listCourseAccess(db, userId);
+  const row = rows.find((r) => r.courseId === courseId);
+  // Not in the chain at all (draft or deleted course) — not openable.
+  return row ? isOpen(row.state) : false;
 }
 
 /**
@@ -159,8 +201,32 @@ export async function unlockCourse(
     where: { userId_courseId: { userId: input.userId, courseId: input.courseId } },
   });
 
-  if (existing?.lockedByAdmin && !input.force) return { changed: false };
-  if (existing?.unlockedAt && !existing.lockedByAdmin) return { changed: false };
+  // An admin lock still blocks the OPENING, but the fact that the chain reached
+  // this course must be recorded anyway — otherwise «вернуть в цепь» later hands
+  // back a locked_chain row and quietly revokes a course the student earned
+  // while the lock was on (audit finding).
+  if (existing?.lockedByAdmin && !input.force) {
+    if (input.by === "system" && !existing.unlockedAt) {
+      await db.courseAccess.update({
+        where: { userId_courseId: { userId: input.userId, courseId: input.courseId } },
+        data: { unlockedAt: now, unlockedBy: "system" },
+      });
+    }
+    return { changed: false };
+  }
+
+  if (existing?.unlockedAt && !existing.lockedByAdmin) {
+    // Already open — but if the chain has now reached a course an admin had
+    // opened early, the row must stop claiming «открыт досрочно»: unlock_reset
+    // keys off that field and would re-lock a course the student has earned.
+    if (input.by === "system" && existing.unlockedBy === "admin") {
+      await db.courseAccess.update({
+        where: { userId_courseId: { userId: input.userId, courseId: input.courseId } },
+        data: { unlockedBy: "system" },
+      });
+    }
+    return { changed: false };
+  }
 
   try {
     await db.courseAccess.upsert({

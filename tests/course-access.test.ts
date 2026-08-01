@@ -469,3 +469,107 @@ describe("the «Откроется после» hint names a course that can act
     expect(counts.get(course.id)).toBe(3);
   });
 });
+
+describe("chain audit fixes (block 5 over 2v2)", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  async function emptyCourse(slug: string, title: string, order: number) {
+    return testDb.course.create({
+      data: { slug, title, order, status: "published", gating: "free" },
+    });
+  }
+
+  it("a content-less course at the HEAD does not strand everyone", async () => {
+    const shell = await emptyCourse("shell", "Пустая шапка", 0);
+    const real = await makeCourse("welcome", "Знакомство", 1);
+    const later = await makeCourse("python", "Python", 2);
+    const user = await makeStudent();
+
+    // The shell can never be completed, so it must be transparent: the first
+    // course with content has to be open too, or nothing ever opens.
+    expect(await canOpenCourse(testDb as never, user.id, shell.id)).toBe(true);
+    expect(await canOpenCourse(testDb as never, user.id, real.id)).toBe(true);
+    expect(await canOpenCourse(testDb as never, user.id, later.id)).toBe(false);
+  });
+
+  it("a mid-chain course emptied AFTER the student reached it stops blocking", async () => {
+    const welcome = await makeCourse("welcome", "Знакомство", 0);
+    const middle = await makeCourse("middle", "Середина", 1);
+    const last = await makeCourse("last", "Финал", 2);
+    const user = await makeStudent();
+
+    await unlockCourse(testDb as never, { userId: user.id, courseId: middle.id, by: "system" });
+    expect(await canOpenCourse(testDb as never, user.id, last.id)).toBe(false);
+
+    // The admin unpublishes the middle course's only lesson — nothing re-runs
+    // the chain, so this has to self-heal at read time.
+    await testDb.lesson.updateMany({
+      where: { module: { courseId: middle.id } },
+      data: { status: "draft" },
+    });
+    expect(await canOpenCourse(testDb as never, user.id, last.id)).toBe(true);
+    expect(await canOpenCourse(testDb as never, user.id, welcome.id)).toBe(true);
+  });
+
+  it("the chain upgrades an admin's early open, so «вернуть в цепь» cannot revoke it", async () => {
+    const { welcome, python } = await makeChain();
+    const user = await makeStudent();
+    const admin = await createTestUser({ email: "chain-admin-2@test.local", role: "owner" });
+
+    // Admin opens Python early…
+    await adminSetCourseAccess(testDb as never, {
+      actorId: admin.id,
+      userId: user.id,
+      courseId: python.id,
+      action: "unlock",
+      now: NOW,
+    });
+    // …then the student earns it anyway by finishing welcome.
+    await unlockNextAfter(testDb as never, {
+      userId: user.id,
+      completedCourseId: welcome.id,
+      now: NOW,
+    });
+
+    // «Вернуть в цепь» must now be a no-op, not a revocation.
+    const res = await adminSetCourseAccess(testDb as never, {
+      actorId: admin.id,
+      userId: user.id,
+      courseId: python.id,
+      action: "unlock_reset",
+    });
+    expect(res).toEqual({ ok: true, state: "open_system" });
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(true);
+  });
+
+  it("a chain unlock earned while an admin lock was on survives the lock being lifted", async () => {
+    const { welcome, python } = await makeChain();
+    const user = await makeStudent();
+    const admin = await createTestUser({ email: "chain-admin-3@test.local", role: "owner" });
+
+    await adminSetCourseAccess(testDb as never, {
+      actorId: admin.id,
+      userId: user.id,
+      courseId: python.id,
+      action: "lock",
+    });
+    // Earned while shut — the lock still wins for now…
+    await unlockNextAfter(testDb as never, {
+      userId: user.id,
+      completedCourseId: welcome.id,
+      now: NOW,
+    });
+    expect(await canOpenCourse(testDb as never, user.id, python.id)).toBe(false);
+
+    // …but lifting the lock must hand back what they earned, not «закрыт».
+    const res = await adminSetCourseAccess(testDb as never, {
+      actorId: admin.id,
+      userId: user.id,
+      courseId: python.id,
+      action: "unlock_reset",
+    });
+    expect(res).toEqual({ ok: true, state: "open_system" });
+  });
+});
