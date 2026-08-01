@@ -6,6 +6,7 @@ import {
   migrateAllStudents,
   migrateStudentAccess,
   planChainOrder,
+  runChainMigration,
 } from "@/lib/services/course-chain-migration";
 
 // Block 2v2.5: migrating the existing stand onto the chain. The rule the owner set
@@ -144,22 +145,34 @@ describe("student migration (2v2.5)", () => {
     expect(await testDb.courseAccess.count({ where: { userId: user.id } })).toBe(2);
   });
 
-  it("the dry run promises exactly what --commit then opens", async () => {
-    await makeCourse("welcome", "Знакомство", 0);
-    const python = await makeCourse("python-pytorch", "Python + PyTorch", 1);
+  it("the dry run promises exactly what --commit then opens — reorder included", async () => {
+    // The stand's shape when this was caught: the intended first link is NOT
+    // first in the stored order, so a preview that skips the reorder reports a
+    // different chain than --commit produces.
+    await makeCourse("nlp-advanced", "NLP: продвинутый", 0);
+    await makeCourse("welcome", "Знакомство", 1);
+    const python = await makeCourse("python-pytorch", "Python + PyTorch", 2);
     const user = await createTestUser({ email: "migrate-4@test.local" });
     await testDb.lessonProgress.create({
       data: { userId: user.id, lessonId: python.lesson.id, status: "in_progress" },
     });
 
-    const preview = await migrateStudentAccess(testDb as never, {
-      userId: user.id,
-      commit: false,
-    });
-    expect(await testDb.courseAccess.count({ where: { userId: user.id } })).toBe(0);
+    const preview = await runChainMigration(testDb as never, { commit: false });
+    expect(await testDb.courseAccess.count()).toBe(0); // rolled back
+    expect((await testDb.course.findUniqueOrThrow({ where: { slug: "nlp-advanced" } })).order).toBe(
+      0,
+    ); // order rolled back too
 
-    const applied = await migrateStudentAccess(testDb as never, { userId: user.id });
-    expect(applied.opened).toEqual(preview.opened);
+    const applied = await runChainMigration(testDb as never, { commit: true });
+    expect(applied.moved).toBe(preview.moved);
+    expect(applied.reports.map((r) => r.opened)).toEqual(preview.reports.map((r) => r.opened));
+
+    // …and the preview was right about the chain, not about the stale order:
+    // the student keeps welcome + Python, and NLP продвинутый stays shut.
+    const opened = applied.reports.flatMap((r) => r.opened);
+    expect(opened).toContain("Знакомство");
+    expect(opened).toContain("Python + PyTorch");
+    expect(opened).not.toContain("NLP: продвинутый");
   });
 
   it("never lifts an admin lock", async () => {

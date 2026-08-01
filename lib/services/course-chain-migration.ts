@@ -58,19 +58,19 @@ export async function planChainOrder(db: Db): Promise<OrderPlanRow[]> {
 /**
  * Writes the planned order; returns how many courses actually moved.
  *
- * ONE transaction on purpose: under the hard chain `courses.order` IS the unlock
- * order, and the intermediate states of the loop contain duplicate values. A run
- * that died half-way would leave those duplicates behind, and a re-run derives
- * its plan from the partially-written orders with createdAt breaking the ties —
- * which can permanently swap two courses. All-or-nothing removes that.
+ * The CALLER supplies atomicity (runChainMigration wraps both halves in one
+ * transaction). That matters: under the hard chain `courses.order` IS the unlock
+ * order, and the intermediate states of this loop contain duplicate values. A
+ * run that died half-way would leave those duplicates behind, and a re-run
+ * derives its plan from the partially-written orders with createdAt breaking the
+ * ties — which can permanently swap two courses.
  */
-export async function applyChainOrder(db: PrismaClient): Promise<number> {
+export async function applyChainOrder(db: Db): Promise<number> {
   const plan = await planChainOrder(db);
   const moves = plan.filter((row) => row.from !== row.to);
-  if (moves.length === 0) return 0;
-  await db.$transaction(
-    moves.map((row) => db.course.update({ where: { id: row.id }, data: { order: row.to } })),
-  );
+  for (const row of moves) {
+    await db.course.update({ where: { id: row.id }, data: { order: row.to } });
+  }
   return moves.length;
 }
 
@@ -92,34 +92,19 @@ export interface StudentMigrationReport {
  */
 export async function migrateStudentAccess(
   db: Db,
-  input: { userId: string; email?: string; now?: Date; commit?: boolean },
+  input: { userId: string; email?: string; now?: Date },
 ): Promise<StudentMigrationReport> {
-  const commit = input.commit ?? true;
   const [chain, counts] = await Promise.all([chainCourses(db), requiredLessonCounts(db)]);
   const opened: string[] = [];
-  const wouldOpen = new Set<string>();
 
   const open = async (courseId: string, label: string) => {
-    if (commit) {
-      const { changed } = await unlockCourse(db, {
-        userId: input.userId,
-        courseId,
-        by: "system",
-        now: input.now,
-      });
-      if (changed) opened.push(label);
-      return;
-    }
-    // Dry run: mirror unlockCourse's decision without writing, so `--commit`
-    // opens exactly what the preview promised.
-    if (wouldOpen.has(courseId)) return;
-    const row = await db.courseAccess.findUnique({
-      where: { userId_courseId: { userId: input.userId, courseId } },
-      select: { unlockedAt: true, lockedByAdmin: true },
+    const { changed } = await unlockCourse(db, {
+      userId: input.userId,
+      courseId,
+      by: "system",
+      now: input.now,
     });
-    if (row?.lockedByAdmin || row?.unlockedAt) return;
-    wouldOpen.add(courseId);
-    opened.push(label);
+    if (changed) opened.push(label);
   };
 
   // «Touched» = a real progress row. NOT `state.lessons[].current`: in a free- or
@@ -167,10 +152,7 @@ export interface MigrationSummary {
  * student who cannot log in is inert, so granting it costs nothing and removes
  * the whole class of problem.
  */
-export async function migrateAllStudents(
-  db: Db,
-  options: { now?: Date; commit?: boolean } = {},
-): Promise<MigrationSummary> {
+export async function migrateAllStudents(db: Db, options: { now?: Date } = {}) {
   const students = await db.user.findMany({
     where: { role: "student" },
     select: { id: true, email: true },
@@ -184,10 +166,57 @@ export async function migrateAllStudents(
       userId: student.id,
       email: student.email,
       now: options.now,
-      commit: options.commit,
     });
     if (report.opened.length > 0) reports.push(report);
     else untouched += 1;
   }
   return { reports, untouched };
+}
+
+export interface ChainMigrationResult extends MigrationSummary {
+  moved: number;
+  plan: OrderPlanRow[];
+}
+
+class DryRunRollback extends Error {}
+
+/**
+ * The whole migration as ONE unit: reorder, then grant.
+ *
+ * A dry run does exactly the same writes inside a transaction that is then
+ * rolled back — it does NOT simulate them. That is the only way the preview can
+ * be trusted: the student pass reads `courses.order`, so evaluating it against
+ * the OLD order (as a simulation must) reports a different chain than the one
+ * `--commit` produces. Caught on the stand, where the preview credited every
+ * student with «NLP: продвинутый» purely because that course still sat first.
+ */
+export async function runChainMigration(
+  db: PrismaClient,
+  options: { commit: boolean; now?: Date },
+): Promise<ChainMigrationResult> {
+  const plan = await planChainOrder(db);
+
+  const run = async (tx: Db): Promise<ChainMigrationResult> => {
+    const moved = await applyChainOrder(tx);
+    const summary = await migrateAllStudents(tx, { now: options.now });
+    return { ...summary, moved, plan };
+  };
+
+  if (options.commit) {
+    return db.$transaction(run, { timeout: 120_000, maxWait: 20_000 });
+  }
+
+  let preview: ChainMigrationResult | null = null;
+  try {
+    await db.$transaction(
+      async (tx) => {
+        preview = await run(tx);
+        throw new DryRunRollback();
+      },
+      { timeout: 120_000, maxWait: 20_000 },
+    );
+  } catch (error) {
+    if (!(error instanceof DryRunRollback)) throw error;
+  }
+  return preview!;
 }
