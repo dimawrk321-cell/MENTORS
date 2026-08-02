@@ -97,6 +97,19 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
   const closed = question.type !== "open";
   const hasOptions = ["single", "multi", "tf"].includes(question.type);
 
+  // Форма разошлась с сервером. Сравнение по значению: `question` приходит из
+  // серверного рендера и обновляется после router.refresh(), так что после
+  // сохранения метка гаснет сама.
+  const dirty =
+    form.categoryId !== question.categoryId ||
+    form.textMd !== question.textMd ||
+    form.answerMd !== question.answerMd ||
+    form.explanationMd !== question.explanationMd ||
+    form.difficulty !== question.difficulty ||
+    form.needsLatex !== question.needsLatex ||
+    form.acceptedText !== question.acceptedAnswers.join("\n") ||
+    JSON.stringify(form.options) !== JSON.stringify(question.options);
+
   // KaTeX/markdown предпросмотр (spec 8.5) — дебаунс через server action.
   useEffect(() => {
     const combined = [form.textMd, question.type === "open" ? form.answerMd : form.explanationMd]
@@ -126,28 +139,60 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
     });
   }
 
+  /** Единый снимок формы — им пользуются и «Сохранить», и «Опубликовать». */
+  function payload() {
+    return {
+      questionId: question.id,
+      categoryId: form.categoryId,
+      textMd: form.textMd,
+      answerMd: question.type === "open" ? form.answerMd || null : null,
+      explanationMd: closed ? form.explanationMd || null : null,
+      options: hasOptions ? form.options : null,
+      acceptedAnswers:
+        question.type === "short_text"
+          ? form.acceptedText
+              .split("\n")
+              .map((line) => line.trim())
+              .filter(Boolean)
+          : null,
+      difficulty: form.difficulty,
+      needsLatex: form.needsLatex,
+    };
+  }
+
   function save(): void {
-    run(
-      () =>
-        updateQuestionAction({
-          questionId: question.id,
-          categoryId: form.categoryId,
-          textMd: form.textMd,
-          answerMd: question.type === "open" ? form.answerMd || null : null,
-          explanationMd: closed ? form.explanationMd || null : null,
-          options: hasOptions ? form.options : null,
-          acceptedAnswers:
-            question.type === "short_text"
-              ? form.acceptedText
-                  .split("\n")
-                  .map((line) => line.trim())
-                  .filter(Boolean)
-              : null,
-          difficulty: form.difficulty,
-          needsLatex: form.needsLatex,
-        }),
-      "Вопрос сохранён",
-    );
+    run(() => updateQuestionAction(payload()), "Вопрос сохранён");
+  }
+
+  /**
+   * Публикация СНАЧАЛА сохраняет форму, потом меняет статус.
+   *
+   * Находка владельца: эталон был введён и виден в предпросмотре (тот рисует
+   * состояние формы), а публикация валидировала СЕРВЕРНЫЙ снимок, где ответа
+   * ещё не было, — и отказывала текстом «У открытого вопроса нет эталонного
+   * ответа». Правильный контракт: кнопка публикует то, что человек видит на
+   * экране; несохранённой правки, о которой знает только форма, больше нет.
+   */
+  function toggleStatus(): void {
+    const next = question.status === "published" ? "draft" : "published";
+    startTransition(async () => {
+      const saved = await updateQuestionAction(payload());
+      if (saved && !saved.ok) {
+        toast({ title: saved.error.message, variant: "danger" });
+        return;
+      }
+      const result = await setQuestionStatusAction(question.id, next);
+      if (!result) return;
+      if (result.ok) {
+        toast({
+          title: next === "published" ? "Опубликован" : "Снят с публикации",
+          variant: "success",
+        });
+        router.refresh();
+      } else {
+        toast({ title: result.error.message, variant: "danger" });
+      }
+    });
   }
 
   function setOption(id: string, patch: Partial<{ text: string; correct: boolean }>): void {
@@ -182,25 +227,14 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
         ) : (
           <Badge>черновик</Badge>
         )}
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          {/* Предпросмотр рисует состояние ФОРМЫ — без этой метки несохранённая
+              правка выглядит как уже сохранённая (находка владельца). */}
+          {dirty && <span className="text-warning text-[12px]">Есть несохранённые правки</span>}
           <Button variant="secondary" size="sm" loading={pending} onClick={save}>
             Сохранить
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={pending}
-            onClick={() =>
-              run(
-                () =>
-                  setQuestionStatusAction(
-                    question.id,
-                    question.status === "published" ? "draft" : "published",
-                  ),
-                question.status === "published" ? "Снят с публикации" : "Опубликован",
-              )
-            }
-          >
+          <Button variant="secondary" size="sm" loading={pending} onClick={toggleStatus}>
             {question.status === "published" ? "В черновик" : "Опубликовать"}
           </Button>
           {question.status === "draft" && (
