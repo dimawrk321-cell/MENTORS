@@ -68,8 +68,21 @@ export function GuidesNav({ guides }: { guides: GuideNavItem[] }) {
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col gap-3 lg:flex">
+      {/* Desktop sidebar. На СТРАНИЦЕ ЧТЕНИЯ гайда он схлопывается там, где встаёт
+          оглавление (≥1264px, тот же литерал, что в lesson-toc): иначе рядом с
+          текстом стоят сразу сайдбар зоны + сайдбар разделов + оглавление и
+          читальная колонка ужимается до ~537px. Чтение важнее навигации —
+          на самой главе её несут «Глава X из Y», карточки соседних глав,
+          «Похожие гайды» и кнопка возврата в раздел. На хабе /guides сайдбар
+          остаётся всегда. */}
+      {/* Скрытие живёт правилом `.guides-section-nav[data-reading]` в globals.css,
+          а не вторым tailwind-вариантом: две утилиты на одно свойство (`lg:flex`
+          против `min-[…]:hidden`) разрешались бы порядком в каскаде, а стек
+          `lg:max-[…]:flex` Tailwind в этом проекте вовсе не сгенерировал. */}
+      <aside
+        data-reading={activeSlug !== null ? "" : undefined}
+        className="guides-section-nav hidden w-60 shrink-0 flex-col gap-3 lg:flex"
+      >
         {search}
         {bookmarksLink}
         {/* 0.2 (walk 13.2): секции — приглушённый мелкий капс с увеличенным

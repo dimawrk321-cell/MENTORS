@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils/cn";
 import { buildToc, readingPercent, type ReadingHeading } from "@/lib/utils/reading";
 
 // Оглавление читального экрана (урок и гайд — один компонент, «Читалка v2»):
-// липкая колонка справа со scroll-spy и процентом прочитанного на ≥1180px,
+// липкая колонка справа со scroll-spy и процентом прочитанного на ≥1264px,
 // Sheet-шторка ниже. Активный раздел и процент берутся из общего хука через
 // ReadingTracker — второго слушателя скролла на странице нет.
 //
@@ -19,12 +19,18 @@ import { buildToc, readingPercent, type ReadingHeading } from "@/lib/utils/readi
 // 85 уроков базы вообще без H2), и жёсткая привязка к H2 оставила бы оглавление
 // пустым (см. lib/utils/reading.ts).
 
-// Оглавление живёт рядом с колонкой только когда для него есть место:
-// 680 (текст) + 40 (зазор) + 224 (колонка) + поля. Ниже 1180px оно уходит в
-// шторку, а читальная колонка просто центрируется — пустого столбца не остаётся.
-// Брейкпоинт написан литералами (`min-[1180px]:…`) в обоих местах намеренно:
+// Оглавление живёт рядом с колонкой только когда для него есть место на ВСЕХ
+// участников сразу: 240 (сайдбар зоны) + 64 (поля) + 680 (текст) + 40 (зазор) +
+// 224 (оглавление) = 1248, плюс ~16px на классический скроллбар — медиазапросы
+// Chrome меряют ширину ВМЕСТЕ с ним, а раскладке достаётся уже без него. Отсюда
+// 1264: ровно на этой ширине читальная колонка ещё держит свои 680. На пороге
+// пониже она СУЖАЛАСЬ бы в момент появления оглавления, то есть текст ужимался
+// бы от расширения окна. Ниже 1264 оглавление уходит в шторку, а колонка просто
+// центрируется — пустого столбца не остаётся.
+// Брейкпоинт написан литералами (`min-[1264px]:…`) во всех местах намеренно:
 // сканер Tailwind v4 читает исходник как текст и склеенный из переменной класс
-// не увидит.
+// не увидит. Тот же литерал стоит в скелетах загрузки обоих экранов и в
+// `GuidesNav` (сайдбар разделов схлопывается там, где встаёт оглавление).
 
 function TocLinks({
   headings,
@@ -97,10 +103,10 @@ export function LessonTocRail({
   // и невидимой: иначе читальная колонка прыгала бы по горизонтали при переходе
   // между соседними главами раздела (одна с заголовками, другая без).
   if (headings.length < 2) {
-    return <aside aria-hidden="true" className="hidden w-56 shrink-0 min-[1180px]:block" />;
+    return <aside aria-hidden="true" className="hidden w-56 shrink-0 min-[1264px]:block" />;
   }
   return (
-    <aside className="sticky top-[76px] hidden max-h-[calc(100dvh-7rem)] w-56 shrink-0 flex-col self-start min-[1180px]:flex">
+    <aside className="sticky top-[76px] hidden max-h-[calc(100dvh-7rem)] w-56 shrink-0 flex-col self-start min-[1264px]:flex">
       <p className="text-text-3 mb-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase">
         {title}
       </p>
@@ -124,7 +130,7 @@ export function LessonTocSheet({
   if (headings.length < 2) return null;
 
   return (
-    <div className="min-[1180px]:hidden">
+    <div className="min-[1264px]:hidden">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <Button variant="secondary" size="sm">

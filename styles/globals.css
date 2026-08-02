@@ -430,6 +430,21 @@
    Unlayered on purpose so the hover border-color/box-shadow win over the base
    border-border / shadow-card utilities (which live in the utilities layer and
    would otherwise override an @layer components rule). */
+/* Сайдбар разделов справочника уступает место оглавлению НА СТРАНИЦЕ ЧТЕНИЯ главы
+   (`data-reading`), начиная с той же ширины, на которой встаёт оглавление
+   (см. lesson-toc.tsx). Иначе рядом с текстом стоят три колонки сразу — сайдбар
+   зоны, сайдбар разделов и оглавление — и читальная колонка зажимается до ~537px,
+   причём при `max-w-6xl` она не может дорасти до 680 ни на какой ширине.
+   Решение владельца: чтение важнее навигации; на самой главе её несут «Глава X из
+   Y», карточки соседних глав, «Похожие гайды» и кнопка возврата в раздел.
+   Правило вне слоёв намеренно — как у .card-cat-hover ниже: так оно выигрывает у
+   утилиты `lg:flex` из слоя utilities, не полагаясь на порядок правил. */
+@media (min-width: 1264px) {
+  .guides-section-nav[data-reading] {
+    display: none;
+  }
+}
+
 .card-cat-hover {
   transition:
     transform 150ms var(--ease),

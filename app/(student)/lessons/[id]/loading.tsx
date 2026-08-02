@@ -30,7 +30,7 @@ export default function LessonLoading() {
       </div>
       {/* Тот же брейкпоинт, что у боевого оглавления (LessonTocRail) — иначе
           колонка чтения прыгнула бы при смене скелета на контент. */}
-      <aside className="hidden w-56 shrink-0 min-[1180px]:block">
+      <aside className="hidden w-56 shrink-0 min-[1264px]:block">
         <Skeleton className="mb-2 h-3 w-24" />
         <div className="flex flex-col gap-2">
           <Skeleton className="h-5 w-full" />
