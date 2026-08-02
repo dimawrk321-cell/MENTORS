@@ -21,7 +21,6 @@ import { ReadingNavCards, type ReadingNavItem } from "@/components/features/read
 import { Badge } from "@/components/ui/badge";
 import { BackButton } from "@/components/ui/back-button";
 import type { ProgressSegment } from "@/components/ui/progress-bar";
-import { sectionDepth } from "@/lib/utils/reading";
 import Link from "next/link";
 
 interface GuidePageProps {
@@ -115,11 +114,7 @@ export default async function GuidePage({ params }: GuidePageProps) {
           {/* Reading column with the always-present watermark layer (spec 5.7). */}
           <div className="relative">
             <Watermark email={session.user.email} />
-            <div
-              className="lesson-prose reading-article"
-              data-reading-size={user.readingFontSize}
-              data-section-level={sectionDepth(headings) ?? undefined}
-            >
+            <div className="lesson-prose reading-article" data-reading-size={user.readingFontSize}>
               {content}
             </div>
           </div>

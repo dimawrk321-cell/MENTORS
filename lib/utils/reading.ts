@@ -18,22 +18,21 @@ export interface ReadingHeading {
 }
 
 export interface TocEntry extends ReadingHeading {
-  /** 1-based position among section-level headings; null for sub-headings. */
-  section: number | null;
-  /** «01», «02», … for section-level headings; null otherwise. */
-  number: string | null;
+  /** Top-level heading of this document (vs a nested one) — drives the indent. */
+  isSection: boolean;
 }
 
 /** Reading line used by the scroll-spy: sticky header (52) + breathing room. */
 export const SCROLL_SPY_OFFSET = 96;
 
 /**
- * The heading depth that acts as a numbered «раздел» of the document.
+ * The heading depth that counts as a top-level «раздел» of the document.
  *
  * Most imported Notion content has NO h2 at all and structures itself with h3
- * (63 of 85 lessons, 20 of 22 guides in the current base), so numbering strictly
- * «по H2» would silently produce nothing. The shallowest depth present is the
- * document's own section level; a document without headings has none.
+ * (63 of 85 lessons, 20 of 22 guides in the current base), so keying the table
+ * of contents strictly on H2 would silently flatten it. The shallowest depth
+ * present is the document's own section level; a document without headings has
+ * none.
  */
 export function sectionDepth(headings: readonly ReadingHeading[]): number | null {
   let min: number | null = null;
@@ -43,24 +42,21 @@ export function sectionDepth(headings: readonly ReadingHeading[]): number | null
   return min;
 }
 
-/** «01».. «09», then «10» — matches CSS `counter(x, decimal-leading-zero)`. */
-export function sectionNumber(index: number): string {
-  return index < 10 ? `0${index}` : String(index);
-}
-
-/** Headings + their section numbers, in document order. */
+/**
+ * Headings in document order, each marked as a top-level section or a nested
+ * one — the table of contents only uses this to indent.
+ *
+ * DECISION (решение владельца): порядковых номеров 01/02/03 здесь НЕТ и в
+ * читалке они не рисуются. Импортированный контент почти весь пронумерован
+ * руками прямо в тексте заголовка («1. Базовый минимум…»), и автонумерация
+ * давала вторую, конфликтующую.
+ */
 export function buildToc(headings: readonly ReadingHeading[]): TocEntry[] {
   const level = sectionDepth(headings);
-  let counter = 0;
-  return headings.map((heading) => {
-    const isSection = level !== null && heading.depth === level;
-    if (isSection) counter += 1;
-    return {
-      ...heading,
-      section: isSection ? counter : null,
-      number: isSection ? sectionNumber(counter) : null,
-    };
-  });
+  return headings.map((heading) => ({
+    ...heading,
+    isSection: level !== null && heading.depth === level,
+  }));
 }
 
 /**

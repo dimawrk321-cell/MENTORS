@@ -130,9 +130,8 @@ function RenderError({ error }: { error: unknown }) {
 
 /**
  * Render markdown for a preview without ever blowing up the pane (spec 13.1/D5).
- * Returns the headings too, so the preview can carry the same
- * `data-section-level` as the student page and stay identical by construction
- * (нумерация разделов 01/02/03 — «Читалка v2»).
+ * Same shape as `renderLessonContent` — the preview ignores the headings today
+ * (no table of contents in the studio pane), but the two paths stay symmetric.
  */
 export async function renderLessonContentSafe(markdown: string): Promise<RenderedLessonContent> {
   try {

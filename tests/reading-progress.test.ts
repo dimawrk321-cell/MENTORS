@@ -5,13 +5,12 @@ import {
   readingFraction,
   readingPercent,
   sectionDepth,
-  sectionNumber,
   SCROLL_SPY_OFFSET,
   type ReadingHeading,
 } from "@/lib/utils/reading";
 
-// «Читалка v2»: полоса прогресса чтения, scroll-spy оглавления и нумерация
-// разделов 01/02/03 держатся на этих чистых функциях — общий хук
+// «Читалка v2»: полоса прогресса чтения, scroll-spy оглавления и уровень
+// вложенности его пунктов держатся на этих чистых функциях — общий хук
 // (lib/hooks/use-reading-progress.ts) только слушает скролл и подставляет
 // измерения. В репозитории нет jsdom (vitest environment: node), поэтому
 // проверяемая часть намеренно вынесена из DOM.
@@ -54,14 +53,14 @@ describe("readingPercent — «прочитано N%»", () => {
   });
 });
 
-describe("sectionDepth — какой уровень заголовков считается разделом", () => {
+describe("sectionDepth — какой уровень заголовков считается верхним", () => {
   it("H2, когда они есть", () => {
     expect(sectionDepth([h("a", 2), h("b", 3), h("c", 2)])).toBe(2);
   });
 
   it("падает на H3, когда H2 в документе нет", () => {
     // 63 из 85 уроков и 20 из 22 гайдов базы структурированы H3 — жёсткая
-    // привязка нумерации к H2 не пронумеровала бы ничего.
+    // привязка к H2 сплющила бы их оглавление в один уровень.
     expect(sectionDepth([h("a", 3), h("b", 3)])).toBe(3);
   });
 
@@ -70,25 +69,27 @@ describe("sectionDepth — какой уровень заголовков счи
   });
 });
 
-describe("sectionNumber / buildToc — нумерация 01/02/03", () => {
-  it("ведущий ноль до девяти, дальше без него (как decimal-leading-zero)", () => {
-    expect(sectionNumber(1)).toBe("01");
-    expect(sectionNumber(9)).toBe("09");
-    expect(sectionNumber(10)).toBe("10");
+describe("buildToc — уровни пунктов оглавления", () => {
+  it("порядковых номеров у пунктов нет — только текст и уровень", () => {
+    // Решение владельца: импортированные заголовки почти все пронумерованы
+    // руками прямо в тексте («1. Базовый минимум…»), автонумерация давала
+    // вторую поверх первой.
+    const toc = buildToc([h("intro", 2, "1. Базовый минимум")]);
+    expect(Object.keys(toc[0]!).sort()).toEqual(["depth", "id", "isSection", "text"]);
+    expect(toc[0]!.text).toBe("1. Базовый минимум");
   });
 
-  it("нумерует только уровень раздела, вложенные заголовки — без номера", () => {
+  it("верхний уровень отмечен разделом, вложенный — нет", () => {
     const toc = buildToc([h("intro", 2), h("intro-sub", 3), h("practice", 2)]);
-    expect(toc.map((e) => e.number)).toEqual(["01", null, "02"]);
-    expect(toc.map((e) => e.section)).toEqual([1, null, 2]);
+    expect(toc.map((e) => e.isSection)).toEqual([true, false, true]);
   });
 
-  it("в документе без H2 номера получают H3", () => {
+  it("в документе без H2 разделами становятся H3", () => {
     const toc = buildToc([h("a", 3), h("b", 3), h("c", 3)]);
-    expect(toc.map((e) => e.number)).toEqual(["01", "02", "03"]);
+    expect(toc.map((e) => e.isSection)).toEqual([true, true, true]);
   });
 
-  it("документ без заголовков даёт пустое оглавление, а не пустые номера", () => {
+  it("документ без заголовков даёт пустое оглавление", () => {
     expect(buildToc([])).toEqual([]);
   });
 

@@ -7,7 +7,6 @@ import { GUIDE_SECTION_LABEL } from "@/lib/constants";
 import { renderLessonContentSafe } from "@/components/blocks/lesson-renderer";
 import { Watermark } from "@/components/features/watermark";
 import { Badge } from "@/components/ui/badge";
-import { sectionDepth } from "@/lib/utils/reading";
 
 export const metadata: Metadata = {
   title: "Предпросмотр гайда",
@@ -25,7 +24,7 @@ export default async function GuidePreviewPage({ params }: GuidePreviewPageProps
   const guide = await getGuideForEditor(prisma, id);
   if (!guide) notFound();
 
-  const { content, headings } = await renderLessonContentSafe(guide.contentMd);
+  const { content } = await renderLessonContentSafe(guide.contentMd);
 
   return (
     <main className="mx-auto w-full max-w-[680px] px-4 py-8">
@@ -36,13 +35,8 @@ export default async function GuidePreviewPage({ params }: GuidePreviewPageProps
       <h1 className="text-[32px] font-semibold">{guide.title}</h1>
       <div className="relative mt-5">
         <Watermark email={user.email} />
-        {/* Тот же `reading-article` + уровень разделов, что у ученика (spec 8.5). */}
-        <div
-          className="lesson-prose reading-article"
-          data-section-level={sectionDepth(headings) ?? undefined}
-        >
-          {content}
-        </div>
+        {/* Тот же `reading-article`, что у ученика (spec 8.5). */}
+        <div className="lesson-prose reading-article">{content}</div>
       </div>
     </main>
   );

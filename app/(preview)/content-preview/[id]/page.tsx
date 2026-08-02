@@ -7,7 +7,6 @@ import { renderLessonContentSafe } from "@/components/blocks/lesson-renderer";
 import { VideoEmbed } from "@/components/blocks/video-embed";
 import { Watermark } from "@/components/features/watermark";
 import { Badge } from "@/components/ui/badge";
-import { sectionDepth } from "@/lib/utils/reading";
 
 export const metadata: Metadata = {
   title: "Предпросмотр",
@@ -28,7 +27,7 @@ export default async function ContentPreviewPage({ params }: PreviewPageProps) {
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();
 
-  const { content, headings } = await renderLessonContentSafe(lesson.contentMd);
+  const { content } = await renderLessonContentSafe(lesson.contentMd);
 
   return (
     <main className="mx-auto w-full max-w-[680px] px-4 py-8">
@@ -47,14 +46,9 @@ export default async function ContentPreviewPage({ params }: PreviewPageProps) {
       )}
       <div className="relative">
         <Watermark email={user.email} />
-        {/* Тот же `reading-article` + уровень разделов, что у ученика — иначе
-            предпросмотр разошёлся бы с боевым видом (spec 8.5). */}
-        <article
-          className="lesson-prose reading-article"
-          data-section-level={sectionDepth(headings) ?? undefined}
-        >
-          {content}
-        </article>
+        {/* Тот же `reading-article`, что у ученика — иначе предпросмотр
+            разошёлся бы с боевым видом (spec 8.5). */}
+        <article className="lesson-prose reading-article">{content}</article>
       </div>
     </main>
   );

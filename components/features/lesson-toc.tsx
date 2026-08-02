@@ -14,10 +14,14 @@ import { buildToc, readingPercent, type ReadingHeading } from "@/lib/utils/readi
 // Sheet-шторка ниже. Активный раздел и процент берутся из общего хука через
 // ReadingTracker — второго слушателя скролла на странице нет.
 //
-// Нумерация 01/02/03 идёт по САМОМУ ВЕРХНЕМУ уровню заголовков документа, а не
-// строго по H2: импортированный контент сплошь и рядом структурирован H3 (63 из
-// 85 уроков базы вообще без H2), и жёсткая привязка к H2 оставила бы оглавление
-// пустым (см. lib/utils/reading.ts).
+// Уровень вложенности пункта считается по САМОМУ ВЕРХНЕМУ уровню заголовков
+// документа, а не строго по H2: импортированный контент сплошь и рядом
+// структурирован H3 (63 из 85 уроков базы вообще без H2), и жёсткая привязка к
+// H2 сплющила бы оглавление (см. lib/utils/reading.ts).
+//
+// Порядковых номеров у пунктов НЕТ (решение владельца): импортированные
+// заголовки почти все пронумерованы руками прямо в тексте — «1. Базовый
+// минимум…», — и автонумерация давала вторую поверх первой.
 
 // Оглавление живёт рядом с колонкой только когда для него есть место на ВСЕХ
 // участников сразу: 240 (сайдбар зоны) + 64 (поля) + 680 (текст) + 40 (зазор) +
@@ -53,25 +57,14 @@ function TocLinks({
               onClick={onNavigate}
               aria-current={active ? "location" : undefined}
               className={cn(
-                "ease-app flex items-baseline gap-2 border-l-2 py-1.5 pr-1 text-[13px] break-words transition-colors duration-150",
-                entry.section === null ? "pl-6 text-[12.5px]" : "pl-3",
+                "ease-app block border-l-2 py-1.5 pr-1 text-[13px] break-words transition-colors duration-150",
+                entry.isSection ? "pl-3" : "pl-6 text-[12.5px]",
                 active
                   ? "border-l-accent text-text-1"
                   : "border-l-border text-text-3 hover:text-text-1",
               )}
             >
-              {entry.number && (
-                <span
-                  className={cn(
-                    "shrink-0 text-[11px] font-semibold tabular-nums",
-                    // accent-ink: 11px акцентом не берёт 4.5 в тёмной теме.
-                    active ? "accent-ink" : "text-text-3",
-                  )}
-                >
-                  {entry.number}
-                </span>
-              )}
-              <span className="min-w-0">{entry.text}</span>
+              {entry.text}
             </a>
           </li>
         );

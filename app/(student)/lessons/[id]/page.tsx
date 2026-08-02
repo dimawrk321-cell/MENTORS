@@ -24,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { ProgressSegment } from "@/components/ui/progress-bar";
-import { sectionDepth } from "@/lib/utils/reading";
 
 const DIFFICULTY_LABEL = { intro: "интро", base: "база", advanced: "продвинутый" } as const;
 
@@ -189,14 +188,7 @@ export default async function LessonPage({ params }: LessonPageProps) {
             {/* Reading column with the always-present watermark layer (spec 5.7). */}
             <div className="relative">
               <Watermark email={session.user.email} />
-              {/* data-section-level включает нумерацию 01/02/03 по верхнему уровню
-                заголовков этого документа (H2, а если их нет — H3). */}
-              <article
-                className="lesson-prose reading-article"
-                data-section-level={sectionDepth(headings) ?? undefined}
-              >
-                {content}
-              </article>
+              <article className="lesson-prose reading-article">{content}</article>
             </div>
           </LessonReader>
 
