@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { CheckSquare, Link2, Plus, Search, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckSquare, Link2, Plus, Search, Square, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,6 +118,14 @@ export function LessonQuestions({
       return next;
     });
 
+  // Что реально доедет до ученика: черновики отбрасывает выборка урока
+  // (getKeyQuestionsForLesson / getQuizQuestionsForLesson), и без этой строки
+  // пропажа блока выглядит как баг платформы, а не как неопубликованный вопрос.
+  const published = links.filter((link) => link.status === "published");
+  const visibleKey = published.filter((link) => link.isKey).length;
+  const visibleQuiz = published.filter((link) => link.inQuiz).length;
+  const draftLinks = links.length - published.length;
+
   const allSelected = links.length > 0 && selected.size === links.length;
   const toggleAll = () =>
     setSelected(allSelected ? new Set() : new Set(links.map((link) => link.questionId)));
@@ -155,10 +163,35 @@ export function LessonQuestions({
           {adding ? "Закрыть" : "Добавить вопрос"}
         </Button>
       </div>
-      <p className="text-text-3 mb-3 text-[13px]">
+      <p className="text-text-3 mb-2 text-[13px]">
         Роль одна: «ключевой» попадает в блок «Ключевые вопросы» (и в SRS с этапа 4), «в квизе» — в
         квиз урока.
       </p>
+
+      {/* Находка владельца: счётчик привязок показывал 2, а блока «Ключевые
+          вопросы» у ученика не было — оба вопроса оказались ЧЕРНОВИКАМИ, и
+          выборка их молча отбросила. Счётчик считает привязки, а не то, что
+          доедет до ученика, поэтому итог проговаривается явно. */}
+      {links.length > 0 && (
+        <p className="text-text-2 mb-3 text-[13px]">
+          Ученик увидит: <span className="text-text-1 tabular-nums">{visibleKey}</span> ключевых ·{" "}
+          <span className="text-text-1 tabular-nums">{visibleQuiz}</span> в квизе
+        </p>
+      )}
+      {draftLinks > 0 && (
+        <p className="rounded-control border-warning/35 bg-warning/6 text-text-2 mb-3 flex items-start gap-2 border px-3 py-2 text-[13px]">
+          <AlertTriangle
+            size={15}
+            strokeWidth={1.75}
+            className="text-warning mt-0.5 shrink-0"
+            aria-hidden="true"
+          />
+          <span>
+            Привязано черновиков: <span className="tabular-nums">{draftLinks}</span> — ученик их не
+            увидит. Опубликуй вопрос в банке, иначе привязка не работает.
+          </span>
+        </p>
+      )}
 
       {links.length === 0 ? (
         <p className="text-text-3 mb-4 text-[13px]">
@@ -230,7 +263,11 @@ export function LessonQuestions({
                   {link.teaser}
                   <span className="text-text-3 ml-2">· {link.category}</span>
                 </span>
-                {link.status === "draft" && <Badge>черновик</Badge>}
+                {link.status === "draft" && (
+                  <Badge variant="warning" title="Черновик — ученик этот вопрос не увидит">
+                    черновик
+                  </Badge>
+                )}
                 {/* Changelog этапа 3: роль одна — ключевой ИЛИ в квизе. */}
                 <QuestionRoleSelect
                   value={roleFromFlags(link.isKey, link.inQuiz)}
@@ -318,7 +355,11 @@ export function LessonQuestions({
                     {row.textMd.slice(0, 120) || "— без текста —"}
                     <span className="text-text-3 ml-2">· {row.category}</span>
                   </span>
-                  {row.status === "draft" && <Badge>черновик</Badge>}
+                  {row.status === "draft" && (
+                    <Badge variant="warning" title="Черновик — ученик этот вопрос не увидит">
+                      черновик
+                    </Badge>
+                  )}
                   <Button
                     variant="secondary"
                     size="sm"
