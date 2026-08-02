@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { ContentStatus } from "@prisma/client";
 import { testDb, resetDb } from "./helpers/db";
-import {
-  bulkPublish,
-  bulkSetDraft,
-  listQuestionIdsForFilter,
-} from "@/lib/services/questions";
+import { bulkPublish, bulkSetDraft, listQuestionIdsForFilter } from "@/lib/services/questions";
 
 // C1 (spec 13.1): bulk question operations — bulk «в черновик», the existing bulk
 // publish (only valid targets, skip-count), and select-all-by-filter id listing.
@@ -25,11 +21,23 @@ async function makeQuestion(status: ContentStatus, answer = "эталон") {
     categoryId ||
     (categoryId = (
       await testDb.questionCategory.create({
-        data: { title: "Cat", slug: `cat-${Math.round(Math.random() * 1e6)}`, colorIndex: 0, order: 0 },
+        data: {
+          title: "Cat",
+          slug: `cat-${Math.round(Math.random() * 1e6)}`,
+          colorIndex: 0,
+          order: 0,
+        },
       })
     ).id);
   return testDb.question.create({
-    data: { type: "open", categoryId: cat, textMd: "Вопрос?", answerMd: answer, status, difficulty: 1 },
+    data: {
+      type: "open",
+      categoryId: cat,
+      textMd: "Вопрос?",
+      answerMd: answer,
+      status,
+      difficulty: 1,
+    },
   });
 }
 
@@ -51,7 +59,9 @@ describe("bulk questions (spec 13.1/C1)", () => {
     expect(res.updated).toBe(2); // only the two published flip
     expect((await testDb.question.findUnique({ where: { id: p1.id } }))!.status).toBe("draft");
     expect((await testDb.question.findUnique({ where: { id: d1.id } }))!.status).toBe("draft");
-    const audits = await testDb.auditLog.findMany({ where: { action: "question.bulk_unpublished" } });
+    const audits = await testDb.auditLog.findMany({
+      where: { action: "question.bulk_unpublished" },
+    });
     expect(audits.length).toBe(1);
     expect((audits[0]!.after as { unpublished: number }).unpublished).toBe(2);
   });
@@ -65,7 +75,9 @@ describe("bulk questions (spec 13.1/C1)", () => {
     });
     expect(res.published).toBe(1);
     expect(res.skipped).toBe(1);
-    expect((await testDb.question.findUnique({ where: { id: good.id } }))!.status).toBe("published");
+    expect((await testDb.question.findUnique({ where: { id: good.id } }))!.status).toBe(
+      "published",
+    );
     expect((await testDb.question.findUnique({ where: { id: bad.id } }))!.status).toBe("draft");
     const audits = await testDb.auditLog.findMany({ where: { action: "question.bulk_published" } });
     expect(audits.length).toBe(1);

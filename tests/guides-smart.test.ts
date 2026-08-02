@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { GuideSection } from "@prisma/client";
 import { testDb, resetDb } from "./helpers/db";
-import {
-  searchGuidesByContent,
-  listSimilarGuides,
-  hasVisibleGuides,
-} from "@/lib/services/guides";
+import { searchGuidesByContent, listSimilarGuides, hasVisibleGuides } from "@/lib/services/guides";
 
 // D6 (spec 13.1): guide content FTS, «Похожие гайды», and the nav-visibility check.
 
@@ -25,7 +21,11 @@ describe("smart guides (spec 13.1/D6)", () => {
   });
 
   it("searchGuidesByContent matches BODY text (not just the title)", async () => {
-    await makeGuide("stages", "Как пройти скрининг", "Готовься к вопросам про метрики и валидацию.");
+    await makeGuide(
+      "stages",
+      "Как пройти скрининг",
+      "Готовься к вопросам про метрики и валидацию.",
+    );
     const hits = await searchGuidesByContent(testDb, "валидация", ALL);
     expect(hits.length).toBe(1);
     expect(hits[0]!.title).toBe("Как пройти скрининг");

@@ -45,8 +45,12 @@ describe("bulk library (spec 13.1/C3)", () => {
     });
     expect(res.updated).toBe(1);
     expect(res.skipped).toBe(2);
-    expect((await testDb.recording.findUnique({ where: { id: good.id } }))!.status).toBe("published");
-    expect((await testDb.recording.findUnique({ where: { id: notReady.id } }))!.status).toBe("draft");
+    expect((await testDb.recording.findUnique({ where: { id: good.id } }))!.status).toBe(
+      "published",
+    );
+    expect((await testDb.recording.findUnique({ where: { id: notReady.id } }))!.status).toBe(
+      "draft",
+    );
     const audits = await testDb.auditLog.findMany({ where: { action: "recording.bulk_status" } });
     expect(audits).toHaveLength(1);
     expect((audits[0]!.after as { updated: number }).updated).toBe(1);

@@ -79,6 +79,8 @@ describe("changeStudentEmail (spec 13.1/D2)", () => {
     // No audit for a no-op.
     expect(await testDb.auditLog.count({ where: { action: "email.changed" } })).toBe(0);
     // emailVerifiedAt preserved on a no-op.
-    expect((await testDb.user.findUniqueOrThrow({ where: { id: s.id } })).emailVerifiedAt).not.toBeNull();
+    expect(
+      (await testDb.user.findUniqueOrThrow({ where: { id: s.id } })).emailVerifiedAt,
+    ).not.toBeNull();
   });
 });

@@ -77,7 +77,9 @@ describe("bulk students (spec 13.1/C5)", () => {
     });
     expect(res.granted).toBe(2);
     expect(res.skipped).toBe(1); // mentor filtered out
-    const audits = await testDb.auditLog.findMany({ where: { action: "streak.bulk_freeze_gifted" } });
+    const audits = await testDb.auditLog.findMany({
+      where: { action: "streak.bulk_freeze_gifted" },
+    });
     expect(audits).toHaveLength(1);
     expect((audits[0]!.after as { granted: number }).granted).toBe(2);
   });

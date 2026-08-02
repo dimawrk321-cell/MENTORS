@@ -17,10 +17,19 @@ let seq = 0;
 async function makeStudent() {
   seq += 1;
   return testDb.user.create({
-    data: { email: `s${seq}@x.io`, name: `S${seq}`, role: "student", status: "active", avatarColor: 0 },
+    data: {
+      email: `s${seq}@x.io`,
+      name: `S${seq}`,
+      role: "student",
+      status: "active",
+      avatarColor: 0,
+    },
   });
 }
-async function makeSession(userId: string, opts: { revoked?: boolean; impersonated?: boolean } = {}) {
+async function makeSession(
+  userId: string,
+  opts: { revoked?: boolean; impersonated?: boolean } = {},
+) {
   seq += 1;
   return testDb.session.create({
     data: {
@@ -106,16 +115,34 @@ describe("admin security aggregates (spec 13.1/D3)", () => {
   it("listMultiDeviceStudents flags a student with a new device + another", async () => {
     const s = await makeStudent();
     await testDb.device.create({
-      data: { userId: s.id, fingerprintHash: "fp1", label: "Chrome", firstSeenAt: NOW, lastSeenAt: NOW },
+      data: {
+        userId: s.id,
+        fingerprintHash: "fp1",
+        label: "Chrome",
+        firstSeenAt: NOW,
+        lastSeenAt: NOW,
+      },
     });
     const old = new Date("2026-01-01T00:00:00Z");
     await testDb.device.create({
-      data: { userId: s.id, fingerprintHash: "fp2", label: "Safari", firstSeenAt: old, lastSeenAt: old },
+      data: {
+        userId: s.id,
+        fingerprintHash: "fp2",
+        label: "Safari",
+        firstSeenAt: old,
+        lastSeenAt: old,
+      },
     });
     // A single-device student is not flagged.
     const single = await makeStudent();
     await testDb.device.create({
-      data: { userId: single.id, fingerprintHash: "fp3", label: "Edge", firstSeenAt: NOW, lastSeenAt: NOW },
+      data: {
+        userId: single.id,
+        fingerprintHash: "fp3",
+        label: "Edge",
+        firstSeenAt: NOW,
+        lastSeenAt: NOW,
+      },
     });
 
     const rows = await listMultiDeviceStudents(testDb, { now: NOW });

@@ -9,7 +9,13 @@ const DAY = new Date("2026-07-22");
 
 async function makeStudent(freezes = 0) {
   const user = await testDb.user.create({
-    data: { email: `s${Math.random()}@x.io`, name: "S", role: "student", status: "active", avatarColor: 0 },
+    data: {
+      email: `s${Math.random()}@x.io`,
+      name: "S",
+      role: "student",
+      status: "active",
+      avatarColor: 0,
+    },
   });
   if (freezes > 0) {
     await testDb.streak.create({ data: { userId: user.id, freezes } });
@@ -66,11 +72,15 @@ describe("applyLevelUp (spec 13.1/D7)", () => {
     // 4 (Джун) → 5 (Оверфиттер): title changes.
     const changed = await applyLevelUp(testDb, { userId: s.id, before: 4, after: 5, day: DAY });
     expect(changed.newTitle).not.toBeNull();
-    expect(await testDb.notification.count({ where: { userId: s.id, type: "level_title" } })).toBe(1);
+    expect(await testDb.notification.count({ where: { userId: s.id, type: "level_title" } })).toBe(
+      1,
+    );
 
     // 5 → 6 stays «Оверфиттер» (minLevel 5, next is 7): no new title.
     const same = await applyLevelUp(testDb, { userId: s.id, before: 5, after: 6, day: DAY });
     expect(same.newTitle).toBeNull();
-    expect(await testDb.notification.count({ where: { userId: s.id, type: "level_title" } })).toBe(1);
+    expect(await testDb.notification.count({ where: { userId: s.id, type: "level_title" } })).toBe(
+      1,
+    );
   });
 });
