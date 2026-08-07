@@ -13,6 +13,11 @@ interface ToastOptions {
   variant?: ToastVariant;
   /** Опциональный монохромный глиф слева (достижения — spec 5.6). */
   icon?: React.ReactNode;
+  /**
+   * Одно действие в тосте — «Вернуть» после удаления блока в редакторе.
+   * Клик выполняет колбэк и закрывает тост.
+   */
+  action?: { label: string; onClick: () => void };
 }
 
 interface ToastItem extends ToastOptions {
@@ -93,6 +98,15 @@ function Toaster() {
               <ToastPrimitive.Description className="text-text-2 text-[13px]">
                 {item.description}
               </ToastPrimitive.Description>
+            ) : null}
+            {item.action ? (
+              <ToastPrimitive.Action
+                altText={item.action.label}
+                onClick={item.action.onClick}
+                className="text-accent ease-app hover:text-accent-hover mt-1.5 text-[13px] font-medium transition-colors duration-150"
+              >
+                {item.action.label}
+              </ToastPrimitive.Action>
             ) : null}
           </div>
           <ToastPrimitive.Close
