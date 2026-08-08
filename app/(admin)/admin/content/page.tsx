@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
-import { getContentTree } from "@/lib/services/content-admin";
+import { getContentTree, listCategoryOptions } from "@/lib/services/content-admin";
 import { ContentStudioTabs } from "@/components/features/content-studio-tabs";
 import { ContentTree, type TreeCourse } from "./content-tree";
 
@@ -12,7 +12,10 @@ export const metadata: Metadata = {
 /** Content studio tree (spec 8.5): drag order, statuses, CRUD dialogs. */
 export default async function ContentPage() {
   await requirePermission("content.manage");
-  const courses = await getContentTree(prisma);
+  const [courses, categories] = await Promise.all([
+    getContentTree(prisma),
+    listCategoryOptions(prisma),
+  ]);
 
   const tree: TreeCourse[] = courses.map((course) => ({
     id: course.id,
@@ -21,6 +24,7 @@ export default async function ContentPage() {
     description: course.description,
     gating: course.gating,
     status: course.status,
+    questionCategoryIds: course.questionCategories.map((link) => link.categoryId),
     modules: course.modules.map((module) => ({
       id: module.id,
       title: module.title,
@@ -46,7 +50,7 @@ export default async function ContentPage() {
   return (
     <div className="flex flex-col gap-4">
       <ContentStudioTabs />
-      <ContentTree courses={tree} />
+      <ContentTree courses={tree} categories={categories} />
     </div>
   );
 }

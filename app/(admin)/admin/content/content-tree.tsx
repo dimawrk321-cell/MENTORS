@@ -74,6 +74,10 @@ import {
   updateCourseAction,
 } from "@/lib/actions/content-admin";
 import { upsertModuleTestAction } from "@/lib/actions/questions-admin";
+import {
+  CategoryMultiSelect,
+  type CategoryOption,
+} from "@/components/features/category-multi-select";
 import { pluralRu } from "@/lib/utils/dates";
 
 export interface TreeLesson {
@@ -106,6 +110,8 @@ export interface TreeCourse {
   description: string;
   gating: "strict" | "recommended" | "free";
   status: "draft" | "published";
+  /** Категории банка, относящиеся к курсу (заход «Банк вопросов», A1). */
+  questionCategoryIds: string[];
   modules: TreeModule[];
 }
 
@@ -399,7 +405,7 @@ function ConfirmDialog({
 
 // --- Course card with nested modules/lessons ---
 
-function CourseCard({ course }: { course: TreeCourse }) {
+function CourseCard({ course, categories }: { course: TreeCourse; categories: CategoryOption[] }) {
   const { pending, act } = useAct();
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -411,6 +417,7 @@ function CourseCard({ course }: { course: TreeCourse }) {
     slug: course.slug,
     description: course.description,
     gating: course.gating as string,
+    questionCategoryIds: course.questionCategoryIds,
   });
 
   useEffect(() => {
@@ -419,6 +426,7 @@ function CourseCard({ course }: { course: TreeCourse }) {
       slug: course.slug,
       description: course.description,
       gating: course.gating,
+      questionCategoryIds: course.questionCategoryIds,
     });
   }, [course]);
 
@@ -591,6 +599,14 @@ function CourseCard({ course }: { course: TreeCourse }) {
                 </SelectContent>
               </Select>
             </div>
+            {/* Заход «Банк вопросов» (A1): единственный рычаг доступа к вопросам —
+                эта связь. Отдельных ручек по категориям нет ни здесь, ни в
+                карточке ученика. */}
+            <CategoryMultiSelect
+              options={categories}
+              value={form.questionCategoryIds}
+              onChange={(questionCategoryIds) => setForm({ ...form, questionCategoryIds })}
+            />
             <DialogFooter className="mt-0">
               <Button type="button" variant="secondary" onClick={() => setEditOpen(false)}>
                 Отмена
@@ -979,7 +995,13 @@ function LessonRow({ lesson }: { lesson: TreeLesson }) {
   );
 }
 
-export function ContentTree({ courses }: { courses: TreeCourse[] }) {
+export function ContentTree({
+  courses,
+  categories,
+}: {
+  courses: TreeCourse[];
+  categories: CategoryOption[];
+}) {
   const { pending, act } = useAct();
   const [newCourseOpen, setNewCourseOpen] = useState(false);
 
@@ -1021,7 +1043,7 @@ export function ContentTree({ courses }: { courses: TreeCourse[] }) {
               {courses.map((course) => (
                 <SortableRow key={course.id} id={course.id} className="flex items-start gap-1.5">
                   <Card className="min-w-0 flex-1 p-4">
-                    <CourseCard course={course} />
+                    <CourseCard course={course} categories={categories} />
                   </Card>
                 </SortableRow>
               ))}

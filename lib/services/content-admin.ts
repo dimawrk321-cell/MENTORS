@@ -13,10 +13,46 @@ import { slugify, uniqueSlug } from "@/lib/utils/slug";
 
 // --- Tree ---
 
+/**
+ * Плоский список категорий банка для формы курса (заход «Банк вопросов», A1):
+ * корень → его подкатегории, со счётчиком опубликованных вопросов. Счётчик тут
+ * не украшение: он единственный ориентир, когда ментор проставляет связи руками,
+ * не дожидаясь привязок вопрос→урок.
+ */
+export interface CategoryOption {
+  id: string;
+  title: string;
+  parentId: string | null;
+  questions: number;
+}
+
+export async function listCategoryOptions(db: Db): Promise<CategoryOption[]> {
+  const [categories, counts] = await Promise.all([
+    db.questionCategory.findMany({
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { id: true, title: true, parentId: true },
+    }),
+    db.question.groupBy({ by: ["categoryId"], where: { status: "published" }, _count: true }),
+  ]);
+  const byCategory = new Map(counts.map((c) => [c.categoryId, c._count]));
+  const roots = categories.filter((c) => c.parentId === null);
+  const ordered: typeof categories = [];
+  for (const root of roots) {
+    ordered.push(root);
+    ordered.push(...categories.filter((c) => c.parentId === root.id));
+  }
+  // Осиротевшие (родитель удалён) не должны пропасть из списка.
+  for (const category of categories) {
+    if (!ordered.includes(category)) ordered.push(category);
+  }
+  return ordered.map((c) => ({ ...c, questions: byCategory.get(c.id) ?? 0 }));
+}
+
 export async function getContentTree(db: Db) {
   return db.course.findMany({
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     include: {
+      questionCategories: { select: { categoryId: true } },
       modules: {
         orderBy: [{ order: "asc" }, { createdAt: "asc" }],
         include: {
