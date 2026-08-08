@@ -3,6 +3,7 @@ import type { Db } from "@/lib/db";
 import { addDays, dateOnlyUtc, localDateStr, zonedDayUtcRange } from "@/lib/utils/dates";
 import { emitEvent, mergeEmitResults, type EarnedAchievement } from "@/lib/services/events";
 import { getNumericSetting, OPS_NEW_CARDS_PER_DAY_KEY } from "@/lib/services/settings";
+import { getQuestionAccess } from "@/lib/services/question-access";
 
 // SRS — интервальные повторения (spec 7.6), ядро продукта. Планировщик —
 // чистая функция applyGrade (юнит-тесты всех переходов); источники карточек
@@ -258,12 +259,17 @@ export async function getSrsQueue(
   const now = input.now ?? new Date();
   const { timezone, todayStr, today } = await getUserToday(db, input.userId, now);
 
+  // Заход «Банк вопросов»: карточки категорий, закрытых цепью курсов, из
+  // очереди ПРЯЧУТСЯ, но не удаляются — курс откроется, и они вернутся с
+  // сохранённым интервалом.
+  const access = await getQuestionAccess(db, input.userId);
+
   const due = await db.srsCard.findMany({
     where: {
       userId: input.userId,
       suspended: false,
       nextReviewAt: { lte: today },
-      question: { status: "published" },
+      question: { status: "published", categoryId: { in: [...access.categoryIds] } },
     },
     orderBy: [{ nextReviewAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
   });
@@ -298,10 +304,11 @@ export async function getNextReviewDate(
   const now = input.now ?? new Date();
   const { timezone, todayStr, today } = await getUserToday(db, input.userId, now);
 
+  const access = await getQuestionAccess(db, input.userId);
   const baseWhere = {
     userId: input.userId,
     suspended: false,
-    question: { status: "published" as const },
+    question: { status: "published" as const, categoryId: { in: [...access.categoryIds] } },
   };
 
   const nextFuture = await db.srsCard.findFirst({

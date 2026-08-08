@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { isOpen, listCourseAccess } from "@/lib/services/course-access";
+import { getQuestionAccess } from "@/lib/services/question-access";
 import {
   GUIDE_SECTION_LABEL,
   LESSON_DIFFICULTY_LABEL,
@@ -184,6 +185,18 @@ interface LessonRow {
  */
 type CourseScope = string[] | null;
 
+/**
+ * Категории банка, доступные ученику по цепи курсов (заход «Банк вопросов»).
+ * Та же дисциплина, что у CourseScope: null — персонал, пустой массив — честный
+ * ноль результатов, а не молчаливый показ всего.
+ */
+type CategoryScope = string[] | null;
+
+function categoryScopeSql(scope: CategoryScope): Prisma.Sql {
+  if (scope === null) return Prisma.empty;
+  return Prisma.sql`AND q.category_id IN (${Prisma.join(scope)})`;
+}
+
 function courseScopeSql(scope: CourseScope): Prisma.Sql {
   if (scope === null) return Prisma.empty;
   return Prisma.sql`AND m.status = 'published' AND m.course_id IN (${Prisma.join(scope)})`;
@@ -222,8 +235,9 @@ interface QuestionRow {
   type: string;
 }
 
-async function searchQuestions(db: Db, q: string): Promise<SearchItem[]> {
-  const rows = await db.$queryRaw<QuestionRow[]>`
+async function searchQuestions(db: Db, q: string, scope: CategoryScope): Promise<SearchItem[]> {
+  if (scope !== null && scope.length === 0) return [];
+  const rows = await db.$queryRaw<QuestionRow[]>(Prisma.sql`
     SELECT q.id,
            left(q.text_md, 200) AS text_md,
            ts_headline('russian', coalesce(q.answer_md, '') || ' ' || q.text_md, query, ${HEADLINE_OPTS}) AS snippet,
@@ -233,8 +247,9 @@ async function searchQuestions(db: Db, q: string): Promise<SearchItem[]> {
     JOIN question_categories c ON c.id = q.category_id,
          websearch_to_tsquery('russian', ${q}) query
     WHERE q.status = 'published' AND q.search_vector @@ query
+      ${categoryScopeSql(scope)}
     ORDER BY ts_rank(q.search_vector, query) DESC, q.id
-    LIMIT ${SEARCH_GROUP_LIMIT}`;
+    LIMIT ${SEARCH_GROUP_LIMIT}`);
   return rows.map((r) => ({
     id: r.id,
     title: stripMarkdown(r.text_md, 100),
@@ -369,13 +384,15 @@ async function fuzzyGuides(db: Db, q: string, allow: GuideSectionAccess): Promis
   }));
 }
 
-async function fuzzyQuestions(db: Db, q: string): Promise<SearchItem[]> {
-  const rows = await db.$queryRaw<{ id: string; text_md: string }[]>`
+async function fuzzyQuestions(db: Db, q: string, scope: CategoryScope): Promise<SearchItem[]> {
+  if (scope !== null && scope.length === 0) return [];
+  const rows = await db.$queryRaw<{ id: string; text_md: string }[]>(Prisma.sql`
     SELECT q.id, left(q.text_md, 200) AS text_md
     FROM questions q
     WHERE q.status = 'published' AND ${q} <% q.text_md AND word_similarity(${q}, q.text_md) > 0.3
+      ${categoryScopeSql(scope)}
     ORDER BY word_similarity(${q}, q.text_md) DESC, q.id
-    LIMIT ${SEARCH_GROUP_LIMIT}`;
+    LIMIT ${SEARCH_GROUP_LIMIT}`);
   return rows.map((r) => ({
     id: r.id,
     title: stripMarkdown(r.text_md, 100),
@@ -450,10 +467,16 @@ export async function search(db: PrismaClient, input: SearchInput): Promise<Sear
     : (await listCourseAccess(db, input.userId))
         .filter((row) => isOpen(row.state))
         .map((row) => row.courseId);
+  // Заход «Банк вопросов»: группа «Вопросы» — по тем же правилам, что каталог и
+  // очередь SRS. Сниппет вопроса запертой категории — такая же утечка, какой был
+  // сниппет урока запертого курса (13.6, блок 2v2).
+  const categoryScope: CategoryScope = input.staff
+    ? null
+    : [...(await getQuestionAccess(db, input.userId)).categoryIds];
 
   const [lessons, questions, guides, recordings] = await Promise.all([
     searchLessons(db, q, scope),
-    searchQuestions(db, q),
+    searchQuestions(db, q, categoryScope),
     searchGuides(db, q, allow),
     input.libraryEnabled ? searchRecordings(db, q) : Promise.resolve<SearchItem[]>([]),
   ]);
@@ -469,7 +492,7 @@ export async function search(db: PrismaClient, input: SearchInput): Promise<Sear
   const fuzzyGroups = await db.$transaction(async (tx) => {
     await tx.$executeRawUnsafe("SET LOCAL pg_trgm.word_similarity_threshold = 0.3");
     const fl = await fuzzyLessons(tx, q, scope);
-    const fq = await fuzzyQuestions(tx, q);
+    const fq = await fuzzyQuestions(tx, q, categoryScope);
     const fg = await fuzzyGuides(tx, q, allow);
     const fr = input.libraryEnabled ? await fuzzyRecordings(tx, q) : [];
     return packGroups({ lessons: fl, questions: fq, guides: fg, recordings: fr });

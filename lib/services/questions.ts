@@ -92,6 +92,12 @@ export interface CatalogFilters {
   difficulty?: 1 | 2 | 3;
   /** «Мои западающие» (этап 4): ограничение выборки по id карточек SRS. */
   ids?: string[];
+  /**
+   * Доступ по цепи курсов (заход «Банк вопросов»): категории, которые ученику
+   * можно показывать. `undefined` — вызов без фильтра (админские экраны банка);
+   * пустой массив — честный ноль строк, а не «показать всё».
+   */
+  allowedCategoryIds?: string[];
 }
 
 // --- Grouped catalog (walk 13.5 block 1): categories → collapsible sections ---
@@ -131,14 +137,19 @@ export async function listQuestionsCatalogGrouped(
   db: Db,
   filters: CatalogFilters,
 ): Promise<{ groups: CatalogGroup[]; total: number }> {
+  // Доступ по цепи курсов и явно выбранная категория пересекаются, а не
+  // складываются: выбор категории не должен открывать то, что цепь закрыла.
+  const picked = filters.categoryId ? await categoryFamilyIds(db, filters.categoryId) : null;
+  const allowed = filters.allowedCategoryIds;
+  const categoryIn =
+    picked && allowed ? picked.filter((id) => allowed.includes(id)) : (picked ?? allowed ?? null);
+
   const where: Prisma.QuestionWhereInput = {
     status: "published",
     ...(filters.ids ? { id: { in: filters.ids } } : {}),
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.difficulty ? { difficulty: filters.difficulty } : {}),
-    ...(filters.categoryId
-      ? { categoryId: { in: await categoryFamilyIds(db, filters.categoryId) } }
-      : {}),
+    ...(categoryIn ? { categoryId: { in: categoryIn } } : {}),
     ...(filters.q ? { textMd: { contains: filters.q, mode: "insensitive" } } : {}),
   };
   const publishedLesson = {

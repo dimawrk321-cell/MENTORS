@@ -442,8 +442,9 @@ model Course {
   icon        String?
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
-  modules     Module[]
-  access      CourseAccess[]
+  modules            Module[]
+  access             CourseAccess[]
+  questionCategories CourseQuestionCategory[]
 
   @@map("courses")
 }
@@ -597,9 +598,31 @@ model QuestionCategory {
   createdAt  DateTime           @default(now()) @map("created_at")
   updatedAt  DateTime           @updatedAt @map("updated_at")
   questions  Question[]
+  courses    CourseQuestionCategory[]
 
   @@index([parentId])
   @@map("question_categories")
+}
+
+/**
+ * Связь «курс ↔ категория банка вопросов» (заход «Банк вопросов»).
+ *
+ * Доступ к вопросу решается доступом к КУРСУ: категория видна ученику, если ей
+ * сопоставлен хотя бы один открытый цепью курс. Категория, у которой здесь нет
+ * ни одной строки, — общий пул: видна всем. Отдельных ручек по категориям нет
+ * ни в админке, ни в карточке ученика — единственный рычаг это цепь курсов.
+ */
+model CourseQuestionCategory {
+  id         String           @id @default(cuid())
+  courseId   String           @map("course_id")
+  course     Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  categoryId String           @map("category_id")
+  category   QuestionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  @@unique([courseId, categoryId])
+  @@index([categoryId])
+  @@map("course_question_categories")
 }
 
 model Question {

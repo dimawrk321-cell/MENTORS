@@ -96,7 +96,19 @@ export async function updateCourse(
   input: {
     actorId: string;
     courseId: string;
-    data: { title: string; slug: string; description: string; gating: CourseGating };
+    data: {
+      title: string;
+      slug: string;
+      description: string;
+      gating: CourseGating;
+      /**
+       * Категории банка, относящиеся к курсу (заход «Банк вопросов»). `undefined`
+       * — не трогать связь; массив — заменить набор целиком. Через него и только
+       * через него открывается доступ ученика к вопросам: отдельных ручек по
+       * категориям нет.
+       */
+      questionCategoryIds?: string[];
+    };
   },
 ): Promise<AdminContentResult> {
   const course = await db.course.findUnique({ where: { id: input.courseId } });
@@ -104,7 +116,27 @@ export async function updateCourse(
   const slugOwner = await db.course.findUnique({ where: { slug: input.data.slug } });
   if (slugOwner && slugOwner.id !== course.id) return { ok: false, code: "slug_taken" };
 
-  await db.course.update({ where: { id: course.id }, data: input.data });
+  const { questionCategoryIds, ...courseData } = input.data;
+  await db.course.update({ where: { id: course.id }, data: courseData });
+
+  if (questionCategoryIds !== undefined) {
+    const wanted = [...new Set(questionCategoryIds)];
+    // Существующие категории: чужой/удалённый id молча не создаёт связь.
+    const real = await db.questionCategory.findMany({
+      where: { id: { in: wanted } },
+      select: { id: true },
+    });
+    const realIds = real.map((c) => c.id);
+    await db.$transaction([
+      db.courseQuestionCategory.deleteMany({
+        where: { courseId: course.id, categoryId: { notIn: realIds.length ? realIds : ["-"] } },
+      }),
+      db.courseQuestionCategory.createMany({
+        data: realIds.map((categoryId) => ({ courseId: course.id, categoryId })),
+        skipDuplicates: true,
+      }),
+    ]);
+  }
   await writeAudit(db, {
     actorId: input.actorId,
     action: "course.updated",
@@ -119,6 +151,18 @@ export async function updateCourse(
     after: { ...input.data },
   });
   return { ok: true };
+}
+
+/** Категории банка, сопоставленные курсу (для формы редактора курса). */
+export async function getCourseQuestionCategoryIds(
+  db: PrismaClient,
+  courseId: string,
+): Promise<string[]> {
+  const rows = await db.courseQuestionCategory.findMany({
+    where: { courseId },
+    select: { categoryId: true },
+  });
+  return rows.map((r) => r.categoryId);
 }
 
 export async function setCourseStatus(

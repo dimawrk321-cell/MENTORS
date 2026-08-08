@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { listQuestionsCatalogGrouped } from "@/lib/services/questions";
 import { getLaggingQuestionIds, getUserCardQuestionIds } from "@/lib/services/srs";
+import { getQuestionAccess } from "@/lib/services/question-access";
 import { QUESTION_DIFFICULTY_LABEL, QUESTION_TYPE_LABEL } from "@/lib/constants";
 import { CatalogAccordion } from "@/components/features/catalog-accordion";
 import { Button } from "@/components/ui/button";
@@ -65,12 +66,18 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
   // «Мои западающие» (spec 7.4 + этап 4): lapses ≥ 1 или карточка из ошибок.
   const laggingIds = lagging ? await getLaggingQuestionIds(prisma, user.id) : undefined;
 
+  // Заход «Банк вопросов»: каталог показывает только категории открытых курсов
+  // плюс общий пул. Категории запертых курсов не помечаются замком — их просто
+  // нет, как скрытых разделов справочника (12.1/C3).
+  const access = await getQuestionAccess(prisma, user.id);
+
   const { groups, total } = await listQuestionsCatalogGrouped(prisma, {
     q: params.q?.trim() || undefined,
     categoryId: params.category || undefined,
     type,
     difficulty,
     ids: laggingIds,
+    allowedCategoryIds: [...access.categoryIds],
   });
   const inSrs = await getUserCardQuestionIds(
     prisma,

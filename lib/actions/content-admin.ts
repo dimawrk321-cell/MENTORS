@@ -49,6 +49,11 @@ const courseUpdateSchema = z.object({
   slug: slugSchema,
   description: z.string().trim().max(1000, "Слишком длинное описание"),
   gating: z.enum(["strict", "recommended", "free"]),
+  /**
+   * Категории банка вопросов, относящиеся к курсу (заход «Банк вопросов»).
+   * Поле необязательное: формы, которые его не шлют, связь не трогают.
+   */
+  questionCategoryIds: z.array(idSchema).max(300).optional(),
 });
 
 const lessonMetaSchema = z.object({
@@ -112,10 +117,13 @@ export async function updateCourseAction(input: unknown): Promise<ActionResult<u
         slug: parsed.slug,
         description: parsed.description,
         gating: parsed.gating,
+        questionCategoryIds: parsed.questionCategoryIds,
       },
     });
     if (!res.ok) failWith(res);
     revalidateContent(parsed.slug);
+    // Связь курс↔категории решает, что ученик видит в банке.
+    revalidatePath("/questions");
     return undefined;
   });
 }
