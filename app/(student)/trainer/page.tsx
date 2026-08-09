@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Layers, MessageCircleQuestion, Play } from "lucide-react";
+import { ArrowRight, Dumbbell, Layers, MessageCircleQuestion, Play } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import {
@@ -87,6 +87,27 @@ export default async function TrainerPage() {
           )}
         </Card>
       )}
+
+      {/* Свободная тренировка (заход «Банк вопросов», B1) — второй вход рядом с
+          очередью, а не вместо неё: прогон без порога, без расхода очереди и без
+          XP. Карточка стоит ниже намеренно — ежедневный ритуал остаётся первым. */}
+      <Card interactive className="group">
+        <Link href="/trainer/free" className="flex flex-wrap items-center gap-4 p-5">
+          <IconTile icon={Dumbbell} colorVar="var(--violet)" size={44} />
+          <div className="min-w-0 flex-1">
+            <p className="text-text-3 text-[13px]">Свободная тренировка</p>
+            <p className="group-hover:text-accent text-[18px] font-semibold">
+              Прогон по выбранному набору
+            </p>
+          </div>
+          <ArrowRight
+            size={16}
+            strokeWidth={1.75}
+            className="text-text-3 group-hover:text-accent shrink-0"
+            aria-hidden="true"
+          />
+        </Link>
+      </Card>
 
       {/* Статистика */}
       <div className="grid gap-3 sm:grid-cols-3">

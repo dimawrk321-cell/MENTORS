@@ -185,7 +185,13 @@ export interface FreeTrainingResult {
   /** Сколько карточек реально завели в повторения этим прогоном. */
   addedToSrs: number;
   /** Разбивка по корневым категориям, худшие сверху. */
-  byCategory: { categoryId: string; title: string; total: number; missed: number }[];
+  byCategory: {
+    categoryId: string;
+    title: string;
+    colorIndex: number;
+    total: number;
+    missed: number;
+  }[];
   /** Вопросы, которые стоит прогнать ещё раз («Повторить слабые»). */
   weakQuestionIds: string[];
 }
@@ -201,7 +207,9 @@ export async function finishFreeTraining(
   const answers = input.answers;
   const questions = await db.question.findMany({
     where: { id: { in: answers.map((a) => a.questionId) } },
-    include: { category: { include: { parent: { select: { id: true, title: true } } } } },
+    include: {
+      category: { include: { parent: { select: { id: true, title: true, colorIndex: true } } } },
+    },
   });
   const byId = new Map(questions.map((q) => [q.id, q]));
 
@@ -221,7 +229,7 @@ export async function finishFreeTraining(
 
   const groups = new Map<
     string,
-    { categoryId: string; title: string; total: number; missed: number }
+    { categoryId: string; title: string; colorIndex: number; total: number; missed: number }
   >();
   for (const answer of answers) {
     const question = byId.get(answer.questionId);
@@ -230,6 +238,7 @@ export async function finishFreeTraining(
     const group = groups.get(root.id) ?? {
       categoryId: root.id,
       title: root.title,
+      colorIndex: root.colorIndex,
       total: 0,
       missed: 0,
     };
