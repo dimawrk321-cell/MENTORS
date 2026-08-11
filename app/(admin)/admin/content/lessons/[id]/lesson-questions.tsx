@@ -33,6 +33,8 @@ export interface LessonQuestionLinkRow {
   teaser: string;
   category: string;
   status: "draft" | "published";
+  /** Есть ли обратная сторона: эталон открытого либо варианты закрытого. */
+  hasAnswer: boolean;
   isKey: boolean;
   inQuiz: boolean;
 }
@@ -106,6 +108,27 @@ export function LessonQuestions({
     });
   }
 
+  /**
+   * Роль «ключевой» на вопросе, который до ученика не доедет, — самая дорогая
+   * молчаливая ошибка редактора: ментор ставит роль, а блок «Ключевые вопросы»
+   * под уроком не появляется (находка владельца, заход «Доступ к вопросам»,
+   * блок 3). Роль ставится — запрещать её нельзя, черновик дописывают позже, —
+   * но предупреждение выдаётся В МОМЕНТ действия, а не только сводкой сверху.
+   */
+  function warnUnreachableKey(rows: LessonQuestionLinkRow[]): void {
+    const drafts = rows.filter((row) => row.status === "draft").length;
+    const answerless = rows.filter((row) => row.status === "published" && !row.hasAnswer).length;
+    if (drafts === 0 && answerless === 0) return;
+    const reasons = [
+      drafts > 0 ? `черновиков: ${drafts}` : null,
+      answerless > 0 ? `без эталона: ${answerless}` : null,
+    ].filter(Boolean);
+    toast({
+      title: `Ключевыми отмечено то, что ученик не увидит (${reasons.join(", ")}). Опубликуй вопрос и допиши эталон — иначе блок «Ключевые вопросы» под уроком не появится.`,
+      variant: "warning",
+    });
+  }
+
   // Bulk role marking (walk 13.6, block 3v2). The category pass links whole
   // categories at once, and re-picking a role on twelve rows one select at a
   // time is not a workflow — «ключевой» in particular is an editorial decision
@@ -121,10 +144,13 @@ export function LessonQuestions({
   // Что реально доедет до ученика: черновики отбрасывает выборка урока
   // (getKeyQuestionsForLesson / getQuizQuestionsForLesson), и без этой строки
   // пропажа блока выглядит как баг платформы, а не как неопубликованный вопрос.
+  // Заход «Доступ к вопросам»: вторая причина молчаливой пропажи — пустой
+  // эталон у открытого вопроса, она считается здесь же.
   const published = links.filter((link) => link.status === "published");
-  const visibleKey = published.filter((link) => link.isKey).length;
+  const visibleKey = published.filter((link) => link.isKey && link.hasAnswer).length;
   const visibleQuiz = published.filter((link) => link.inQuiz).length;
   const draftLinks = links.length - published.length;
+  const answerlessLinks = published.filter((link) => !link.hasAnswer).length;
 
   const allSelected = links.length > 0 && selected.size === links.length;
   const toggleAll = () =>
@@ -132,6 +158,9 @@ export function LessonQuestions({
 
   function bulkRole(role: QuestionLinkRole, success: string): void {
     const questionIds = [...selected];
+    if (role === "key") {
+      warnUnreachableKey(links.filter((link) => selected.has(link.questionId)));
+    }
     run(() => bulkQuestionLinkRoleAction({ lessonId, questionIds, role }), success);
     setSelected(new Set());
   }
@@ -189,6 +218,21 @@ export function LessonQuestions({
           <span>
             Привязано черновиков: <span className="tabular-nums">{draftLinks}</span> — ученик их не
             увидит. Опубликуй вопрос в банке, иначе привязка не работает.
+          </span>
+        </p>
+      )}
+      {answerlessLinks > 0 && (
+        <p className="rounded-control border-warning/35 bg-warning/6 text-text-2 mb-3 flex items-start gap-2 border px-3 py-2 text-[13px]">
+          <AlertTriangle
+            size={15}
+            strokeWidth={1.75}
+            className="text-warning mt-0.5 shrink-0"
+            aria-hidden="true"
+          />
+          <span>
+            Без эталона: <span className="tabular-nums">{answerlessLinks}</span> — у открытого
+            вопроса пустой эталонный ответ. Такой вопрос ученику не показывается и в повторения не
+            заводится: допиши ответ в банке.
           </span>
         </p>
       )}
@@ -268,18 +312,27 @@ export function LessonQuestions({
                     черновик
                   </Badge>
                 )}
+                {link.status === "published" && !link.hasAnswer && (
+                  <Badge
+                    variant="warning"
+                    title="У открытого вопроса пустой эталон — ученику он не показывается и в повторения не заводится"
+                  >
+                    нет эталона
+                  </Badge>
+                )}
                 {/* Changelog этапа 3: роль одна — ключевой ИЛИ в квизе. */}
                 <QuestionRoleSelect
                   value={roleFromFlags(link.isKey, link.inQuiz)}
-                  onChange={(role) =>
+                  onChange={(role) => {
+                    if (role === "key") warnUnreachableKey([link]);
                     run(() =>
                       upsertQuestionLinkAction({
                         questionId: link.questionId,
                         lessonId,
                         ...flagsFromRole(role),
                       }),
-                    )
-                  }
+                    );
+                  }}
                 />
                 <button
                   type="button"

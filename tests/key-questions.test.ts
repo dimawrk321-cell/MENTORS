@@ -14,9 +14,9 @@ let categoryId = "";
 let lessonId = "";
 let otherLessonId = "";
 
-async function makeQuestion(status: "draft" | "published", text: string) {
+async function makeQuestion(status: "draft" | "published", text: string, answerMd = "эталон") {
   return testDb.question.create({
-    data: { type: "open", categoryId, textMd: text, answerMd: "эталон", status, difficulty: 1 },
+    data: { type: "open", categoryId, textMd: text, answerMd, status, difficulty: 1 },
   });
 }
 
@@ -75,6 +75,28 @@ describe("getKeyQuestionsForLesson — что доезжает до ученик
     const draft = await makeQuestion("draft", "Черновик");
     await testDb.questionLesson.create({
       data: { lessonId, questionId: draft.id, isKey: true, inQuiz: false },
+    });
+    expect(await getKeyQuestionsForLesson(testDb, lessonId)).toEqual([]);
+  });
+
+  it("опубликованный ключевой с эталоном рендерится под уроком", async () => {
+    // Прямая проверка цепочки блока 3: роль «ключевой» + published + непустой
+    // эталон = блок под уроком существует и содержит этот вопрос.
+    const q = await makeQuestion("published", "Что такое attention?");
+    await testDb.questionLesson.create({
+      data: { lessonId, questionId: q.id, isKey: true, inQuiz: false },
+    });
+    const keys = await getKeyQuestionsForLesson(testDb, lessonId);
+    expect(keys.map((k) => k.id)).toEqual([q.id]);
+    expect(KeyQuestions({ questions: keys })).not.toBeNull();
+  });
+
+  it("ПУСТОЙ ЭТАЛОН у ключевого вопроса — до ученика не доезжает", async () => {
+    // Вторая молчаливая причина пропажи блока (заход «Доступ к вопросам»):
+    // опубликован, роль стоит, а обратной стороны у карточки нет.
+    const blank = await makeQuestion("published", "Без эталона", "   ");
+    await testDb.questionLesson.create({
+      data: { lessonId, questionId: blank.id, isKey: true, inQuiz: false },
     });
     expect(await getKeyQuestionsForLesson(testDb, lessonId)).toEqual([]);
   });
