@@ -1,6 +1,12 @@
-import type { Question } from "@prisma/client";
+import type { Prisma, Question } from "@prisma/client";
 import type { Db } from "@/lib/db";
-import { getQuestionAccess } from "@/lib/services/question-access";
+import {
+  ANSWERED_QUESTION_WHERE,
+  getQuestionAccess,
+  hasReferenceAnswer,
+  questionAccessWhere,
+  type QuestionAccess,
+} from "@/lib/services/question-access";
 import { addSrsCardManually, getLaggingQuestionIds } from "@/lib/services/srs";
 import { seededShuffle } from "@/lib/utils/shuffle";
 import {
@@ -82,35 +88,69 @@ async function courseCategoryIds(db: Db, courseId: string): Promise<string[]> {
   return [...out];
 }
 
+/** Вопросы, привязанные к урокам курса, — поимённо (второй уровень доступа). */
+async function courseLinkedQuestionIds(db: Db, courseId: string): Promise<string[]> {
+  const links = await db.questionLesson.findMany({
+    where: { lesson: { module: { courseId } } },
+    select: { questionId: true },
+  });
+  return [...new Set(links.map((link) => link.questionId))];
+}
+
+/**
+ * `where` набора: пересечение «что в наборе» и «что ученику доступно» (заход
+ * «Доступ к вопросам»). Второе — общий `getQuestionAccess`, второй логики
+ * доступа здесь нет: для пройденного курса это его категории, для курса в
+ * процессе — ключевые вопросы пройденных уроков.
+ */
+function setWhere(
+  access: QuestionAccess,
+  scope: { categoryIds?: string[]; questionIds?: string[] },
+): Prisma.QuestionWhereInput {
+  const inSet: Prisma.QuestionWhereInput[] = [];
+  if (scope.categoryIds) inSet.push({ categoryId: { in: scope.categoryIds } });
+  if (scope.questionIds) inSet.push({ id: { in: scope.questionIds } });
+  return {
+    status: "published",
+    AND: [ANSWERED_QUESTION_WHERE, questionAccessWhere(access), { OR: inSet }],
+  };
+}
+
 /** Наборы, доступные ученику: только открытые категории и открытые курсы. */
 export async function listFreeTrainingSources(
   db: Db,
   userId: string,
 ): Promise<FreeTrainingSources> {
   const access = await getQuestionAccess(db, userId);
-  const allowed = [...access.categoryIds];
 
-  const [counts, categories, laggingIds] = await Promise.all([
-    db.question.groupBy({
-      by: ["categoryId"],
-      where: { status: "published", categoryId: { in: allowed } },
-      _count: true,
+  // Считаем по РЕАЛЬНО доступным вопросам, а не по открытым категориям: при
+  // курсе в процессе доступ поимённый, и счётчик «по категории» обязан это
+  // учитывать — обещать 40 вопросов там, где ученику открыты 3, нельзя.
+  const [visible, categories, laggingIds] = await Promise.all([
+    db.question.findMany({
+      where: {
+        status: "published",
+        AND: [ANSWERED_QUESTION_WHERE, questionAccessWhere(access)],
+      },
+      select: { id: true, type: true, answerMd: true, categoryId: true },
     }),
     db.questionCategory.findMany({
-      where: { id: { in: allowed } },
       orderBy: [{ order: "asc" }, { createdAt: "asc" }],
       select: { id: true, title: true, parentId: true },
     }),
     getLaggingQuestionIds(db, userId),
   ]);
 
-  const byCategory = new Map(counts.map((c) => [c.categoryId, c._count]));
+  const parentOf = new Map(categories.map((c) => [c.id, c.parentId]));
   // Наборы показываем по КОРНЯМ: 58 категорий списком — это не выбор, а поиск.
   const roots = categories.filter((c) => c.parentId === null);
   const rootTotals = new Map<string, number>();
-  for (const category of categories) {
-    const rootId = category.parentId ?? category.id;
-    rootTotals.set(rootId, (rootTotals.get(rootId) ?? 0) + (byCategory.get(category.id) ?? 0));
+  const visibleIds = new Set<string>();
+  for (const question of visible) {
+    if (!hasReferenceAnswer(question)) continue;
+    visibleIds.add(question.id);
+    const rootId = parentOf.get(question.categoryId) ?? question.categoryId;
+    rootTotals.set(rootId, (rootTotals.get(rootId) ?? 0) + 1);
   }
 
   const courses = await db.course.findMany({
@@ -120,10 +160,11 @@ export async function listFreeTrainingSources(
   });
   const courseOptions: FreeTrainingOption[] = [];
   for (const course of courses) {
-    const ids = (await courseCategoryIds(db, course.id)).filter((id) => access.categoryIds.has(id));
-    if (ids.length === 0) continue;
     const total = await db.question.count({
-      where: { status: "published", categoryId: { in: ids } },
+      where: setWhere(access, {
+        categoryIds: await courseCategoryIds(db, course.id),
+        questionIds: await courseLinkedQuestionIds(db, course.id),
+      }),
     });
     if (total > 0) courseOptions.push({ id: course.id, title: course.title, questions: total });
   }
@@ -133,7 +174,7 @@ export async function listFreeTrainingSources(
       .map((root) => ({ id: root.id, title: root.title, questions: rootTotals.get(root.id) ?? 0 }))
       .filter((option) => option.questions > 0),
     courses: courseOptions,
-    lagging: laggingIds.length,
+    lagging: laggingIds.filter((id) => visibleIds.has(id)).length,
   };
 }
 
@@ -147,31 +188,25 @@ export async function buildFreeTrainingSet(
   input: { userId: string; source: FreeTrainingSource; size: FreeTrainingSize; seed?: string },
 ): Promise<Question[]> {
   const access = await getQuestionAccess(db, input.userId);
-  const allowed = access.categoryIds;
 
-  let categoryIds: string[] | null = null;
-  let questionIds: string[] | null = null;
+  // Набор задаёт только СОСТАВ; что из него доступно — решает `setWhere` тем же
+  // общим правилом доступа (заход «Доступ к вопросам»).
+  const scope: { categoryIds?: string[]; questionIds?: string[] } =
+    input.source.kind === "category"
+      ? { categoryIds: await categorySubtreeIds(db, input.source.categoryId) }
+      : input.source.kind === "course"
+        ? {
+            categoryIds: await courseCategoryIds(db, input.source.courseId),
+            questionIds: await courseLinkedQuestionIds(db, input.source.courseId),
+          }
+        : { questionIds: await getLaggingQuestionIds(db, input.userId) };
 
-  if (input.source.kind === "category") {
-    categoryIds = (await categorySubtreeIds(db, input.source.categoryId)).filter((id) =>
-      allowed.has(id),
-    );
-  } else if (input.source.kind === "course") {
-    categoryIds = (await courseCategoryIds(db, input.source.courseId)).filter((id) =>
-      allowed.has(id),
-    );
-  } else {
-    questionIds = await getLaggingQuestionIds(db, input.userId);
-  }
-
-  const questions = await db.question.findMany({
-    where: {
-      status: "published",
-      categoryId: categoryIds ? { in: categoryIds } : { in: [...allowed] },
-      ...(questionIds ? { id: { in: questionIds } } : {}),
-    },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-  });
+  const questions = (
+    await db.question.findMany({
+      where: setWhere(access, scope),
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    })
+  ).filter(hasReferenceAnswer);
 
   const shuffled = seededShuffle(questions, input.seed ?? input.userId);
   return input.size === "all" ? shuffled : shuffled.slice(0, input.size);

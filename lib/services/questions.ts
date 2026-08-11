@@ -12,6 +12,12 @@ import { renderMarkdownHtml } from "@/lib/utils/markdown";
 import { seededShuffle } from "@/lib/utils/shuffle";
 import { slugify, uniqueSlug } from "@/lib/utils/slug";
 import { emitEvent, type EarnedAchievement } from "@/lib/services/events";
+import {
+  ANSWERED_QUESTION_WHERE,
+  hasReferenceAnswer,
+  visibleQuestionWhere,
+  type QuestionAccess,
+} from "@/lib/services/question-access";
 import { addSrsCardForFailure } from "@/lib/services/srs";
 import { writeAudit } from "@/lib/services/audit";
 
@@ -93,11 +99,11 @@ export interface CatalogFilters {
   /** «Мои западающие» (этап 4): ограничение выборки по id карточек SRS. */
   ids?: string[];
   /**
-   * Доступ по цепи курсов (заход «Банк вопросов»): категории, которые ученику
-   * можно показывать. `undefined` — вызов без фильтра (админские экраны банка);
-   * пустой массив — честный ноль строк, а не «показать всё».
+   * Доступ по цепи курсов (заход «Банк вопросов», два уровня — «Доступ к
+   * вопросам»). `undefined` — вызов без фильтра (админские экраны банка);
+   * пустой доступ — честный ноль строк, а не «показать всё».
    */
-  allowedCategoryIds?: string[];
+  access?: QuestionAccess;
 }
 
 // --- Grouped catalog (walk 13.5 block 1): categories → collapsible sections ---
@@ -139,18 +145,21 @@ export async function listQuestionsCatalogGrouped(
 ): Promise<{ groups: CatalogGroup[]; total: number }> {
   // Доступ по цепи курсов и явно выбранная категория пересекаются, а не
   // складываются: выбор категории не должен открывать то, что цепь закрыла.
+  // Поэтому выбранная категория идёт отдельным условием, а доступ — своим
+  // фрагментом (`AND`): у второго уровня доступа фильтр по id, и «сузить до
+  // категории» не должно его терять.
   const picked = filters.categoryId ? await categoryFamilyIds(db, filters.categoryId) : null;
-  const allowed = filters.allowedCategoryIds;
-  const categoryIn =
-    picked && allowed ? picked.filter((id) => allowed.includes(id)) : (picked ?? allowed ?? null);
 
   const where: Prisma.QuestionWhereInput = {
     status: "published",
     ...(filters.ids ? { id: { in: filters.ids } } : {}),
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.difficulty ? { difficulty: filters.difficulty } : {}),
-    ...(categoryIn ? { categoryId: { in: categoryIn } } : {}),
+    ...(picked ? { categoryId: { in: picked } } : {}),
     ...(filters.q ? { textMd: { contains: filters.q, mode: "insensitive" } } : {}),
+    // Каталог ученика: доступ по цепи + наличие эталона. Админские экраны банка
+    // зовут без `access` — там фильтра нет вовсе.
+    ...(filters.access ? visibleQuestionWhere(filters.access) : {}),
   };
   const publishedLesson = {
     status: "published" as const,
@@ -163,6 +172,7 @@ export async function listQuestionsCatalogGrouped(
         id: true,
         textMd: true,
         type: true,
+        answerMd: true,
         difficulty: true,
         category: { select: { id: true, parentId: true, title: true, colorIndex: true } },
         lessonLinks: {
@@ -183,7 +193,10 @@ export async function listQuestionsCatalogGrouped(
 
   const rootMap = new Map(roots.map((root) => [root.id, root]));
   const byGroup = new Map<string, CatalogGroup>();
-  for (const q of questions) {
+  // Второй рубеж фильтра эталона (SQL не умеет trim): только на ученическом
+  // пути — админские экраны банка обязаны видеть и недописанные вопросы.
+  const visible = filters.access ? questions.filter(hasReferenceAnswer) : questions;
+  for (const q of visible) {
     // Root = the question's category or, for a subcategory, its parent.
     const rootId = q.category.parentId ?? q.category.id;
     const header = rootMap.get(rootId) ?? {
@@ -222,7 +235,7 @@ export async function listQuestionsCatalogGrouped(
     }
   }
   groups.push(...byGroup.values());
-  return { groups, total: questions.length };
+  return { groups, total: visible.length };
 }
 
 export interface CatalogAnswer {
@@ -276,7 +289,9 @@ export async function renderCatalogAnswer(db: Db, id: string): Promise<CatalogAn
     if (q.explanationMd?.trim()) {
       parts.push(await renderMarkdownHtml(q.explanationMd));
     } else if (!correct) {
-      parts.push('<p class="text-text-2">Разбор появится позже.</p>');
+      // Тупика без выхода быть не должно (заход «Доступ к вопросам», 1.2):
+      // честный текст вместо пустого блока.
+      parts.push('<p class="text-text-2">Ответ не заполнен.</p>');
     }
     answerHtml = parts.join("");
   }
@@ -314,14 +329,26 @@ export async function logQuestionOpen(
 
 // --- Lesson blocks (spec 7.3/7.5) ---
 
-/** «Ключевые вопросы урока»: is_key links, published questions. */
+/**
+ * «Ключевые вопросы урока»: is_key links, published questions.
+ *
+ * Заход «Доступ к вопросам», блок 1: открытый вопрос без эталона сюда тоже не
+ * попадает — блок раскрывает эталон, и пустая карточка в нём бессмысленна, а
+ * ещё именно эти вопросы заводятся в SRS при завершении урока. Причину, по
+ * которой привязка не доехала до ученика (черновик / нет эталона), называет
+ * секция «Вопросы урока» в редакторе — по строкам, а не общим счётчиком.
+ */
 export async function getKeyQuestionsForLesson(db: Db, lessonId: string) {
   const links = await db.questionLesson.findMany({
-    where: { lessonId, isKey: true, question: { status: "published" } },
+    where: {
+      lessonId,
+      isKey: true,
+      question: { status: "published", ...ANSWERED_QUESTION_WHERE },
+    },
     include: { question: true },
     orderBy: { createdAt: "asc" },
   });
-  return links.map((link) => link.question);
+  return links.map((link) => link.question).filter(hasReferenceAnswer);
 }
 
 /**

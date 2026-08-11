@@ -3,7 +3,12 @@ import type { Db } from "@/lib/db";
 import { addDays, dateOnlyUtc, localDateStr, zonedDayUtcRange } from "@/lib/utils/dates";
 import { emitEvent, mergeEmitResults, type EarnedAchievement } from "@/lib/services/events";
 import { getNumericSetting, OPS_NEW_CARDS_PER_DAY_KEY } from "@/lib/services/settings";
-import { getQuestionAccess } from "@/lib/services/question-access";
+import {
+  ANSWERED_QUESTION_WHERE,
+  getQuestionAccess,
+  hasReferenceAnswer,
+  visibleQuestionWhere,
+} from "@/lib/services/question-access";
 
 // SRS — интервальные повторения (spec 7.6), ядро продукта. Планировщик —
 // чистая функция applyGrade (юнит-тесты всех переходов); источники карточек
@@ -150,15 +155,22 @@ export async function addSrsCardsForLessonCompletion(
   db: Db,
   input: { userId: string; lessonId: string; now?: Date },
 ): Promise<void> {
+  // Заход «Доступ к вопросам», блок 1: вопрос без эталона в очередь не заводим —
+  // карточку без обратной стороны нечем закрывать.
   const links = await db.questionLesson.findMany({
-    where: { lessonId: input.lessonId, isKey: true, question: { status: "published" } },
-    select: { questionId: true },
+    where: {
+      lessonId: input.lessonId,
+      isKey: true,
+      question: { status: "published", ...ANSWERED_QUESTION_WHERE },
+    },
+    select: { questionId: true, question: { select: { type: true, answerMd: true } } },
     orderBy: { createdAt: "asc" },
   });
   if (links.length === 0) return;
 
   const { today } = await getUserToday(db, input.userId, input.now ?? new Date());
   for (const link of links) {
+    if (!hasReferenceAnswer(link.question)) continue;
     await upsertCardFromSource(db, {
       userId: input.userId,
       questionId: link.questionId,
@@ -196,6 +208,8 @@ export async function addSrsCardManually(
 ): Promise<AddManualResult> {
   const question = await db.question.findUnique({ where: { id: input.questionId } });
   if (!question || question.status !== "published") return { ok: false, code: "not_found" };
+  // Вопрос без эталона в повторения не попадает ни одним путём (блок 1).
+  if (!hasReferenceAnswer(question)) return { ok: false, code: "not_found" };
 
   const { today } = await getUserToday(db, input.userId, input.now ?? new Date());
   const outcome = await upsertCardFromSource(db, {
@@ -259,9 +273,9 @@ export async function getSrsQueue(
   const now = input.now ?? new Date();
   const { timezone, todayStr, today } = await getUserToday(db, input.userId, now);
 
-  // Заход «Банк вопросов»: карточки категорий, закрытых цепью курсов, из
-  // очереди ПРЯЧУТСЯ, но не удаляются — курс откроется, и они вернутся с
-  // сохранённым интервалом.
+  // Заход «Банк вопросов» (уточнён заходом «Доступ к вопросам»): карточки,
+  // закрытые цепью курсов, из очереди ПРЯЧУТСЯ, но не удаляются — курс
+  // откроется, и они вернутся с сохранённым интервалом.
   const access = await getQuestionAccess(db, input.userId);
 
   const due = await db.srsCard.findMany({
@@ -269,8 +283,9 @@ export async function getSrsQueue(
       userId: input.userId,
       suspended: false,
       nextReviewAt: { lte: today },
-      question: { status: "published", categoryId: { in: [...access.categoryIds] } },
+      question: { status: "published", ...visibleQuestionWhere(access) },
     },
+    include: { question: { select: { type: true, answerMd: true } } },
     orderBy: [{ nextReviewAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
   });
 
@@ -281,6 +296,9 @@ export async function getSrsQueue(
   let newAllowance =
     newPerDay - (await countNewCardsReviewedToday(db, input.userId, todayStr, timezone));
   const cards = due.filter((card) => {
+    // Второй рубеж по эталону: SQL-фильтр не умеет trim, а «эталон из пробелов»
+    // — такая же карточка без обратной стороны (заход «Доступ к вопросам»).
+    if (!hasReferenceAnswer(card.question)) return false;
     if (card.reviewsCount > 0) return true;
     if (newAllowance <= 0) return false;
     newAllowance -= 1;
@@ -308,7 +326,7 @@ export async function getNextReviewDate(
   const baseWhere = {
     userId: input.userId,
     suspended: false,
-    question: { status: "published" as const, categoryId: { in: [...access.categoryIds] } },
+    question: { status: "published" as const, ...visibleQuestionWhere(access) },
   };
 
   const nextFuture = await db.srsCard.findFirst({

@@ -45,6 +45,7 @@ async function makeCourse(slug: string, title: string, order: number) {
         ],
       },
     },
+    include: { modules: { include: { lessons: true } } },
   });
 }
 
@@ -70,6 +71,16 @@ beforeEach(async () => {
 
   const openCourse = await makeCourse("open", "Открытый курс", 0);
   lockedCourseId = (await makeCourse("locked", "Запертый курс", 1)).id;
+  // Заход «Доступ к вопросам»: категорию целиком открывает ПРОЙДЕННЫЙ курс, а
+  // не просто открытый, — иначе набор по категории был бы пуст.
+  await testDb.lessonProgress.create({
+    data: {
+      userId: studentId,
+      lessonId: openCourse.modules[0]!.lessons[0]!.id,
+      status: "completed",
+      completedAt: new Date(),
+    },
+  });
 
   openCategoryId = (
     await testDb.questionCategory.create({

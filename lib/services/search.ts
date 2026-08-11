@@ -186,15 +186,40 @@ interface LessonRow {
 type CourseScope = string[] | null;
 
 /**
- * Категории банка, доступные ученику по цепи курсов (заход «Банк вопросов»).
- * Та же дисциплина, что у CourseScope: null — персонал, пустой массив — честный
- * ноль результатов, а не молчаливый показ всего.
+ * Что из банка доступно ученику (заход «Банк вопросов», два уровня — «Доступ к
+ * вопросам»): открытые категории плюс поимённо открытые вопросы пройденных
+ * уроков. Та же дисциплина, что у CourseScope: null — персонал, пустой доступ —
+ * честный ноль результатов, а не молчаливый показ всего.
  */
-type CategoryScope = string[] | null;
+type CategoryScope = { categoryIds: string[]; questionIds: string[] } | null;
 
+/** Пустой доступ — честный ноль результатов, а не молчаливый показ всего. */
+function isEmptyScope(scope: CategoryScope): boolean {
+  return scope !== null && scope.categoryIds.length === 0 && scope.questionIds.length === 0;
+}
+
+/** Оба уровня доступа к банку — из общего источника правды. */
+async function questionScope(db: Db, userId: string): Promise<CategoryScope> {
+  const access = await getQuestionAccess(db, userId);
+  return { categoryIds: [...access.categoryIds], questionIds: [...access.questionIds] };
+}
+
+/**
+ * Доступ к вопросу — оба уровня (открытая категория ИЛИ поимённо открытый
+ * вопрос) плюс правило «открытый вопрос без эталона ученику не показываем».
+ * Здесь оно точное: в SQL есть btrim, которого нет у Prisma-фильтров.
+ */
 function categoryScopeSql(scope: CategoryScope): Prisma.Sql {
   if (scope === null) return Prisma.empty;
-  return Prisma.sql`AND q.category_id IN (${Prisma.join(scope)})`;
+  const parts: Prisma.Sql[] = [];
+  if (scope.categoryIds.length > 0) {
+    parts.push(Prisma.sql`q.category_id IN (${Prisma.join(scope.categoryIds)})`);
+  }
+  if (scope.questionIds.length > 0) {
+    parts.push(Prisma.sql`q.id IN (${Prisma.join(scope.questionIds)})`);
+  }
+  return Prisma.sql`AND (${Prisma.join(parts, " OR ")})
+      AND NOT (q.type = 'open' AND coalesce(btrim(q.answer_md), '') = '')`;
 }
 
 function courseScopeSql(scope: CourseScope): Prisma.Sql {
@@ -236,7 +261,7 @@ interface QuestionRow {
 }
 
 async function searchQuestions(db: Db, q: string, scope: CategoryScope): Promise<SearchItem[]> {
-  if (scope !== null && scope.length === 0) return [];
+  if (isEmptyScope(scope)) return [];
   const rows = await db.$queryRaw<QuestionRow[]>(Prisma.sql`
     SELECT q.id,
            left(q.text_md, 200) AS text_md,
@@ -385,7 +410,7 @@ async function fuzzyGuides(db: Db, q: string, allow: GuideSectionAccess): Promis
 }
 
 async function fuzzyQuestions(db: Db, q: string, scope: CategoryScope): Promise<SearchItem[]> {
-  if (scope !== null && scope.length === 0) return [];
+  if (isEmptyScope(scope)) return [];
   const rows = await db.$queryRaw<{ id: string; text_md: string }[]>(Prisma.sql`
     SELECT q.id, left(q.text_md, 200) AS text_md
     FROM questions q
@@ -470,9 +495,7 @@ export async function search(db: PrismaClient, input: SearchInput): Promise<Sear
   // Заход «Банк вопросов»: группа «Вопросы» — по тем же правилам, что каталог и
   // очередь SRS. Сниппет вопроса запертой категории — такая же утечка, какой был
   // сниппет урока запертого курса (13.6, блок 2v2).
-  const categoryScope: CategoryScope = input.staff
-    ? null
-    : [...(await getQuestionAccess(db, input.userId)).categoryIds];
+  const categoryScope: CategoryScope = input.staff ? null : await questionScope(db, input.userId);
 
   const [lessons, questions, guides, recordings] = await Promise.all([
     searchLessons(db, q, scope),

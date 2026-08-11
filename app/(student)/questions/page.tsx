@@ -77,7 +77,7 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
     type,
     difficulty,
     ids: laggingIds,
-    allowedCategoryIds: [...access.categoryIds],
+    access,
   });
   const inSrs = await getUserCardQuestionIds(
     prisma,

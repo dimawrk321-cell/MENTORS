@@ -29,6 +29,9 @@ async function seedDueCard(userId: string): Promise<void> {
       type: "open",
       categoryId: category.id,
       textMd: "Q",
+      // Эталон обязателен: без него вопрос в очередь не попадает вовсе
+      // (заход «Доступ к вопросам», блок 1).
+      answerMd: "эталон",
       status: "published",
       difficulty: 1,
     },
