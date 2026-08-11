@@ -164,8 +164,22 @@ export function SessionCardDeck({
           style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
         >
           {/* inert на неактивной грани убирает её из фокуса и дерева
-              доступности — backface-visibility прячет только визуально. */}
-          <div className="col-start-1 row-start-1 [backface-visibility:hidden]" inert={flipped}>
+              доступности — backface-visibility прячет только визуально.
+
+              max-h-0 на скрытой грани — находка владельца («вопрос виден, тело
+              пустое, выхода нет»): обе грани лежат в ОДНОЙ ячейке grid, поэтому
+              высота ячейки была максимумом из двух. Короткий вопрос с длинным
+              эталоном давал лицевую грань в 1214px при вьюпорте 720px — экран
+              пустоты и кнопка «Показать ответ» за его пределами. Скрытую грань
+              всё равно не видно (backface-visibility), так что в расчёт высоты
+              она входить не должна. */}
+          <div
+            className={cn(
+              "col-start-1 row-start-1 [backface-visibility:hidden]",
+              flipped && "max-h-0 overflow-hidden",
+            )}
+            inert={flipped}
+          >
             <Card className="min-h-[280px]">
               <CardContent className="p-6">
                 <p className="text-text-3 mb-3 text-[12px] font-medium tracking-wide uppercase">
@@ -176,7 +190,10 @@ export function SessionCardDeck({
             </Card>
           </div>
           <div
-            className="col-start-1 row-start-1 [transform:rotateY(180deg)] [backface-visibility:hidden]"
+            className={cn(
+              "col-start-1 row-start-1 [transform:rotateY(180deg)] [backface-visibility:hidden]",
+              !flipped && "max-h-0 overflow-hidden",
+            )}
             inert={!flipped}
           >
             <Card className="min-h-[280px]">
@@ -200,8 +217,11 @@ export function SessionCardDeck({
         </div>
       </div>
 
-      {/* Оценки внизу, тач-зоны ≥44px (spec 13); sticky над BottomNav на мобильном. */}
-      <div className="bg-bg sticky bottom-0 z-10 flex flex-col gap-2 py-2 md:static md:bg-transparent md:py-0">
+      {/* Оценки внизу, тач-зоны ≥44px (spec 13); sticky над BottomNav.
+          Липкость теперь на ВСЕХ разрешениях (была только на мобильном): на
+          десктопе панель уезжала вниз вместе с длинным эталоном, и «выхода» с
+          карточки на экране не оставалось — вторая половина той же находки. */}
+      <div className="bg-bg sticky bottom-0 z-10 flex flex-col gap-2 py-2">
         {flipped ? (
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="Оценка карточки">
             <Button

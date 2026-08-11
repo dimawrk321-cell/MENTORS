@@ -85,7 +85,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                       <LessonRenderer markdown={question.explanationMd} />
                     ) : (
                       correctOptions.length === 0 && (
-                        <p className="text-text-2">Разбор появится позже.</p>
+                        <p className="text-text-2">Ответ не заполнен.</p>
                       )
                     )}
                   </>

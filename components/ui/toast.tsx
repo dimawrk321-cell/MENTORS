@@ -5,7 +5,7 @@ import * as ToastPrimitive from "@radix-ui/react-toast";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-type ToastVariant = "default" | "success" | "danger";
+type ToastVariant = "default" | "success" | "warning" | "danger";
 
 interface ToastOptions {
   title: string;
@@ -66,6 +66,9 @@ function getServerSnapshot(): ToastItem[] {
 const variantClasses: Record<ToastVariant, string> = {
   default: "",
   success: "border-l-2 border-l-success",
+  // Предупреждение: действие выполнено, но у него есть последствие, о котором
+  // надо сказать сразу (заход «Доступ к вопросам»: ключевая роль на черновике).
+  warning: "border-l-2 border-l-warning",
   danger: "border-l-2 border-l-danger",
 };
 

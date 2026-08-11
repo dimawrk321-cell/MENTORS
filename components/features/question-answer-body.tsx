@@ -31,7 +31,10 @@ export function QuestionAnswerBody({ question }: { question: AnswerQuestion }) {
       {question.explanationMd?.trim() ? (
         <LessonRenderer markdown={question.explanationMd} />
       ) : (
-        !answerText && <p className="text-text-2">Разбор появится позже.</p>
+        // Второй рубеж (заход «Доступ к вопросам», 1.2): выборки такой вопрос
+        // ученику уже не отдают, но если карточка всё же доехала — честный
+        // текст и кнопки оценки рядом, а не тупик с пустым телом.
+        !answerText && <p className="text-text-2">Ответ не заполнен.</p>
       )}
     </div>
   );
