@@ -82,7 +82,9 @@ export default async function FreeTrainingRunPage({ searchParams }: RunPageProps
 
   const withCategory = await prisma.question.findMany({
     where: { id: { in: selected.map((q) => q.id) } },
-    include: { category: { include: { parent: { select: { colorIndex: true } } } } },
+    include: {
+      category: { include: { parent: { select: { id: true, title: true, colorIndex: true } } } },
+    },
   });
   const byId = new Map(withCategory.map((q) => [q.id, q]));
 
@@ -99,13 +101,14 @@ export default async function FreeTrainingRunPage({ searchParams }: RunPageProps
   const items: FreeSessionItem[] = selected.flatMap((question) => {
     const full = byId.get(question.id);
     if (!full) return [];
+    const root = full.category.parent ?? full.category;
     return [
       {
         questionId: question.id,
-        category: {
-          title: full.category.title,
-          colorIndex: full.category.parent?.colorIndex ?? full.category.colorIndex,
-        },
+        category: { title: full.category.title, colorIndex: root.colorIndex },
+        // Корень нужен клиенту, чтобы посчитать «слабые темы» самому в режиме
+        // просмотра — там итог не приходит с сервера.
+        root: { id: root.id, title: root.title, colorIndex: root.colorIndex },
         lesson: lessonByQuestion.get(question.id) ?? null,
         questionNode: <LessonRenderer markdown={question.textMd} />,
         answerNode: <QuestionAnswerBody question={question} />,

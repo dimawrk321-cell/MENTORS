@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useState, useTransition, type ReactNode } from "react";
-import { Check, Layers, Sparkles, TrendingDown } from "lucide-react";
+import { Check, Eye, Layers, Sparkles, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/toast";
 import { CategoryChip } from "@/components/features/category-chip";
 import { SessionCardDeck, type DeckGrade } from "@/components/features/session-card-deck";
+import { useViewOnly } from "@/components/features/view-only";
 import { finishFreeTrainingAction } from "@/lib/actions/free-training";
 import type { FreeTrainingResult } from "@/lib/services/free-training";
+import { summarizeFreeTraining, type FreeTrainingRoot } from "@/lib/utils/free-training-summary";
 import { pluralRu } from "@/lib/utils/dates";
 
 // Свободная тренировка (заход «Банк вопросов», блок B). Карточки рисует общая
@@ -21,6 +23,8 @@ import { pluralRu } from "@/lib/utils/dates";
 export interface FreeSessionItem {
   questionId: string;
   category: { title: string; colorIndex: number };
+  /** Корневая категория — по ней строится разбор «слабых тем». */
+  root: FreeTrainingRoot;
   lesson: { id: string; title: string } | null;
   questionNode: ReactNode;
   answerNode: ReactNode;
@@ -34,6 +38,7 @@ export function FreeSession({
   /** Куда возвращает «Другой набор» — с сохранёнными параметрами прогона. */
   setupHref: string;
 }) {
+  const viewOnly = useViewOnly();
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [answers, setAnswers] = useState<{ questionId: string; grade: DeckGrade }[]>([]);
@@ -41,6 +46,21 @@ export function FreeSession({
   const [pending, startTransition] = useTransition();
 
   const item = items[index];
+
+  function finishLocally(answered: { questionId: string; grade: DeckGrade }[]): void {
+    // «Глазами ученика»: итог считаем тем же кодом, что и сервер, но ничего не
+    // пишем — ни карточек SRS, ни событий (spec 7.2).
+    const roots = new Map(items.map((entry) => [entry.questionId, entry.root]));
+    setResult({ ...summarizeFreeTraining(answered, roots), addedToSrs: 0 });
+  }
+
+  function celebrate(): void {
+    try {
+      navigator.vibrate?.(10);
+    } catch {
+      // Vibration API недоступен — тихо пропускаем.
+    }
+  }
 
   function grade(value: DeckGrade): void {
     if (!item || pending || result) return;
@@ -51,6 +71,11 @@ export function FreeSession({
       setFlipped(false);
       return;
     }
+    if (viewOnly) {
+      finishLocally(next);
+      celebrate();
+      return;
+    }
     startTransition(async () => {
       const res = await finishFreeTrainingAction({ answers: next });
       if (!res) return;
@@ -59,15 +84,15 @@ export function FreeSession({
         return;
       }
       setResult(res.data);
-      try {
-        navigator.vibrate?.(10);
-      } catch {
-        // Vibration API недоступен — тихо пропускаем.
-      }
+      celebrate();
     });
   }
 
-  if (result) return <FreeResult result={result} setupHref={setupHref} total={items.length} />;
+  if (result) {
+    return (
+      <FreeResult result={result} setupHref={setupHref} total={items.length} viewOnly={viewOnly} />
+    );
+  }
   if (!item) return null;
 
   return (
@@ -87,8 +112,13 @@ export function FreeSession({
       exitHref="/trainer"
       exitLabel="Закончить"
       // Прогон засчитывается целиком в конце, поэтому выход теряет его весь —
-      // текст подтверждения об этом честно предупреждает.
-      exitConfirm="Прогон не будет засчитан. Прервать свободную тренировку?"
+      // текст подтверждения об этом честно предупреждает. В режиме просмотра
+      // засчитывать нечего, теряется только разбор.
+      exitConfirm={
+        viewOnly
+          ? "Разбор прогона не будет показан. Прервать свободную тренировку?"
+          : "Прогон не будет засчитан. Прервать свободную тренировку?"
+      }
       onFlip={setFlipped}
       onGrade={grade}
     />
@@ -108,10 +138,12 @@ function FreeResult({
   result,
   setupHref,
   total,
+  viewOnly,
 }: {
   result: FreeTrainingResult;
   setupHref: string;
   total: number;
+  viewOnly: boolean;
 }) {
   const weak = result.byCategory.filter((row) => row.missed > 0);
 
@@ -141,16 +173,23 @@ function FreeResult({
         </CardContent>
       </Card>
 
-      {result.addedToSrs > 0 && (
-        <p className="rounded-control border-accent/30 bg-accent/8 text-text-2 flex items-start gap-2 border px-3.5 py-2.5 text-[13px]">
-          <Sparkles size={15} strokeWidth={1.75} className="text-accent mt-0.5 shrink-0" />
-          <span>
-            В повторения добавлено{" "}
-            <span className="text-text-1 tabular-nums">{result.addedToSrs}</span>{" "}
-            {pluralRu(result.addedToSrs, "карточка", "карточки", "карточек")} — вернутся в очередь
-            по расписанию.
-          </span>
+      {viewOnly ? (
+        <p className="rounded-control border-border bg-surface-1 text-text-2 flex items-start gap-2 border px-3.5 py-2.5 text-[13px]">
+          <Eye size={15} strokeWidth={1.75} className="text-text-3 mt-0.5 shrink-0" />
+          <span>Режим просмотра: карточки в повторения не добавлены.</span>
         </p>
+      ) : (
+        result.addedToSrs > 0 && (
+          <p className="rounded-control border-accent/30 bg-accent/8 text-text-2 flex items-start gap-2 border px-3.5 py-2.5 text-[13px]">
+            <Sparkles size={15} strokeWidth={1.75} className="text-accent mt-0.5 shrink-0" />
+            <span>
+              В повторения добавлено{" "}
+              <span className="text-text-1 tabular-nums">{result.addedToSrs}</span>{" "}
+              {pluralRu(result.addedToSrs, "карточка", "карточки", "карточек")} — вернутся в очередь
+              по расписанию.
+            </span>
+          </p>
+        )
       )}
 
       {weak.length > 0 && (

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { CopyButton } from "@/components/ui/copy-button";
 import { ActionButton } from "@/components/features/action-button";
+import { useViewOnly, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 import { toast } from "@/components/ui/toast";
 import { connectTelegramAction, disconnectTelegramAction } from "@/lib/actions/profile";
 
@@ -32,6 +33,8 @@ const DEFAULT_DESCRIPTION =
 
 export function TelegramSection({ linked, description = DEFAULT_DESCRIPTION }: Props) {
   const router = useRouter();
+  // «Глазами ученика»: чужой Telegram не привязываем (spec 7.2).
+  const viewOnly = useViewOnly();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [link, setLink] = useState<{ deepLink: string; expiresMinutes: number } | null>(null);
@@ -72,7 +75,12 @@ export function TelegramSection({ linked, description = DEFAULT_DESCRIPTION }: P
     <div className="flex flex-col gap-3">
       <p className="text-text-2 text-[14px]">{description}</p>
       <div>
-        <Button onClick={connect} loading={pending}>
+        <Button
+          onClick={connect}
+          loading={pending}
+          disabled={viewOnly}
+          title={viewOnly ? VIEW_ONLY_TITLE : undefined}
+        >
           <Send size={16} strokeWidth={1.75} aria-hidden="true" />
           Подключить Telegram
         </Button>

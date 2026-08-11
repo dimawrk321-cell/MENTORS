@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { StudentSidebar } from "@/components/layout/student-sidebar";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { ImpersonationBanner } from "@/components/features/impersonation-banner";
+import { ViewOnlyProvider } from "@/components/features/view-only";
 import { CommandPalette } from "@/components/features/command-palette";
 import { SearchTriggerIcon } from "@/components/features/search-trigger";
 import { NotificationBell } from "@/components/features/notification-bell";
@@ -32,7 +33,9 @@ export default async function StudentLayout({ children }: { children: ReactNode 
   ]);
 
   return (
-    <>
+    // ViewOnlyProvider охватывает всю зону, включая шапку с колокольчиком:
+    // «Глазами ученика» — режим страницы целиком, а не отдельного блока.
+    <ViewOnlyProvider value={impersonated}>
       <OfflineBanner />
       {impersonated && <ImpersonationBanner studentName={user.name} />}
       <div className="flex min-h-dvh">
@@ -79,6 +82,6 @@ export default async function StudentLayout({ children }: { children: ReactNode 
       />
       {/* Preloaded palette: opening is a state flip, data is lazy (spec 5.3). */}
       <CommandPalette zone="student" />
-    </>
+    </ViewOnlyProvider>
   );
 }

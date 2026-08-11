@@ -20,13 +20,31 @@ import {
   joinWaitlistAction,
   transferBookingAction,
 } from "@/lib/actions/mocks";
+import { useViewOnly, ViewOnlyNote, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 
 // Клиентские кнопки моков (spec 8.3): подтверждение брони, клейм предложения,
 // лист ожидания, отмена/перенос по правилам 24ч. Все идут через server actions.
+//
+// «Глазами ученика» (spec 7.2): бронировать и отменять чужие моки нельзя, и это
+// видно сразу — иначе ментор проходил мастер выбора слота до конца и упирался в
+// красный тост на последнем шаге.
 
 export function ConfirmBookButton({ slotId, type }: { slotId: string; type: string }) {
   const [pending, start] = useTransition();
   const router = useRouter();
+  const viewOnly = useViewOnly();
+
+  if (viewOnly) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Button disabled title={VIEW_ONLY_TITLE}>
+          Забронировать
+        </Button>
+        <ViewOnlyNote>Режим просмотра: бронь не оформляется.</ViewOnlyNote>
+      </div>
+    );
+  }
+
   return (
     <Button
       loading={pending}
@@ -50,10 +68,13 @@ export function ConfirmBookButton({ slotId, type }: { slotId: string; type: stri
 export function ClaimOfferButton({ waitlistId }: { waitlistId: string }) {
   const [pending, start] = useTransition();
   const router = useRouter();
+  const viewOnly = useViewOnly();
   return (
     <Button
       size="sm"
       loading={pending}
+      disabled={viewOnly}
+      title={viewOnly ? VIEW_ONLY_TITLE : undefined}
       onClick={() =>
         start(async () => {
           const res = await claimOfferAction({ waitlistId });
@@ -80,10 +101,13 @@ export function JoinWaitlistButton({
 }) {
   const [pending, start] = useTransition();
   const router = useRouter();
+  const viewOnly = useViewOnly();
   return (
     <Button
       variant="secondary"
       loading={pending}
+      disabled={viewOnly}
+      title={viewOnly ? VIEW_ONLY_TITLE : undefined}
       onClick={() =>
         start(async () => {
           const res = await joinWaitlistAction({ type, interviewerId: interviewerId ?? null });
@@ -121,6 +145,7 @@ export function CancelBookingControls({ bookingId, late }: CancelControlsProps) 
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
+  const viewOnly = useViewOnly();
 
   const runCancel = () =>
     start(async () => {
@@ -139,13 +164,28 @@ export function CancelBookingControls({ bookingId, late }: CancelControlsProps) 
 
   return (
     <>
-      <div className="flex flex-wrap gap-2">
-        <Button asChild variant="secondary">
-          <Link href={`/mocks/book?reschedule=${bookingId}`}>Перенести</Link>
-        </Button>
-        <Button variant="ghost" className="text-danger" onClick={() => setOpen(true)}>
-          Отменить
-        </Button>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap gap-2">
+          {viewOnly ? (
+            <Button variant="secondary" disabled title={VIEW_ONLY_TITLE}>
+              Перенести
+            </Button>
+          ) : (
+            <Button asChild variant="secondary">
+              <Link href={`/mocks/book?reschedule=${bookingId}`}>Перенести</Link>
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            className="text-danger"
+            onClick={() => setOpen(true)}
+            disabled={viewOnly}
+            title={viewOnly ? VIEW_ONLY_TITLE : undefined}
+          >
+            Отменить
+          </Button>
+        </div>
+        {viewOnly && <ViewOnlyNote>Режим просмотра: бронь ученика не меняется.</ViewOnlyNote>}
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -181,6 +221,19 @@ export function TransferConfirmButton({
 }) {
   const [pending, start] = useTransition();
   const router = useRouter();
+  const viewOnly = useViewOnly();
+
+  if (viewOnly) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Button disabled title={VIEW_ONLY_TITLE}>
+          Перенести
+        </Button>
+        <ViewOnlyNote>Режим просмотра: перенос не выполняется.</ViewOnlyNote>
+      </div>
+    );
+  }
+
   return (
     <Button
       loading={pending}

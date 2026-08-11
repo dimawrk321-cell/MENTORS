@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
-import { Check, Flame, Layers, Sparkles } from "lucide-react";
+import { Check, Eye, Flame, Layers, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { pluralRu } from "@/lib/utils/dates";
 import { reviewCardAction } from "@/lib/actions/srs";
 import { celebrateGamification } from "@/components/features/gamification-celebrate";
 import { SessionCardDeck, type DeckGrade } from "@/components/features/session-card-deck";
+import { useViewOnly } from "@/components/features/view-only";
 
 // Сессия SRS (spec 7.6/13/14): полноэкранная карточка — категория, вопрос →
 // «Показать ответ» (флип 250мс; reduced-motion — мгновенная смена) → эталон →
@@ -35,6 +36,10 @@ type Phase = "cards" | "break" | "done";
 
 export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; queueTotal: number }) {
   const router = useRouter();
+  // «Глазами ученика»: карточки листаются, но ни один грейд не уходит на сервер
+  // (spec 7.2). Ритуал показывается целиком — иначе ментор упирался бы в отказ
+  // на первой же карточке и не видел ни экрана «Готово», ни «Порция закрыта».
+  const viewOnly = useViewOnly();
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [phase, setPhase] = useState<Phase>("cards");
@@ -61,6 +66,10 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
 
   function grade(value: Grade): void {
     if (!item || !flipped || pending || phase !== "cards") return;
+    if (viewOnly) {
+      advance(remaining);
+      return;
+    }
     startTransition(async () => {
       const result = await reviewCardAction({ cardId: item.cardId, grade: value });
       if (!result.ok) {
@@ -146,9 +155,17 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
         <div>
           <p className="text-[20px] font-bold tracking-[-0.01em]">Готово!</p>
           <p className="text-text-2 mt-1.5 text-[14px]">
-            Очередь на сегодня закрыта. Следующие карточки придут по расписанию.
+            {viewOnly
+              ? "Так ученик увидит закрытую очередь."
+              : "Очередь на сегодня закрыта. Следующие карточки придут по расписанию."}
           </p>
         </div>
+        {viewOnly && (
+          <p className="text-text-3 flex items-start gap-1.5 text-[13px]">
+            <Eye size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <span>Режим просмотра: ответы не записаны, расписание не изменилось.</span>
+          </p>
+        )}
         {/* Пилюли наград (design handoff): XP за закрытие очереди + продление серии,
             если день ещё не был засчитан. Значения — из результата грейда. */}
         {(doneXp > 0 || streakAdvanced) && (
@@ -192,8 +209,13 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
       exitHref="/trainer"
       exitLabel="Закончить"
       // Отвеченные карточки уже сохранены (каждый грейд — свой action), теряется
-      // только неотвеченный остаток (spec 12.1/C7).
-      exitConfirm="Прогресс отвеченных сохранён. Прервать сессию повторений?"
+      // только неотвеченный остаток (spec 12.1/C7). В режиме просмотра не
+      // сохраняется ничего, и обещать сохранность нельзя.
+      exitConfirm={
+        viewOnly
+          ? "Режим просмотра: ответы не сохраняются. Прервать сессию повторений?"
+          : "Прогресс отвеченных сохранён. Прервать сессию повторений?"
+      }
       onFlip={setFlipped}
       onGrade={grade}
     />

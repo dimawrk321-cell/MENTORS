@@ -3,6 +3,12 @@ import type { Db } from "@/lib/db";
 import { getQuestionAccess } from "@/lib/services/question-access";
 import { addSrsCardManually, getLaggingQuestionIds } from "@/lib/services/srs";
 import { seededShuffle } from "@/lib/utils/shuffle";
+import {
+  summarizeFreeTraining,
+  type FreeTrainingAnswer,
+  type FreeTrainingRoot,
+  type FreeTrainingSummary,
+} from "@/lib/utils/free-training-summary";
 
 // Свободная тренировка (заход «Банк вопросов», блок B; changelog к 7.6).
 //
@@ -171,29 +177,18 @@ export async function buildFreeTrainingSet(
   return input.size === "all" ? shuffled : shuffled.slice(0, input.size);
 }
 
-export type FreeTrainingGrade = "again" | "hard" | "good";
+// Типы итога — из общей чистой части, чтобы клиент мог считать его сам.
+export type {
+  FreeTrainingAnswer,
+  FreeTrainingCategoryRow,
+  FreeTrainingGrade,
+  FreeTrainingRoot,
+  FreeTrainingSummary,
+} from "@/lib/utils/free-training-summary";
 
-export interface FreeTrainingAnswer {
-  questionId: string;
-  grade: FreeTrainingGrade;
-}
-
-export interface FreeTrainingResult {
-  good: number;
-  hard: number;
-  again: number;
+export interface FreeTrainingResult extends FreeTrainingSummary {
   /** Сколько карточек реально завели в повторения этим прогоном. */
   addedToSrs: number;
-  /** Разбивка по корневым категориям, худшие сверху. */
-  byCategory: {
-    categoryId: string;
-    title: string;
-    colorIndex: number;
-    total: number;
-    missed: number;
-  }[];
-  /** Вопросы, которые стоит прогнать ещё раз («Повторить слабые»). */
-  weakQuestionIds: string[];
 }
 
 /**
@@ -211,13 +206,16 @@ export async function finishFreeTraining(
       category: { include: { parent: { select: { id: true, title: true, colorIndex: true } } } },
     },
   });
-  const byId = new Map(questions.map((q) => [q.id, q]));
+  const rootByQuestion = new Map<string, FreeTrainingRoot>(
+    questions.map((question) => {
+      const root = question.category.parent ?? question.category;
+      return [question.id, { id: root.id, title: root.title, colorIndex: root.colorIndex }];
+    }),
+  );
 
   let addedToSrs = 0;
-  const weakQuestionIds: string[] = [];
   for (const answer of answers) {
     if (answer.grade === "good") continue;
-    weakQuestionIds.push(answer.questionId);
     // Живую карточку не трогаем: addSrsCardManually поверх неё — no-op.
     const res = await addSrsCardManually(db, {
       userId: input.userId,
@@ -227,34 +225,5 @@ export async function finishFreeTraining(
     if (res.ok && res.added) addedToSrs += 1;
   }
 
-  const groups = new Map<
-    string,
-    { categoryId: string; title: string; colorIndex: number; total: number; missed: number }
-  >();
-  for (const answer of answers) {
-    const question = byId.get(answer.questionId);
-    if (!question) continue;
-    const root = question.category.parent ?? question.category;
-    const group = groups.get(root.id) ?? {
-      categoryId: root.id,
-      title: root.title,
-      colorIndex: root.colorIndex,
-      total: 0,
-      missed: 0,
-    };
-    group.total += 1;
-    if (answer.grade !== "good") group.missed += 1;
-    groups.set(root.id, group);
-  }
-
-  return {
-    good: answers.filter((a) => a.grade === "good").length,
-    hard: answers.filter((a) => a.grade === "hard").length,
-    again: answers.filter((a) => a.grade === "again").length,
-    addedToSrs,
-    byCategory: [...groups.values()].sort(
-      (a, b) => b.missed - a.missed || b.total - a.total || a.title.localeCompare(b.title),
-    ),
-    weakQuestionIds,
-  };
+  return { ...summarizeFreeTraining(answers, rootByQuestion), addedToSrs };
 }

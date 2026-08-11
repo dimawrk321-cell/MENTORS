@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { answerQuizAction } from "@/lib/actions/quiz-tests";
 import { celebrateGamification } from "@/components/features/gamification-celebrate";
+import { useViewOnly, ViewOnlyNote } from "@/components/features/view-only";
 
 interface QuizQuestionProps {
   lessonId: string;
@@ -32,6 +33,10 @@ export function QuizQuestion({
   questionNode,
   explanationNode,
 }: QuizQuestionProps) {
+  // «Глазами ученика»: проверить ответ нельзя — вердикт считает сервер, а он
+  // мутацию отобьёт. Закрываемся на входе, чтобы ментор не выбирал вариант
+  // впустую (spec 7.2).
+  const viewOnly = useViewOnly();
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState("");
   const [result, setResult] = useState<{ correct: boolean } | null>(null);
@@ -42,7 +47,7 @@ export function QuizQuestion({
   const canSubmit = type === "short_text" ? text.trim().length > 0 : selected.length > 0;
 
   function toggleOption(id: string): void {
-    if (answered) return;
+    if (answered || viewOnly) return;
     if (multi) {
       setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
     } else {
@@ -84,7 +89,7 @@ export function QuizQuestion({
           <Input
             value={text}
             onChange={(event) => setText(event.target.value)}
-            disabled={answered}
+            disabled={answered || viewOnly}
             aria-label="Ответ"
             placeholder="Короткий ответ"
             onKeyDown={(event) => {
@@ -102,7 +107,7 @@ export function QuizQuestion({
                 type="button"
                 role={multi ? "checkbox" : "radio"}
                 aria-checked={isSelected}
-                disabled={answered}
+                disabled={answered || viewOnly}
                 onClick={() => toggleOption(option.id)}
                 className={cn(
                   "rounded-control ease-app border px-3.5 py-2.5 text-left text-[14px] transition-colors duration-150",
@@ -119,13 +124,18 @@ export function QuizQuestion({
         </div>
       )}
 
-      {!answered && (
-        <div className="mt-3">
-          <Button size="sm" loading={pending} disabled={!canSubmit} onClick={submit}>
-            Ответить
-          </Button>
-        </div>
-      )}
+      {!answered &&
+        (viewOnly ? (
+          <ViewOnlyNote className="mt-3">
+            Режим просмотра: ответить нельзя — вердикт и разбор считает сервер.
+          </ViewOnlyNote>
+        ) : (
+          <div className="mt-3">
+            <Button size="sm" loading={pending} disabled={!canSubmit} onClick={submit}>
+              Ответить
+            </Button>
+          </div>
+        ))}
 
       {result && (
         <div className="border-border mt-3 border-t pt-3" aria-live="polite">

@@ -5,9 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { updateNameAction, type ProfileFormState } from "@/lib/actions/profile";
+import { useViewOnly, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 
 /** Edit the student's own name (walk 12.4: «имя редактируется в профиле»). */
 export function NameForm({ initialName }: { initialName: string }) {
+  // «Глазами ученика»: имя чужое, править нельзя (spec 7.2).
+  const viewOnly = useViewOnly();
   const [state, formAction, pending] = useActionState<ProfileFormState, FormData>(
     updateNameAction,
     null,
@@ -29,6 +32,7 @@ export function NameForm({ initialName }: { initialName: string }) {
           onChange={(event) => setName(event.target.value)}
           maxLength={50}
           aria-label="Имя"
+          disabled={viewOnly}
         />
         {error && (
           <p role="alert" aria-live="polite" className="text-danger mt-1 text-[13px]">
@@ -36,7 +40,14 @@ export function NameForm({ initialName }: { initialName: string }) {
           </p>
         )}
       </div>
-      <Button type="submit" variant="secondary" size="sm" loading={pending} disabled={!changed}>
+      <Button
+        type="submit"
+        variant="secondary"
+        size="sm"
+        loading={pending}
+        disabled={!changed || viewOnly}
+        title={viewOnly ? VIEW_ONLY_TITLE : undefined}
+      >
         Сохранить
       </Button>
     </form>

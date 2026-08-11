@@ -14,6 +14,7 @@ import {
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { reportContentAction } from "@/lib/actions/content";
+import { useViewOnly, ViewOnlyNote } from "@/components/features/view-only";
 
 const TYPES = [
   { value: "error" as const, label: "Ошибка в материале" },
@@ -22,6 +23,9 @@ const TYPES = [
 
 /** «⚑ Нашёл ошибку / непонятно» — floating action (spec 7.3) → content_reports. */
 export function ReportDialog({ lessonId }: { lessonId: string }) {
+  // «Глазами ученика»: обращение не отправится, поэтому закрываемся на входе —
+  // раньше отказ прилетал уже после набранного комментария (spec 7.2).
+  const viewOnly = useViewOnly();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"error" | "unclear">("error");
   const [text, setText] = useState("");
@@ -90,17 +94,25 @@ export function ReportDialog({ lessonId }: { lessonId: string }) {
                 rows={4}
                 maxLength={1000}
                 placeholder="Что именно не так?"
-                className="rounded-control border-border text-text-1 ease-app placeholder:text-text-3 hover:border-border-strong w-full resize-y border bg-transparent px-3 py-2 text-[14px] transition-colors duration-150"
+                disabled={viewOnly}
+                className="rounded-control border-border text-text-1 ease-app placeholder:text-text-3 hover:border-border-strong w-full resize-y border bg-transparent px-3 py-2 text-[14px] transition-colors duration-150 disabled:opacity-60"
               />
             </div>
+            {viewOnly && (
+              <ViewOnlyNote>
+                Режим просмотра: обращение не отправится. Поправить материал можно в админке.
+              </ViewOnlyNote>
+            )}
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setOpen(false)}>
-              Отмена
+              {viewOnly ? "Закрыть" : "Отмена"}
             </Button>
-            <Button loading={pending} onClick={submit}>
-              Отправить
-            </Button>
+            {!viewOnly && (
+              <Button loading={pending} onClick={submit}>
+                Отправить
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

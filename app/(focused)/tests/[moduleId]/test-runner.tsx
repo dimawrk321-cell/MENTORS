@@ -9,6 +9,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { answerTestAction, finishTestAction } from "@/lib/actions/quiz-tests";
+import { useViewOnly, ViewOnlyNote, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 import { celebrateGamification } from "@/components/features/gamification-celebrate";
 
 export interface RunnerQuestion {
@@ -32,6 +33,7 @@ interface TestRunnerProps {
  */
 export function TestRunner({ attemptId, questions, answeredIds }: TestRunnerProps) {
   const router = useRouter();
+  const viewOnly = useViewOnly();
   const answered = new Set(answeredIds);
   const firstUnanswered = questions.findIndex((question) => !answered.has(question.id));
   const [index, setIndex] = useState(
@@ -50,6 +52,7 @@ export function TestRunner({ attemptId, questions, answeredIds }: TestRunnerProp
   const isLast = index === total - 1;
 
   function toggleOption(id: string): void {
+    if (viewOnly) return;
     if (multi) {
       setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
     } else {
@@ -169,10 +172,23 @@ export function TestRunner({ attemptId, questions, answeredIds }: TestRunnerProp
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-text-3 max-w-[40ch] text-[12px]">
-          Верно или нет — узнаешь в конце: это экзамен, а не квиз.
-        </span>
-        <Button loading={pending} disabled={!canSubmit} onClick={submit}>
+        {/* «Глазами ученика»: ответ — запись в чужую попытку (spec 7.2), поэтому
+            отвечать нельзя. Экран показываем целиком: ментор видит вопросы. */}
+        {viewOnly ? (
+          <ViewOnlyNote className="max-w-[46ch]">
+            Режим просмотра: ответы не сохраняются, попытку продолжает ученик.
+          </ViewOnlyNote>
+        ) : (
+          <span className="text-text-3 max-w-[40ch] text-[12px]">
+            Верно или нет — узнаешь в конце: это экзамен, а не квиз.
+          </span>
+        )}
+        <Button
+          loading={pending}
+          disabled={!canSubmit || viewOnly}
+          onClick={submit}
+          title={viewOnly ? VIEW_ONLY_TITLE : undefined}
+        >
           {isLast ? "Завершить тест" : "Далее"}
         </Button>
       </div>

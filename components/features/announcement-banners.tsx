@@ -3,12 +3,17 @@
 import { useState, useTransition } from "react";
 import { X } from "lucide-react";
 import { dismissBannerAction } from "@/lib/actions/announcements";
+import { useViewOnly, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 import type { ActiveBanner } from "@/lib/services/announcements";
 
 // Dismissible banner strip above student content (spec 8.5). The × persists a
 // dismissal (announcement_reads) and hides the banner optimistically.
+//
+// «Глазами ученика» (spec 7.2): скрытие не сохранится, а оптимистичный × делал
+// вид, что сохранилось. Прячем сам крестик — врать не будем.
 
 export function AnnouncementBanners({ banners }: { banners: ActiveBanner[] }) {
+  const viewOnly = useViewOnly();
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [, start] = useTransition();
   const visible = banners.filter((b) => !dismissed.includes(b.id));
@@ -40,7 +45,9 @@ export function AnnouncementBanners({ banners }: { banners: ActiveBanner[] }) {
             type="button"
             aria-label="Скрыть объявление"
             onClick={() => dismiss(banner.id)}
-            className="text-text-3 ease-app hover:text-text-1 -mr-1 flex size-7 shrink-0 items-center justify-center transition-colors duration-150"
+            disabled={viewOnly}
+            title={viewOnly ? VIEW_ONLY_TITLE : undefined}
+            className="text-text-3 ease-app hover:text-text-1 -mr-1 flex size-7 shrink-0 items-center justify-center transition-colors duration-150 disabled:opacity-40"
           >
             <X size={16} strokeWidth={1.75} aria-hidden="true" />
           </button>

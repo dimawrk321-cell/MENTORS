@@ -5,6 +5,7 @@ import { Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { addToSrsAction } from "@/lib/actions/srs";
+import { useViewOnly, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 
 // «В повторения» (spec 7.4): ручное добавление карточки из каталога и с
 // FlipCard-страницы вопроса. Поверх живой карточки — no-op с тостом.
@@ -21,6 +22,9 @@ export function AddToSrsButton({
   /** Иконка-кнопка без подписи (каталог-строка, walk 13.5 block 1.2). */
   iconOnly?: boolean;
 }) {
+  // «Глазами ученика»: чужие повторения не пополняем (spec 7.2) — кнопка видна,
+  // но закрыта, вместо красного тоста после клика.
+  const viewOnly = useViewOnly();
   const [inSrs, setInSrs] = useState(initialInSrs);
   const [pending, startTransition] = useTransition();
   const iconSize = size === "sm" ? 13 : 15;
@@ -62,8 +66,9 @@ export function AddToSrsButton({
         size="sm"
         loading={pending}
         onClick={add}
+        disabled={viewOnly}
         aria-label="В повторения"
-        title="В повторения"
+        title={viewOnly ? VIEW_ONLY_TITLE : "В повторения"}
         className="w-8 px-0 max-md:w-11"
       >
         {!pending && <Plus size={16} strokeWidth={1.75} aria-hidden="true" />}
@@ -83,7 +88,14 @@ export function AddToSrsButton({
   }
 
   return (
-    <Button variant="secondary" size={size} loading={pending} onClick={add}>
+    <Button
+      variant="secondary"
+      size={size}
+      loading={pending}
+      onClick={add}
+      disabled={viewOnly}
+      title={viewOnly ? VIEW_ONLY_TITLE : undefined}
+    >
       <Plus size={iconSize} strokeWidth={1.75} aria-hidden="true" />В повторения
     </Button>
   );

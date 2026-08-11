@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 import { openGuideAction, toggleBookmarkAction } from "@/lib/actions/guides";
 import { toast } from "@/components/ui/toast";
+import { useViewOnly, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 import { cn } from "@/lib/utils/cn";
 
 /**
@@ -17,6 +18,9 @@ export function GuideBookmark({
   guideId: string;
   initialBookmarked: boolean;
 }) {
+  // «Глазами ученика»: закладка чужая (spec 7.2). Раньше кнопка успевала
+  // переключиться и откатывалась с красным тостом — теперь просто закрыта.
+  const viewOnly = useViewOnly();
   const [bookmarked, setBookmarked] = useState(initialBookmarked);
   const [pending, startTransition] = useTransition();
   const logged = useRef(false);
@@ -46,7 +50,8 @@ export function GuideBookmark({
     <button
       type="button"
       onClick={toggle}
-      disabled={pending}
+      disabled={pending || viewOnly}
+      title={viewOnly ? VIEW_ONLY_TITLE : undefined}
       aria-pressed={bookmarked}
       aria-label={bookmarked ? "Убрать из закладок" : "Добавить в закладки"}
       className={cn(

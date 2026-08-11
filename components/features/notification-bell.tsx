@@ -9,6 +9,7 @@ import {
   dismissNotificationsAction,
   markNotificationsReadAction,
 } from "@/lib/actions/notifications";
+import { useViewOnly, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 
 // NotificationBell (spec 5.3/7.12): unread badge + popover of the last 20 in-app
 // notifications, «Прочитать все», click = mark read + navigate. Polls the API
@@ -44,6 +45,10 @@ function relativeTime(iso: string): string {
 
 export function NotificationBell({ className }: { className?: string }) {
   const router = useRouter();
+  // «Глазами ученика» (spec 7.2): пометка прочитанным не сохранится. Оптимистичный
+  // апдейт раньше делал вид, что сохранилась, — теперь чужие уведомления просто
+  // не трогаем: список читается, счётчик не сбрасывается.
+  const viewOnly = useViewOnly();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -87,6 +92,7 @@ export function NotificationBell({ className }: { className?: string }) {
 
   const markRead = useCallback(
     (ids: string[]) => {
+      if (viewOnly) return;
       // Optimistic (spec 15: read-marking is safe to update optimistically).
       setItems((prev) =>
         prev.map((n) =>
@@ -100,10 +106,11 @@ export function NotificationBell({ className }: { className?: string }) {
         await markNotificationsReadAction({ ids });
       });
     },
-    [items],
+    [items, viewOnly],
   );
 
   const markAll = useCallback(() => {
+    if (viewOnly) return;
     setItems((prev) =>
       prev.map((n) => (n.readAt ? n : { ...n, readAt: new Date().toISOString() })),
     );
@@ -111,11 +118,12 @@ export function NotificationBell({ className }: { className?: string }) {
     startTransition(async () => {
       await markNotificationsReadAction({ all: true });
     });
-  }, []);
+  }, [viewOnly]);
 
   // 13.4/4.4: «крестик» — hide one from the bell (optimistic).
   const dismiss = useCallback(
     (id: string) => {
+      if (viewOnly) return;
       const wasUnread = items.some((n) => n.id === id && !n.readAt);
       setItems((prev) => prev.filter((n) => n.id !== id));
       if (wasUnread) setUnread((prev) => Math.max(0, prev - 1));
@@ -123,7 +131,7 @@ export function NotificationBell({ className }: { className?: string }) {
         await dismissNotificationsAction({ ids: [id] });
       });
     },
-    [items],
+    [items, viewOnly],
   );
 
   // «Очистить» — hide all (marks read + dismissed). Confirmed inline first.
@@ -176,7 +184,12 @@ export function NotificationBell({ className }: { className?: string }) {
           <div className="border-border flex items-center justify-between gap-3 border-b px-4 py-2.5">
             <span className="text-[14px] font-semibold">Уведомления</span>
             <div className="flex items-center gap-3">
-              {unread > 0 && (
+              {viewOnly && (
+                <span className="text-text-3 text-[12px]" title={VIEW_ONLY_TITLE}>
+                  режим просмотра
+                </span>
+              )}
+              {!viewOnly && unread > 0 && (
                 <button
                   type="button"
                   onClick={markAll}
@@ -186,7 +199,7 @@ export function NotificationBell({ className }: { className?: string }) {
                   Прочитать все
                 </button>
               )}
-              {items.length > 0 && (
+              {!viewOnly && items.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setConfirmingClear(true)}
@@ -268,19 +281,26 @@ export function NotificationBell({ className }: { className?: string }) {
                       <button
                         type="button"
                         onClick={() => onItemClick(item)}
-                        className="hover:bg-surface-1 ease-app block w-full py-2.5 pr-11 pl-4 text-left transition-colors duration-150"
+                        // pr-11 освобождает место под «крестик»; в режиме
+                        // просмотра его нет — и отступ не нужен.
+                        className={cn(
+                          "hover:bg-surface-1 ease-app block w-full py-2.5 pl-4 text-left transition-colors duration-150",
+                          viewOnly ? "pr-4" : "pr-11",
+                        )}
                       >
                         {content}
                       </button>
                       {/* 13.4/4.4: «крестик» hides this one from the bell. */}
-                      <button
-                        type="button"
-                        onClick={() => dismiss(item.id)}
-                        aria-label="Скрыть уведомление"
-                        className="text-text-3 ease-app hover:text-text-1 absolute top-1.5 right-1.5 flex size-8 items-center justify-center rounded transition-colors duration-150 md:size-7"
-                      >
-                        <X size={14} strokeWidth={1.75} aria-hidden="true" />
-                      </button>
+                      {!viewOnly && (
+                        <button
+                          type="button"
+                          onClick={() => dismiss(item.id)}
+                          aria-label="Скрыть уведомление"
+                          className="text-text-3 ease-app hover:text-text-1 absolute top-1.5 right-1.5 flex size-8 items-center justify-center rounded transition-colors duration-150 md:size-7"
+                        >
+                          <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                      )}
                     </li>
                   );
                 })}

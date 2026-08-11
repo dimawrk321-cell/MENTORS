@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
+import { useViewOnly, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 import type { ActionResult } from "@/lib/auth/action-helpers";
 
 interface ActionButtonProps {
@@ -41,6 +42,10 @@ export function ActionButton({
 }: ActionButtonProps) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  // «Глазами ученика» (spec 7.2): в студзоне действие отобьётся сервером, поэтому
+  // кнопка закрыта сразу — без диалога подтверждения, ведущего в отказ. Вне
+  // студзоны провайдера нет и значение всегда false, так что админка не меняется.
+  const viewOnly = useViewOnly();
 
   function run(): void {
     startTransition(async () => {
@@ -55,9 +60,17 @@ export function ActionButton({
     });
   }
 
-  if (!confirm) {
+  if (!confirm || viewOnly) {
     return (
-      <Button variant={variant} size={size} className={className} loading={pending} onClick={run}>
+      <Button
+        variant={variant}
+        size={size}
+        className={className}
+        loading={pending}
+        onClick={run}
+        disabled={viewOnly}
+        title={viewOnly ? VIEW_ONLY_TITLE : undefined}
+      >
         {children}
       </Button>
     );

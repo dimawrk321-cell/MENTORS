@@ -6,8 +6,12 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { toast } from "@/components/ui/toast";
 import { PasswordMeter } from "@/components/features/password-meter";
 import { changePasswordAction, type ProfileFormState } from "@/lib/actions/profile";
+import { useViewOnly, ViewOnlyNote, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 
 export function ChangePasswordForm() {
+  // «Глазами ученика»: чужой пароль не меняем (spec 7.2). Форму закрываем на
+  // входе — раньше отказ прилетал после заполненных полей.
+  const viewOnly = useViewOnly();
   const [state, formAction, pending] = useActionState<ProfileFormState, FormData>(
     changePasswordAction,
     null,
@@ -35,6 +39,7 @@ export function ChangePasswordForm() {
           name="oldPassword"
           autoComplete="current-password"
           required
+          disabled={viewOnly}
         />
       </div>
       <div className="flex flex-col gap-1.5">
@@ -49,6 +54,7 @@ export function ChangePasswordForm() {
           minLength={8}
           value={newPassword}
           onChange={(event) => setNewPassword(event.target.value)}
+          disabled={viewOnly}
         />
         <PasswordMeter password={newPassword} />
       </div>
@@ -57,8 +63,15 @@ export function ChangePasswordForm() {
           {error}
         </p>
       )}
+      {viewOnly && <ViewOnlyNote>Режим просмотра: пароль ученика не меняется.</ViewOnlyNote>}
       <div>
-        <Button type="submit" variant="secondary" loading={pending}>
+        <Button
+          type="submit"
+          variant="secondary"
+          loading={pending}
+          disabled={viewOnly}
+          title={viewOnly ? VIEW_ONLY_TITLE : undefined}
+        >
           Сменить пароль
         </Button>
       </div>

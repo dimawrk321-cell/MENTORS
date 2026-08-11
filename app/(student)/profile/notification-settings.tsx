@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { updateNotificationSettingsAction } from "@/lib/actions/profile";
 import type { MatrixRow } from "@/lib/services/notifications";
+import { useViewOnly, ViewOnlyNote, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 
 // Notification settings (spec 7.12/8.3): toggleable type×channel matrix, quiet
 // hours, digest time. «Всегда»-типы don't appear here (only toggleable channels
@@ -30,6 +31,9 @@ type PrefState = Record<string, { inapp: boolean; email: boolean; telegram: bool
 
 export function NotificationSettings({ matrix, telegramLinked, ...initial }: Props) {
   const router = useRouter();
+  // «Глазами ученика»: настройки чужие (spec 7.2) — показываем как есть, но
+  // закрываем на входе, чтобы ментор не перещёлкивал матрицу впустую.
+  const viewOnly = useViewOnly();
   const [pending, start] = useTransition();
   const [digestTime, setDigestTime] = useState(initial.digestTime);
   const [quietStart, setQuietStart] = useState(initial.quietHoursStart);
@@ -85,6 +89,7 @@ export function NotificationSettings({ matrix, telegramLinked, ...initial }: Pro
           aria-label={`${row.label}: ${mobileLabel}`}
           checked={prefs[row.type]![channel]}
           onCheckedChange={(v) => setChannel(row.type, channel, v)}
+          disabled={viewOnly}
         />
       ) : (
         <span className="text-text-3 text-[13px]">—</span>
@@ -154,8 +159,14 @@ export function NotificationSettings({ matrix, telegramLinked, ...initial }: Pro
         </ul>
       </div>
 
+      {viewOnly && <ViewOnlyNote>Режим просмотра: настройки ученика не меняются.</ViewOnlyNote>}
       <div>
-        <Button onClick={save} loading={pending}>
+        <Button
+          onClick={save}
+          loading={pending}
+          disabled={viewOnly}
+          title={viewOnly ? VIEW_ONLY_TITLE : undefined}
+        >
           Сохранить настройки
         </Button>
       </div>

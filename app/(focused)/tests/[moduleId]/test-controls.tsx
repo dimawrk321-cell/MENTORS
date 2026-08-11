@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { startTestAction } from "@/lib/actions/quiz-tests";
+import { useViewOnly, ViewOnlyNote, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 
 /** Кнопка старта/пересдачи с кулдаун-таймером на самой кнопке (spec 7.5). */
 export function StartTestButton({
@@ -20,6 +21,7 @@ export function StartTestButton({
   label: string;
 }) {
   const router = useRouter();
+  const viewOnly = useViewOnly();
   const [pending, startTransition] = useTransition();
   // Pre-hydration the client cannot know the time without disagreeing with the
   // server's render — stay neutral until mounted (same shape as MockBookingCard).
@@ -72,6 +74,19 @@ export function StartTestButton({
       <Button size="lg" disabled>
         Пересдача через {minutes}:{String(seconds).padStart(2, "0")}
       </Button>
+    );
+  }
+
+  // «Глазами ученика»: попытка теста — запись в чужой прогресс (spec 7.2).
+  // Закрываем на входе: раньше кнопка запускалась и падала красным тостом.
+  if (viewOnly) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <Button size="lg" disabled title={VIEW_ONLY_TITLE}>
+          {label}
+        </Button>
+        <ViewOnlyNote>Режим просмотра: попытку теста завести нельзя.</ViewOnlyNote>
+      </div>
     );
   }
 

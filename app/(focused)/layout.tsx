@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { ImpersonationBanner } from "@/components/features/impersonation-banner";
+import { ViewOnlyProvider } from "@/components/features/view-only";
 import { OfflineBanner } from "@/components/features/offline-banner";
 import { ThemeToggleIcon } from "@/components/features/theme-toggle";
 
@@ -39,7 +40,9 @@ export default async function FocusedLayout({ children }: { children: ReactNode 
         <header className="relative z-10 flex items-center justify-end px-4 py-3 md:px-6">
           <ThemeToggleIcon initialTheme={user.theme} />
         </header>
-        <main className="relative z-10 w-full flex-1 px-4 pb-16 md:px-6">{children}</main>
+        <main className="relative z-10 w-full flex-1 px-4 pb-16 md:px-6">
+          <ViewOnlyProvider value={impersonated}>{children}</ViewOnlyProvider>
+        </main>
       </div>
     </>
   );
