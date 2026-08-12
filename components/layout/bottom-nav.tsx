@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useBottomDock } from "@/components/features/bottom-dock";
 import { cn } from "@/lib/utils/cn";
 import { ThemeToggleTile } from "@/components/features/theme-toggle";
 import type { Theme } from "@prisma/client";
@@ -62,6 +63,9 @@ export function BottomNav({
   theme: Theme;
 }) {
   const pathname = usePathname();
+  // Нижний док экрана: над ним встают тосты (см. lib/utils/bottom-dock.ts).
+  // `md:hidden` = display:none, поэтому на десктопе замер сам даёт 0.
+  const dockRef = useBottomDock<HTMLElement>();
 
   const moreItems: NavItem[] = [
     ...(guidesEnabled ? [guidesItem] : []),
@@ -74,6 +78,8 @@ export function BottomNav({
 
   return (
     <nav
+      ref={dockRef}
+      data-bottom-dock
       aria-label="Основная навигация"
       className="border-border bg-bg/92 fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >

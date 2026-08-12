@@ -434,3 +434,61 @@
   transform: translateY(-2px);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--card-cat) 12%, transparent);
 }
+
+/* --- Нижний док экрана и вьюпорт тостов (spec 7.6/13, заход «Хвосты по тостам
+   и высоте») ---------------------------------------------------------------
+
+   `--bottom-dock` — фактическая высота занятой полосы у нижнего края экрана;
+   пишет её клиентский наблюдатель `components/features/bottom-dock.tsx` по
+   реально смонтированному контролу (BottomNav в студзоне, липкая панель оценок
+   в focused-зоне, липкая CTA курса), а не константой: BottomNav есть не везде,
+   а высота панели оценок зависит от содержимого.
+
+   Отступ берётся как max(док, env(safe-area-inset-bottom)), а НЕ как сумма:
+   высота BottomNav уже включает `pb-[env(safe-area-inset-bottom)]`, и сложение
+   считало бы инсет дважды. Когда доков нет, работает голый env() — на устройстве
+   с домашним индикатором это 34px, в браузере без выреза 0. */
+:root {
+  --bottom-dock: 0px;
+}
+
+.toast-viewport {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1rem + max(var(--bottom-dock, 0px), env(safe-area-inset-bottom, 0px)));
+  z-index: 50;
+  display: flex;
+  width: min(380px, calc(100vw - 2rem));
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (max-width: 767px) {
+  /* Мобильный тост тянется по ширине экрана (заход «Мобильный тренажёр и тосты»). */
+  .toast-viewport {
+    right: 0.75rem;
+    left: 0.75rem;
+    bottom: calc(0.75rem + max(var(--bottom-dock, 0px), env(safe-area-inset-bottom, 0px)));
+    width: auto;
+  }
+}
+
+/* --- Дека карточек тренажёра (spec 7.6/13) --------------------------------
+
+   `--deck-chrome` — всё, что кроме самой грани: шапка focused-зоны, липкая
+   шапка сессии со счётчиком и прогрессом, метка категории, панель оценок и
+   нижний отступ main. Пол `max(10rem, …)` обязателен: на альбомной ориентации
+   телефона (844×390) вычет из 100dvh давал 62px, и грань схлопывалась в
+   полоску — а min-height в 240px, наоборот, перебивал max-height и выносил
+   карточку за экран. */
+.session-deck {
+  --deck-chrome: 20.5rem;
+  --deck-face-max: max(10rem, calc(100dvh - var(--deck-chrome)));
+}
+
+@media (max-height: 560px) {
+  /* Альбомная ориентация телефона: такого хрома там физически нет. */
+  .session-deck {
+    --deck-chrome: 13rem;
+  }
+}

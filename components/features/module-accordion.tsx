@@ -164,27 +164,6 @@ export function ModuleAccordion({ modules }: { modules: ModuleTreeModule[] }) {
   );
 }
 
-/**
- * Sticky «Продолжить: {урок}» bar (walk 12.3, P2). Sits just above the BottomNav
- * (56px + safe-area) so it never overlaps it. Solid accent — the gradient is
- * reserved for the dashboard hero / goal ring / level-up (spec 5.1).
- */
-export function CourseStickyCta({
-  lessonId,
-  lessonTitle,
-}: {
-  lessonId: string;
-  lessonTitle: string;
-}) {
-  return (
-    <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 px-4 md:hidden">
-      <Link
-        href={`/lessons/${lessonId}`}
-        className="bg-accent hover:bg-accent-hover ease-app rounded-control flex h-12 items-center justify-center gap-2 px-4 text-[15px] font-medium text-white shadow-[0_2px_16px_rgb(0_0_0/0.24)] transition-colors duration-150 active:scale-[.98]"
-      >
-        <span className="shrink-0 text-white/75">Продолжить:</span>
-        <span className="truncate">{lessonTitle}</span>
-      </Link>
-    </div>
-  );
-}
+// CourseStickyCta переехала в `course-sticky-cta.tsx`: ей нужен клиентский замер
+// нижнего дока, а этот файл остаётся серверным.
+export { CourseStickyCta } from "./course-sticky-cta";

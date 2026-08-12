@@ -3,6 +3,7 @@ import {
   pushToast,
   toastCollapseKey,
   toastCountLabel,
+  TOAST_ACTION_STACK_LIMIT,
   TOAST_STACK_LIMIT,
   type StackedToast,
 } from "@/lib/utils/toast-stack";
@@ -22,6 +23,7 @@ function make(title: string, options: { action?: boolean; variant?: string } = {
   return {
     id: nextId,
     count: 1,
+    pinned: Boolean(options.action),
     collapseKey: toastCollapseKey({
       title,
       variant: options.variant,
@@ -86,5 +88,41 @@ describe("схлопывание однотипных", () => {
     items = pushToast(items, make("Блок удалён", { action: true }));
     expect(items).toHaveLength(2);
     expect(items.every((i) => i.collapseKey === null)).toBe(true);
+  });
+});
+
+// Заход «Хвосты по тостам и высоте»: «Вернуть» не схлопывалось, но вытеснялось
+// общим лимитом — три удаления подряд, и отмена первых двух исчезала молча.
+describe("тосты с действием не вытесняются", () => {
+  it("сценарий «три удаления подряд»: отмена доступна у всех трёх", () => {
+    let items: TestToast[] = [];
+    for (let i = 1; i <= 3; i += 1) {
+      items = pushToast(items, make(`Блок ${i} удалён`, { action: true }));
+    }
+    expect(items).toHaveLength(3);
+    expect(items.map((i) => i.title)).toEqual(["Блок 1 удалён", "Блок 2 удалён", "Блок 3 удалён"]);
+    expect(items.every((i) => i.pinned)).toBe(true);
+  });
+
+  it("обычные тосты не сносят «Вернуть», а «Вернуть» не сносит обычные", () => {
+    let items = pushToast([], make("Блок удалён", { action: true }));
+    items = pushToast(items, make("Сохранено"));
+    items = pushToast(items, make("Опубликовано"));
+    items = pushToast(items, make("Скопировано"));
+    // Обычных осталось два (свой лимит), тост с действием на месте.
+    expect(items.filter((i) => i.pinned)).toHaveLength(1);
+    expect(items.filter((i) => !i.pinned).map((i) => i.title)).toEqual([
+      "Опубликовано",
+      "Скопировано",
+    ]);
+  });
+
+  it("у тостов с действием собственный лимит, вытеснение — с головы", () => {
+    let items: TestToast[] = [];
+    for (let i = 1; i <= TOAST_ACTION_STACK_LIMIT + 1; i += 1) {
+      items = pushToast(items, make(`Блок ${i} удалён`, { action: true }));
+    }
+    expect(items).toHaveLength(TOAST_ACTION_STACK_LIMIT);
+    expect(items[0]!.title).toBe("Блок 2 удалён");
   });
 });

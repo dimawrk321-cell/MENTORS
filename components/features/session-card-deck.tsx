@@ -1,19 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-  type TouchEvent,
-} from "react";
+import { useEffect, useRef, useState, type ReactNode, type TouchEvent } from "react";
 import { BookOpen, ChevronDown, RotateCw } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CategoryChip } from "@/components/features/category-chip";
+import { useBottomDock } from "@/components/features/bottom-dock";
 import { cn } from "@/lib/utils/cn";
 import { isVerticalIntent, resolveSwipe } from "@/lib/utils/card-gesture";
 
@@ -119,6 +113,9 @@ export function SessionCardDeck({
   onGrade: (grade: DeckGrade) => void;
 }) {
   const gesture = useRef<Gesture | null>(null);
+  // Панель оценок — нижний док focused-зоны: BottomNav тут нет, и тост должен
+  // вставать над ПАНЕЛЬЮ (lib/utils/bottom-dock.ts).
+  const panelRef = useBottomDock<HTMLDivElement>();
   // Компактная строка вопроса над ответом: развёрнутое состояние живёт до
   // следующей карточки, чтобы тап не приходилось повторять на каждой грани.
   const [questionOpen, setQuestionOpen] = useState(false);
@@ -142,7 +139,10 @@ export function SessionCardDeck({
       if (!state.active) return;
       // Не перехватываем Space/цифры у сфокусированного контрола — пусть кнопка
       // или ссылка активируется штатно (spec 14: полная клавиатурная навигация).
-      const target = event.target as HTMLElement | null;
+      // `instanceof Element`, а не приведение типа: целью keydown может быть и
+      // `document` (когда сфокусированный элемент только что убрали из дерева) —
+      // у него нет `closest`, и обработчик падал бы целиком.
+      const target = event.target instanceof Element ? event.target : null;
       if (target?.closest("button, a, input, textarea, select")) return;
       if (event.code === "Space") {
         event.preventDefault();
@@ -212,42 +212,51 @@ export function SessionCardDeck({
     if (outcome) grade(outcome);
   }
 
-  const faceClass = "flex max-h-[var(--deck-face-max)] min-h-[240px] flex-col md:min-h-[280px]";
+  // Пол высоты грани (заход «Хвосты по тостам и высоте»): min-h тоже считается
+  // от --deck-face-max, иначе на низком вьюпорте min-height (240px) перебивал бы
+  // max-height (62px на альбомном 844×390) и карточка вылезала бы за экран.
+  const faceClass =
+    "flex max-h-[var(--deck-face-max)] min-h-[min(15rem,var(--deck-face-max))] flex-col md:min-h-[min(17.5rem,var(--deck-face-max))]";
   const bodyClass = "min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 md:p-6";
   const captionClass = "text-text-3 mb-3 text-[12px] font-medium tracking-wide uppercase";
 
   return (
     <div
-      className="mx-auto flex w-full max-w-2xl flex-col gap-4"
       // Высота грани ограничена вьюпортом: карточка скроллится внутри себя, а
-      // хедер сессии и панель оценок остаются на экране при любой длине эталона
-      // (spec 13). Вычет — хром зоны и самой деки (шапка, прогресс, метка,
-      // панель кнопок); если он окажется мал, страховкой служит sticky-панель.
-      style={{ "--deck-face-max": "calc(100dvh - 20.5rem)" } as CSSProperties}
+      // шапка сессии и панель оценок остаются на экране при любой длине эталона
+      // (spec 13). Вычет (--deck-chrome) и пол высоты живут в globals.css —
+      // на альбомной ориентации телефона вычет должен быть меньше, а инлайновый
+      // стиль медиазапроса не держит.
+      className="session-deck mx-auto flex w-full max-w-2xl flex-col gap-4"
     >
-      <div className="flex items-center justify-between">
-        <p className="text-text-2 text-[13px]" aria-live="polite">
-          {index + 1} / {total}
-        </p>
-        {/* Hierarchical exit with confirm (spec 12.1/C7). */}
-        <BackButton href={exitHref} label={exitLabel} confirmMessage={exitConfirm} />
-      </div>
+      {/* Шапка сессии липнет к верху: на низком вьюпорте (альбомная ориентация)
+          страница всё-таки скроллится, и счётчик с выходом уезжали бы за экран —
+          при липкой панели оценок внизу это оставляло карточку без обоих краёв. */}
+      <div className="bg-bg sticky top-0 z-10 flex flex-col gap-4 pb-1">
+        <div className="flex items-center justify-between">
+          <p className="text-text-2 text-[13px]" aria-live="polite">
+            {index + 1} / {total}
+          </p>
+          {/* Hierarchical exit with confirm (spec 12.1/C7). */}
+          <BackButton href={exitHref} label={exitLabel} confirmMessage={exitConfirm} />
+        </div>
 
-      <div
-        className="rounded-pill bg-border h-1 w-full overflow-hidden"
-        role="progressbar"
-        aria-valuenow={Math.round((index / total) * 100)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label="Прогресс сессии"
-      >
         <div
-          className="ease-app h-full rounded-full transition-[width] duration-300"
-          style={{
-            width: `${Math.round((index / total) * 100)}%`,
-            backgroundImage: "var(--gradient-accent)",
-          }}
-        />
+          className="rounded-pill bg-border h-1 w-full overflow-hidden"
+          role="progressbar"
+          aria-valuenow={Math.round((index / total) * 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Прогресс сессии"
+        >
+          <div
+            className="ease-app h-full rounded-full transition-[width] duration-300"
+            style={{
+              width: `${Math.round((index / total) * 100)}%`,
+              backgroundImage: "var(--gradient-accent)",
+            }}
+          />
+        </div>
       </div>
 
       <div>
@@ -373,7 +382,11 @@ export function SessionCardDeck({
           Липкость теперь на ВСЕХ разрешениях (была только на мобильном): на
           десктопе панель уезжала вниз вместе с длинным эталоном, и «выхода» с
           карточки на экране не оставалось — вторая половина той же находки. */}
-      <div className="bg-bg sticky bottom-0 z-10 flex flex-col gap-2 py-2">
+      <div
+        ref={panelRef}
+        data-bottom-dock
+        className="bg-bg sticky bottom-0 z-10 flex flex-col gap-2 py-2"
+      >
         {flipped ? (
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="Оценка карточки">
             <Button
