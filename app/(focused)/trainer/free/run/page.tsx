@@ -12,6 +12,7 @@ import {
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
 import { QuestionAnswerBody } from "@/components/features/question-answer-body";
 import { FreeSession, type FreeSessionItem } from "@/components/features/free-session";
+import { stripMarkdown } from "@/lib/utils/text";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -110,6 +111,8 @@ export default async function FreeTrainingRunPage({ searchParams }: RunPageProps
         // просмотра — там итог не приходит с сервера.
         root: { id: root.id, title: root.title, colorIndex: root.colorIndex },
         lesson: lessonByQuestion.get(question.id) ?? null,
+        // Компактная строка вопроса над раскрытым ответом (тот же strip, что в каталоге).
+        questionText: stripMarkdown(question.textMd, 160),
         questionNode: <LessonRenderer markdown={question.textMd} />,
         answerNode: <QuestionAnswerBody question={question} />,
       },

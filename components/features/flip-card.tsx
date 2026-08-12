@@ -16,8 +16,12 @@ export function FlipCard({ front, back }: { front: ReactNode; back: ReactNode })
     <div className="flex flex-col gap-4">
       <div className="relative [perspective:1200px]">
         {/* Spec 5.4: reduced-motion — флип заменяется мгновенной сменой. */}
+        {/* grid-cols-[minmax(0,1fr)] — та же находка, что в SessionCardDeck:
+            неявная auto-колонка меряется по max-content, и широкая строка кода в
+            эталоне растягивала карточку далеко за вьюпорт (spec 13). С явной
+            колонкой блок кода скроллится внутри себя. */}
         <div
-          className="ease-app relative grid transition-transform duration-250 [transform-style:preserve-3d] motion-reduce:transition-none"
+          className="ease-app relative grid grid-cols-[minmax(0,1fr)] transition-transform duration-250 [transform-style:preserve-3d] motion-reduce:transition-none"
           style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
         >
           {/* Скрытая грань не участвует в высоте ячейки (та же находка, что в

@@ -26,6 +26,8 @@ export interface FreeSessionItem {
   /** Корневая категория — по ней строится разбор «слабых тем». */
   root: FreeTrainingRoot;
   lesson: { id: string; title: string } | null;
+  /** Вопрос простым текстом — компактная строка над раскрытым ответом. */
+  questionText: string;
   questionNode: ReactNode;
   answerNode: ReactNode;
 }
@@ -101,6 +103,7 @@ export function FreeSession({
         id: item.questionId,
         category: item.category,
         lesson: item.lesson,
+        questionText: item.questionText,
         questionNode: item.questionNode,
         answerNode: item.answerNode,
       }}

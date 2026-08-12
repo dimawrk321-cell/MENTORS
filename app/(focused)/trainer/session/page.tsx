@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getNextReviewDate, getSessionCards } from "@/lib/services/srs";
 import { formatDateOnlyRu } from "@/lib/utils/dates";
+import { stripMarkdown } from "@/lib/utils/text";
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
 import { QuestionAnswerBody } from "@/components/features/question-answer-body";
 import { ReviewSession, type SessionItem } from "@/components/features/review-session";
@@ -50,6 +51,9 @@ export default async function TrainerSessionPage() {
     cardId: card.cardId,
     category: card.category,
     lesson: card.lesson,
+    // Компактная строка вопроса над раскрытым ответом — тот же strip, что у
+    // строк каталога: разметка в одну строку не нужна.
+    questionText: stripMarkdown(card.question.textMd, 160),
     questionNode: <LessonRenderer markdown={card.question.textMd} />,
     answerNode: <QuestionAnswerBody question={card.question} />,
   }));

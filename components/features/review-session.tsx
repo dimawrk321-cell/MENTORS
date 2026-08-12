@@ -27,6 +27,8 @@ export interface SessionItem {
   cardId: string;
   category: { title: string; colorIndex: number };
   lesson: { id: string; title: string } | null;
+  /** Вопрос простым текстом — компактная строка над раскрытым ответом. */
+  questionText: string;
   questionNode: ReactNode;
   answerNode: ReactNode;
 }
@@ -198,6 +200,7 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
         id: item.cardId,
         category: item.category,
         lesson: item.lesson,
+        questionText: item.questionText,
         questionNode: item.questionNode,
         answerNode: item.answerNode,
       }}

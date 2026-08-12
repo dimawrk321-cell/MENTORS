@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, type ReactNode } from "react";
-import { BookOpen, RotateCw } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type TouchEvent,
+} from "react";
+import { BookOpen, ChevronDown, RotateCw } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { CategoryChip } from "@/components/features/category-chip";
 import { cn } from "@/lib/utils/cn";
+import { isVerticalIntent, resolveSwipe } from "@/lib/utils/card-gesture";
 
 // Презентационная дека карточек (spec 7.6/13/14) — общая для дневной очереди
 // (ReviewSession) и свободной тренировки (FreeSession).
@@ -20,19 +28,69 @@ import { cn } from "@/lib/utils/cn";
 // /trainer/session — ежедневный ритуал: любое отличие поведения здесь считается
 // регрессом, поэтому дека не знает ни про SRS, ни про прогон и не принимает
 // решений — только рисует и зовёт onGrade/onFlip.
+//
+// Заход «Мобильный тренажёр и тосты» (по скринам с телефонов учеников):
+//   • тело карточки скроллится ВНУТРИ себя (высота ограничена вьюпортом), чтобы
+//     кнопки оценки не уезжали за экран при длинном эталоне;
+//   • жест переключения отделён от скролла — см. lib/utils/card-gesture.ts;
+//   • при раскрытом ответе вопрос доступен целиком: компактная строка сверху,
+//     тап разворачивает её в полный текст.
 
 export interface DeckItem {
   /** Ключ перемонтирования граней: cardId в очереди, questionId в прогоне. */
   id: string;
   category: { title: string; colorIndex: number };
   lesson: { id: string; title: string } | null;
+  /** Вопрос простым текстом — компактная строка над раскрытым ответом. */
+  questionText: string;
   questionNode: ReactNode;
   answerNode: ReactNode;
 }
 
 export type DeckGrade = "again" | "hard" | "good";
 
-const SWIPE_THRESHOLD_PX = 60;
+interface Gesture {
+  x: number;
+  y: number;
+  /** Скролл страницы и тела карточки на момент начала касания. */
+  pageY: number;
+  scroller: HTMLElement | null;
+  scrollTop: number;
+  vertical: boolean;
+  insideScrollableX: boolean;
+}
+
+/**
+ * Касание началось внутри горизонтально прокручиваемого блока (код, KaTeX,
+ * широкая таблица)? Тогда это прокрутка содержимого, а не свайп по карточке —
+ * ровно тот случай со скрина: вопрос про asyncio, текст + список + блок кода.
+ */
+function startedInScrollableX(target: EventTarget | null, root: HTMLElement): boolean {
+  let node = target instanceof Element ? target : null;
+  while (node) {
+    if (node.scrollWidth - node.clientWidth > 2) return true;
+    if (node === root) return false;
+    node = node.parentElement;
+  }
+  return false;
+}
+
+/** Ближайший вертикальный скроллер (тело карточки) или null — тогда скроллит страница. */
+function scrollerFor(target: EventTarget | null, root: HTMLElement): HTMLElement | null {
+  let node = target instanceof Element ? (target as HTMLElement) : null;
+  while (node) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      node.scrollHeight - node.clientHeight > 2
+    ) {
+      return node;
+    }
+    if (node === root) return null;
+    node = node.parentElement;
+  }
+  return null;
+}
 
 export function SessionCardDeck({
   item,
@@ -60,7 +118,11 @@ export function SessionCardDeck({
   onFlip: (next: boolean) => void;
   onGrade: (grade: DeckGrade) => void;
 }) {
-  const touchStart = useRef<{ x: number; y: number; scrollY: number } | null>(null);
+  const gesture = useRef<Gesture | null>(null);
+  // Компактная строка вопроса над ответом: развёрнутое состояние живёт до
+  // следующей карточки, чтобы тап не приходилось повторять на каждой грани.
+  const [questionOpen, setQuestionOpen] = useState(false);
+  useEffect(() => setQuestionOpen(false), [item.id]);
 
   function grade(value: DeckGrade): void {
     if (!flipped || pending || !active) return;
@@ -96,8 +158,73 @@ export function SessionCardDeck({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Жест: копим признаки во время касания и решаем один раз на touchend.
+  // preventDefault не зовём вовсе — React вешает touchstart/touchmove на корень
+  // ПАССИВНО, и на разных движках отменить прокрутку отсюда всё равно нельзя.
+  // `touch-action` тоже не трогаем: глобальный `pan-y` на карточке отобрал бы у
+  // блоков кода их собственную горизонтальную прокрутку — то самое содержимое,
+  // ради которого всё и затевалось. Прокруткой владеет браузер, дека только
+  // наблюдает и отбрасывает свои жесты (lib/utils/card-gesture.ts).
+  function onTouchStart(event: TouchEvent<HTMLDivElement>): void {
+    const touch = event.touches[0];
+    if (!touch) {
+      gesture.current = null;
+      return;
+    }
+    const root = event.currentTarget;
+    const scroller = scrollerFor(event.target, root);
+    gesture.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      pageY: window.scrollY,
+      scroller,
+      scrollTop: scroller?.scrollTop ?? 0,
+      vertical: false,
+      insideScrollableX: startedInScrollableX(event.target, root),
+    };
+  }
+
+  function onTouchMove(event: TouchEvent<HTMLDivElement>): void {
+    const start = gesture.current;
+    const touch = event.touches[0];
+    if (!start || !touch) return;
+    // Намерение читается по всему движению, а не по конечной точке: палец,
+    // ушедший вниз и вернувшийся, — это скролл, а не свайп.
+    if (isVerticalIntent(touch.clientX - start.x, touch.clientY - start.y)) start.vertical = true;
+  }
+
+  function onTouchEnd(event: TouchEvent<HTMLDivElement>): void {
+    const start = gesture.current;
+    gesture.current = null;
+    if (!start || !flipped || pending) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const scrolled =
+      Math.abs(window.scrollY - start.pageY) > 4 ||
+      Math.abs((start.scroller?.scrollTop ?? 0) - start.scrollTop) > 4;
+    const outcome = resolveSwipe({
+      dx: touch.clientX - start.x,
+      dy: touch.clientY - start.y,
+      verticalIntent: start.vertical,
+      insideScrollableX: start.insideScrollableX,
+      scrolled,
+    });
+    if (outcome) grade(outcome);
+  }
+
+  const faceClass = "flex max-h-[var(--deck-face-max)] min-h-[240px] flex-col md:min-h-[280px]";
+  const bodyClass = "min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 md:p-6";
+  const captionClass = "text-text-3 mb-3 text-[12px] font-medium tracking-wide uppercase";
+
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <div
+      className="mx-auto flex w-full max-w-2xl flex-col gap-4"
+      // Высота грани ограничена вьюпортом: карточка скроллится внутри себя, а
+      // хедер сессии и панель оценок остаются на экране при любой длине эталона
+      // (spec 13). Вычет — хром зоны и самой деки (шапка, прогресс, метка,
+      // панель кнопок); если он окажется мал, страховкой служит sticky-панель.
+      style={{ "--deck-face-max": "calc(100dvh - 20.5rem)" } as CSSProperties}
+    >
       <div className="flex items-center justify-between">
         <p className="text-text-2 text-[13px]" aria-live="polite">
           {index + 1} / {total}
@@ -127,40 +254,31 @@ export function SessionCardDeck({
         <CategoryChip title={item.category.title} colorIndex={item.category.colorIndex} />
       </div>
 
-      {/* Флип-карточка: свайпы по открытому ответу = оценки (spec 7.6). */}
+      {/* Флип-карточка: горизонтальные свайпы по открытому ответу = оценки
+          (spec 7.6). Вертикаль отдана скроллу целиком. */}
       <div
         className="relative [perspective:1200px]"
-        onTouchStart={(event) => {
-          const touch = event.touches[0];
-          touchStart.current = touch
-            ? { x: touch.clientX, y: touch.clientY, scrollY: window.scrollY }
-            : null;
-        }}
-        onTouchEnd={(event) => {
-          const start = touchStart.current;
-          touchStart.current = null;
-          if (!start || !flipped || pending) return;
-          // Если за жест страница проскроллилась — это скролл длинного ответа,
-          // а не свайп-оценка: не даём вертикальному скроллу ставить «hard».
-          if (Math.abs(window.scrollY - start.scrollY) > 8) return;
-          const touch = event.changedTouches[0];
-          if (!touch) return;
-          const dx = touch.clientX - start.x;
-          const dy = touch.clientY - start.y;
-          if (Math.abs(dx) >= Math.abs(dy)) {
-            if (dx <= -SWIPE_THRESHOLD_PX) grade("again");
-            else if (dx >= SWIPE_THRESHOLD_PX) grade("good");
-          } else if (dy >= SWIPE_THRESHOLD_PX) {
-            grade("hard");
-          }
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={() => {
+          gesture.current = null;
         }}
       >
         {/* key по карточке: переход к следующей монтирует грани заново на
             rotateY(0), без анимации разворота (иначе мелькнул бы ответ). */}
         {/* Spec 5.4: reduced-motion — флип заменяется мгновенной сменой. */}
+        {/* grid-cols-[minmax(0,1fr)] — иначе неявная auto-колонка меряется по
+            max-content граней: широкая строка кода в эталоне растягивала колонку
+            до ~1200px при вьюпорте 390 и давала горизонтальный оверфлоу ВСЕЙ
+            страницы (spec 13 — «никакого horizontal overflow на 360px»). Это же
+            и ломало жест: палец тянул страницу вбок, а не блок кода, и на
+            touchend дека видела «свайп». Замер на 390px до правки: scrollWidth
+            889 при clientWidth 390, `pre` шириной 821 без собственной прокрутки;
+            после — 390/390, код скроллится внутри себя. */}
         <div
           key={item.id}
-          className="ease-app relative grid transition-transform duration-250 [transform-style:preserve-3d] motion-reduce:transition-none"
+          className="ease-app relative grid grid-cols-[minmax(0,1fr)] transition-transform duration-250 [transform-style:preserve-3d] motion-reduce:transition-none"
           style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
         >
           {/* inert на неактивной грани убирает её из фокуса и дерева
@@ -180,13 +298,11 @@ export function SessionCardDeck({
             )}
             inert={flipped}
           >
-            <Card className="min-h-[280px]">
-              <CardContent className="p-6">
-                <p className="text-text-3 mb-3 text-[12px] font-medium tracking-wide uppercase">
-                  Вопрос
-                </p>
+            <Card className={faceClass}>
+              <div className={bodyClass}>
+                <p className={captionClass}>Вопрос</p>
                 <div className="lesson-prose text-[17px]">{item.questionNode}</div>
-              </CardContent>
+              </div>
             </Card>
           </div>
           <div
@@ -196,11 +312,47 @@ export function SessionCardDeck({
             )}
             inert={!flipped}
           >
-            <Card className="min-h-[280px]">
-              <CardContent className="p-6">
-                <p className="text-text-3 mb-3 text-[12px] font-medium tracking-wide uppercase">
-                  Эталонный ответ
-                </p>
+            <Card className={faceClass}>
+              {/* Вопрос над ответом (заход «Мобильный тренажёр и тосты»): на
+                  телефоне раскрытый эталон занимал экран целиком и вопрос было
+                  не перечитать. Компактная строка сверху не скроллится вместе с
+                  ответом, а тап разворачивает вопрос полностью — ничего не
+                  обрезается без возможности прочитать. */}
+              <div className="border-border shrink-0 border-b px-5 py-1.5 md:px-6">
+                <button
+                  type="button"
+                  onClick={() => setQuestionOpen((open) => !open)}
+                  aria-expanded={questionOpen}
+                  className="ease-app text-text-2 hover:text-text-1 flex min-h-11 w-full items-center gap-2 text-left transition-colors duration-150"
+                >
+                  <span className="text-text-3 shrink-0 text-[11px] font-medium tracking-wide uppercase">
+                    Вопрос
+                  </span>
+                  <span className={cn("min-w-0 flex-1 text-[13px]", !questionOpen && "truncate")}>
+                    {questionOpen ? (
+                      <span className="text-text-3">Свернуть</span>
+                    ) : (
+                      item.questionText
+                    )}
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    className={cn(
+                      "text-text-3 ease-app shrink-0 transition-transform duration-150",
+                      questionOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {questionOpen && (
+                  <div className="lesson-prose max-h-[38dvh] overflow-y-auto overscroll-contain pb-3 text-[14px]">
+                    {item.questionNode}
+                  </div>
+                )}
+              </div>
+              <div className={bodyClass}>
+                <p className={captionClass}>Эталонный ответ</p>
                 <div className="lesson-prose text-[15px]">{item.answerNode}</div>
                 {item.lesson && (
                   <Link
@@ -211,7 +363,7 @@ export function SessionCardDeck({
                     Открыть урок: {item.lesson.title}
                   </Link>
                 )}
-              </CardContent>
+              </div>
             </Card>
           </div>
         </div>
@@ -256,7 +408,7 @@ export function SessionCardDeck({
           </Button>
         )}
         <p className="text-text-3 hidden text-center text-[12px] md:block">
-          Space — ответ · 1 / 2 / 3 — оценки · свайпы на мобильном
+          Space — ответ · 1 / 2 / 3 — оценки · свайпы влево/вправо на мобильном
         </p>
       </div>
     </div>
