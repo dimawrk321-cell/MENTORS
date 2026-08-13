@@ -53,12 +53,34 @@ function schedule(): void {
   frame = requestAnimationFrame(measure);
 }
 
+/**
+ * Возврат к странице: меряем СИНХРОННО, а не через кадр.
+ *
+ * Сценарий, который это закрывает: ученик свернул браузер, повернул телефон и
+ * вернулся. Пока вкладка скрыта, не работает ничего из обычного потока — ни
+ * `requestAnimationFrame`, ни `ResizeObserver` (его колбэки доставляются на
+ * шаге отрисовки, а скрытая страница не отрисовывается). Штатный путь чинит
+ * себя сам: перекладка на возврате шлёт `resize`, и накопленный кадр
+ * выполняется первым же видимым. Но если страница восстановлена из bfcache или
+ * заморозки БЕЗ `resize`, пересчитывать было бы некому, и `--bottom-dock`
+ * держал бы величину от старой ориентации до первого скролла.
+ *
+ * `pageshow` — именно про bfcache-восстановление, `visibilitychange` — про
+ * обычный возврат из фона; вместе они покрывают оба входа.
+ */
+function onPageVisible(): void {
+  if (document.visibilityState !== "visible") return;
+  measure();
+}
+
 function attachListeners(): void {
   observer = new ResizeObserver(schedule);
   window.addEventListener("resize", schedule);
   window.addEventListener("scroll", schedule, { passive: true });
   // Мобильные браузеры прячут адресную строку — вьюпорт меняется без `resize`.
   window.visualViewport?.addEventListener("resize", schedule);
+  document.addEventListener("visibilitychange", onPageVisible);
+  window.addEventListener("pageshow", onPageVisible);
 }
 
 function detachListeners(): void {
@@ -67,6 +89,8 @@ function detachListeners(): void {
   window.removeEventListener("resize", schedule);
   window.removeEventListener("scroll", schedule);
   window.visualViewport?.removeEventListener("resize", schedule);
+  document.removeEventListener("visibilitychange", onPageVisible);
+  window.removeEventListener("pageshow", onPageVisible);
   if (frame) {
     cancelAnimationFrame(frame);
     frame = 0;
