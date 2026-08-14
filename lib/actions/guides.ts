@@ -73,11 +73,15 @@ function revalidateGuides(slug?: string, guideId?: string): void {
   if (guideId) revalidatePath(`/admin/content/guides/${guideId}`);
 }
 
-function failGuide(code: "not_found" | "slug_taken" | "not_draft"): never {
+function failGuide(
+  code: "not_found" | "slug_taken" | "not_draft" | "unsafe_recording_reference",
+): never {
   const messages: Record<typeof code, string> = {
     not_found: "Гайд не найден",
     slug_taken: "Такой адрес уже занят",
     not_draft: "Удалять можно только черновики — сначала сними с публикации",
+    unsafe_recording_reference:
+      "Прямую ссылку или пароль от записи интервью публиковать нельзя. Добавь запись в Библиотеку и пройди чеклист 4/4.",
   };
   throw new ActionError(code, messages[code]);
 }
@@ -160,7 +164,11 @@ export async function bulkGuideStatusAction(
     });
     revalidateGuides();
     const verb = parsed.status === "published" ? "Опубликовано" : "В черновик";
-    return { message: `${verb}: ${res.updated}` };
+    const skipNote =
+      parsed.status === "published" && res.skipped > 0
+        ? ` · ${res.skipped} пропущено (запись должна пройти через Библиотеку)`
+        : "";
+    return { message: `${verb}: ${res.updated}${skipNote}` };
   });
 }
 

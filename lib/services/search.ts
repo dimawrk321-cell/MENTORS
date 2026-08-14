@@ -11,6 +11,7 @@ import {
   recordingCardTitle,
 } from "@/lib/constants";
 import { stripMarkdown } from "@/lib/utils/text";
+import { redactProtectedRecordingSnippet } from "@/lib/utils/content-safety";
 
 // Search service (spec 7.11 / 6 «FTS»). Pure over `db` so it is unit-testable
 // against the test database. Postgres FTS (`russian`) over lessons/questions/
@@ -164,7 +165,7 @@ function balanceSentinels(s: string): string {
 
 /** Strip markdown to clean text, then escape and reveal only the <mark> highlights. */
 export function renderSnippet(raw: string): string {
-  const clean = balanceSentinels(stripSnippetMarkdown(raw));
+  const clean = balanceSentinels(redactProtectedRecordingSnippet(stripSnippetMarkdown(raw)));
   return escapeHtml(clean).split(HL_START).join("<mark>").split(HL_END).join("</mark>");
 }
 

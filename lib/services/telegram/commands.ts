@@ -189,7 +189,7 @@ async function buildQueue(
     };
   }
   const next = await getNextReviewDate(db, { userId: user.id, now });
-  const nextLine = next ? `Следующие карточки: ${formatDateOnlyRu(next)}.` : null;
+  const nextLine = next ? `Следующие карточки: ${formatDateOnlyRu(next)}` : null;
   return { text: messageBlock("Очередь повторений", ["Пусто — всё повторено.", nextLine]) };
 }
 

@@ -34,7 +34,7 @@ export default async function TrainerSessionPage() {
           title="Всё повторено"
           description={
             nextReview
-              ? `Следующие карточки — ${formatDateOnlyRu(nextReview)}.`
+              ? `Следующие карточки — ${formatDateOnlyRu(nextReview)}`
               : "Заверши урок — его ключевые вопросы придут сюда."
           }
           action={

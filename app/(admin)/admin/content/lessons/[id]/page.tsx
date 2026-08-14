@@ -47,6 +47,10 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
           isOptional: lesson.isOptional,
           status: lesson.status,
           readingMinutes: lesson.readingMinutes,
+          pathPolicy: lesson.pathPolicy,
+          textMinutes: lesson.textMinutes,
+          videoMinutes: lesson.videoMinutes,
+          practiceMinutes: lesson.practiceMinutes,
         }}
         courseTitle={lesson.module.course.title}
         moduleTitle={lesson.module.title}

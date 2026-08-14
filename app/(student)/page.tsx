@@ -156,7 +156,7 @@ export default async function DashboardPage() {
           title="Всё повторено"
           description={
             nextReview
-              ? `Следующие карточки — ${formatDateOnlyRu(nextReview)}.`
+              ? `Следующие карточки — ${formatDateOnlyRu(nextReview)}`
               : "Заверши урок — его ключевые вопросы придут сюда."
           }
         />

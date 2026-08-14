@@ -1,8 +1,10 @@
 import Link from "next/link";
+import type { LessonPathPolicy } from "@prisma/client";
 import { Check, Circle, ClipboardCheck, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { pluralRu } from "@/lib/utils/dates";
 import { cn } from "@/lib/utils/cn";
+import { lessonDurationLabel } from "@/lib/utils/lesson-path";
 
 // ModuleTree (spec 5.3): галки завершённых, точка текущего, замки закрытых,
 // метки «необязательный» и «обновлён»; строка модульного теста
@@ -12,6 +14,11 @@ export interface ModuleTreeLesson {
   id: string;
   title: string;
   readingMinutes: number;
+  pathPolicy: LessonPathPolicy;
+  textMinutes: number | null;
+  videoMinutes: number | null;
+  practiceMinutes: number | null;
+  hasVideo: boolean;
   isOptional: boolean;
   unlocked: boolean;
   completed: boolean;
@@ -73,7 +80,7 @@ function LessonRow({ lesson }: { lesson: ModuleTreeLesson }) {
       {lesson.updatedSinceCompletion && <Badge variant="accent">обновлён</Badge>}
       {lesson.isOptional && <Badge>необязательный</Badge>}
       <span className="text-text-3 shrink-0 text-[12px] max-sm:hidden">
-        {lesson.readingMinutes} мин
+        {lessonDurationLabel(lesson)}
       </span>
     </>
   );

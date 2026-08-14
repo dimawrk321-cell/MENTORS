@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Check, ChevronDown, Circle, ClipboardCheck, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/cn";
+import { lessonDurationLabel } from "@/lib/utils/lesson-path";
 import type { ModuleTreeLesson, ModuleTreeModule, ModuleTreeTest } from "./module-tree";
 
 // Mobile course view (walk 12.3, P2): modules as an accordion — only the module
@@ -32,13 +33,16 @@ function LessonRow({ lesson }: { lesson: ModuleTreeLesson }) {
       <span className="flex w-5 shrink-0 items-center justify-center">
         <LessonIcon lesson={lesson} />
       </span>
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate text-[15px]",
-          !lesson.unlocked ? "text-text-3" : lesson.completed ? "text-text-2" : "text-text-1",
-        )}
-      >
-        {lesson.title}
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "line-clamp-2 text-[15px] leading-snug",
+            !lesson.unlocked ? "text-text-3" : lesson.completed ? "text-text-2" : "text-text-1",
+          )}
+        >
+          {lesson.title}
+        </span>
+        <span className="text-text-3 mt-0.5 block text-[11px]">{lessonDurationLabel(lesson)}</span>
       </span>
       {lesson.updatedSinceCompletion && <Badge variant="accent">обновлён</Badge>}
       {lesson.isOptional && <Badge>необязательный</Badge>}

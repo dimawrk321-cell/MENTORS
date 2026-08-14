@@ -71,7 +71,7 @@ export default async function TrainerPage() {
             <EmptyState
               icon={Layers}
               title="Всё повторено"
-              description={`Следующие карточки — ${formatDateOnlyRu(nextReview)}.`}
+              description={`Следующие карточки — ${formatDateOnlyRu(nextReview)}`}
             />
           ) : (
             <EmptyState
@@ -121,6 +121,9 @@ export default async function TrainerPage() {
           <CardContent className="p-4">
             <p className="text-text-3 text-[13px]">Выучено</p>
             <p className="text-[24px] font-semibold">{stats.learnedCount}</p>
+            <p className="text-text-3 mt-1 text-[11px] leading-snug">
+              Карточки, прошедшие интервалы 1 → 3 → 7 → 16 → 35 дней
+            </p>
           </CardContent>
         </Card>
         <Card>

@@ -4,6 +4,7 @@ import {
   getCourseView,
   getLessonView,
   savePosition,
+  selectLearningPath,
   startLesson,
 } from "@/lib/services/content";
 import { saveLessonContent } from "@/lib/services/content-admin";
@@ -156,6 +157,34 @@ describe("gating over the database", () => {
     expect(progress?.scrollPos).toBe(1);
     expect(progress?.videoPos).toBe(90);
     expect(progress?.status).toBe("in_progress");
+  });
+
+  it("video-or-text choice is persisted only for a configured alternative lesson", async () => {
+    const user = await makeStudent();
+    const { bySlug } = await makeCourse();
+    const l1 = bySlug.get("l1")!;
+
+    expect(await selectLearningPath(testDb, { userId: user.id, lessonId: l1, path: "text" })).toBe(
+      false,
+    );
+
+    await testDb.lesson.update({
+      where: { id: l1 },
+      data: { pathPolicy: "choose_one", videoUrl: "https://youtu.be/example" },
+    });
+    expect(await completeLesson(testDb, { userId: user.id, lessonId: l1, now: NOW })).toEqual({
+      ok: false,
+      code: "path_required",
+    });
+    expect(await selectLearningPath(testDb, { userId: user.id, lessonId: l1, path: "video" })).toBe(
+      true,
+    );
+    expect(
+      await testDb.lessonProgress.findUnique({
+        where: { userId_lessonId: { userId: user.id, lessonId: l1 } },
+        select: { selectedPath: true },
+      }),
+    ).toEqual({ selectedPath: "video" });
   });
 });
 

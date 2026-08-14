@@ -124,55 +124,57 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
         subtitle="Реальные мок-интервью выпускников: анонимизированные записи с этапами, грейдами и исходами. Смотри, как отвечают другие — и что решает оффер."
       />
 
-      <div className="rounded-card border-border bg-surface-1 flex flex-col gap-2 border p-4">
-        <FilterRow
-          label="Этап"
-          name="stage"
-          options={RECORDING_STAGES}
-          labels={RECORDING_STAGE_LABEL}
-          active={filters.stage}
-          params={params}
-        />
-        <FilterRow
-          label="Направление"
-          name="direction"
-          options={RECORDING_DIRECTIONS}
-          labels={RECORDING_DIRECTION_LABEL}
-          active={filters.direction}
-          params={params}
-        />
-        <FilterRow
-          label="Грейд"
-          name="grade"
-          options={RECORDING_GRADES}
-          labels={RECORDING_GRADE_LABEL}
-          active={filters.grade}
-          params={params}
-        />
-        <FilterRow
-          label="Исход"
-          name="outcome"
-          options={RECORDING_OUTCOMES}
-          labels={RECORDING_OUTCOME_LABEL}
-          active={filters.outcome}
-          params={params}
-        />
-        <FilterRow
-          label="Тип компании"
-          name="companyType"
-          options={COMPANY_TYPES}
-          labels={COMPANY_TYPE_LABEL}
-          active={filters.companyType}
-          params={params}
-        />
-        {hasFilter && (
-          <div className="pt-1">
-            <Link href="/library" className="text-text-3 hover:text-text-1 text-[13px]">
-              Сбросить фильтры
-            </Link>
-          </div>
-        )}
-      </div>
+      {(recordings.length > 0 || hasFilter) && (
+        <div className="rounded-card border-border bg-surface-1 flex flex-col gap-2 border p-4">
+          <FilterRow
+            label="Этап"
+            name="stage"
+            options={RECORDING_STAGES}
+            labels={RECORDING_STAGE_LABEL}
+            active={filters.stage}
+            params={params}
+          />
+          <FilterRow
+            label="Направление"
+            name="direction"
+            options={RECORDING_DIRECTIONS}
+            labels={RECORDING_DIRECTION_LABEL}
+            active={filters.direction}
+            params={params}
+          />
+          <FilterRow
+            label="Грейд"
+            name="grade"
+            options={RECORDING_GRADES}
+            labels={RECORDING_GRADE_LABEL}
+            active={filters.grade}
+            params={params}
+          />
+          <FilterRow
+            label="Исход"
+            name="outcome"
+            options={RECORDING_OUTCOMES}
+            labels={RECORDING_OUTCOME_LABEL}
+            active={filters.outcome}
+            params={params}
+          />
+          <FilterRow
+            label="Тип компании"
+            name="companyType"
+            options={COMPANY_TYPES}
+            labels={COMPANY_TYPE_LABEL}
+            active={filters.companyType}
+            params={params}
+          />
+          {hasFilter && (
+            <div className="pt-1">
+              <Link href="/library" className="text-text-3 hover:text-text-1 text-[13px]">
+                Сбросить фильтры
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
 
       {recordings.length === 0 ? (
         <Card>
@@ -185,11 +187,9 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
                 : "Команда загружает анонимизированные собеседования. Загляни позже."
             }
             action={
-              hasFilter ? (
-                <Link href="/library" className="text-accent text-[14px]">
-                  Сбросить фильтры
-                </Link>
-              ) : undefined
+              <Link href={hasFilter ? "/library" : "/mocks"} className="text-accent text-[14px]">
+                {hasFilter ? "Сбросить фильтры" : "Перейти к мок-интервью"}
+              </Link>
             }
           />
         </Card>

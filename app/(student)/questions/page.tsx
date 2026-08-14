@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { QuestionType } from "@prisma/client";
 import { MessageCircleQuestion, Search } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -15,6 +16,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils/cn";
+import { pluralRu } from "@/lib/utils/dates";
 
 export const metadata: Metadata = {
   title: "Вопросы",
@@ -29,8 +31,11 @@ interface QuestionsPageProps {
     difficulty?: string;
     lagging?: string;
     category?: string;
+    page?: string;
   }>;
 }
+
+const PAGE_SIZE = 40;
 
 function filterHref(
   params: Record<string, string | undefined>,
@@ -58,6 +63,8 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
     ? (Number(params.difficulty) as 1 | 2 | 3)
     : undefined;
   const lagging = params.lagging === "1";
+  const requestedPage = /^\d+$/.test(params.page ?? "") ? Number(params.page) : 1;
+  const currentPage = Math.max(1, requestedPage);
   const anyFilter = Boolean(params.q?.trim() || type || difficulty || lagging || params.category);
   // «Мои западающие» — единственный активный фильтр (для пустого состояния 5.5):
   // отдельный предикат, т.к. lagging входит в anyFilter (иначе ветка недостижима).
@@ -78,7 +85,24 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
     difficulty,
     ids: laggingIds,
     access,
+    offset: (currentPage - 1) * PAGE_SIZE,
+    limit: PAGE_SIZE,
   });
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (currentPage > totalPages) {
+    redirect(
+      filterHref(
+        {
+          q: params.q,
+          type: params.type,
+          difficulty: params.difficulty,
+          lagging: params.lagging,
+          category: params.category,
+        },
+        { page: totalPages > 1 ? String(totalPages) : undefined },
+      ),
+    );
+  }
   const inSrs = await getUserCardQuestionIds(
     prisma,
     user.id,
@@ -174,6 +198,17 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
         </Link>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+        <p className="text-text-3">
+          {total} {pluralRu(total, "вопрос", "вопроса", "вопросов")}
+        </p>
+        {anyFilter && (
+          <Link href="/questions" className="text-accent hover:text-accent-hover font-medium">
+            Сбросить поиск и фильтры
+          </Link>
+        )}
+      </div>
+
       {total === 0 ? (
         <Card>
           <EmptyState
@@ -198,6 +233,33 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
         <>
           {/* Аккордеон + ленивая подгрузка эталона при раскрытии (walk 13.5). */}
           <CatalogAccordion groups={groups} inSrsIds={[...inSrs]} anyFilter={anyFilter} />
+          {totalPages > 1 && (
+            <nav aria-label="Страницы банка вопросов" className="flex items-center justify-between">
+              {currentPage > 1 ? (
+                <Button asChild variant="secondary">
+                  <Link
+                    href={filterHref(plain, {
+                      page: currentPage === 2 ? undefined : String(currentPage - 1),
+                    })}
+                  >
+                    Назад
+                  </Link>
+                </Button>
+              ) : (
+                <span />
+              )}
+              <span className="text-text-3 text-[13px]">
+                Страница {currentPage} из {totalPages}
+              </span>
+              {currentPage < totalPages ? (
+                <Button asChild variant="secondary">
+                  <Link href={filterHref(plain, { page: String(currentPage + 1) })}>Дальше</Link>
+                </Button>
+              ) : (
+                <span />
+              )}
+            </nav>
+          )}
         </>
       )}
     </div>

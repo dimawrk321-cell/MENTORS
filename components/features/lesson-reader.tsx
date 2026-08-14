@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { LessonPathPolicy, LessonPathSelection } from "@prisma/client";
 import { VideoEmbed } from "@/components/blocks/video-embed";
-import { savePositionAction } from "@/lib/actions/content";
-import { startLessonAction } from "@/lib/actions/content";
+import {
+  savePositionAction,
+  selectLearningPathAction,
+  startLessonAction,
+} from "@/lib/actions/content";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 
 interface LessonReaderProps {
   lessonId: string;
@@ -13,6 +19,9 @@ interface LessonReaderProps {
   /** Read-only impersonation view never writes progress (spec 7.2). */
   impersonated: boolean;
   video: { url: string; status: "ok" | "unavailable" | "unchecked"; title: string } | null;
+  pathPolicy: LessonPathPolicy;
+  initialSelectedPath: LessonPathSelection | null;
+  hasText: boolean;
   /** Server-rendered lesson body (watermark + prose). */
   children: ReactNode;
 }
@@ -31,11 +40,16 @@ export function LessonReader({
   completed,
   impersonated,
   video,
+  pathPolicy,
+  initialSelectedPath,
+  hasText,
   children,
 }: LessonReaderProps) {
   const dirty = useRef<{ scroll?: number; video?: number }>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedScroll = useRef<number>(initialScrollPos ?? 0);
+  const [selectedPath, setSelectedPath] = useState<LessonPathSelection | null>(initialSelectedPath);
+  const [selecting, setSelecting] = useState(false);
 
   const flush = useCallback(() => {
     timer.current = null;
@@ -58,12 +72,12 @@ export function LessonReader({
   // Restore the reading position («Продолжить» ведёт на точное место).
   // DECISION: completed lessons reopen from the top — resume only mid-progress.
   useEffect(() => {
-    if (completed || !initialScrollPos || initialScrollPos <= 0) return;
+    if (completed || selectedPath === "video" || !initialScrollPos || initialScrollPos <= 0) return;
     requestAnimationFrame(() => {
       const max = document.documentElement.scrollHeight - window.innerHeight;
       if (max > 0) window.scrollTo({ top: initialScrollPos * max });
     });
-  }, [completed, initialScrollPos]);
+  }, [completed, initialScrollPos, selectedPath]);
 
   // Scroll fraction tracking (throttled by the debounce window).
   useEffect(() => {
@@ -96,9 +110,68 @@ export function LessonReader({
     [impersonated, scheduleFlush],
   );
 
+  async function choosePath(path: LessonPathSelection): Promise<void> {
+    const previous = selectedPath;
+    setSelectedPath(path);
+    if (impersonated) return;
+    setSelecting(true);
+    const result = await selectLearningPathAction(lessonId, path);
+    setSelecting(false);
+    if (!result?.ok) {
+      setSelectedPath(previous);
+      toast({
+        title: result?.error.message ?? "Не удалось сохранить выбранный путь",
+        variant: "danger",
+      });
+    }
+  }
+
+  const showChoice = pathPolicy === "choose_one";
+  const showVideo =
+    Boolean(video) &&
+    (pathPolicy === "combined" ||
+      pathPolicy === "video_only" ||
+      (showChoice && selectedPath === "video"));
+  const showText =
+    pathPolicy === "combined" ||
+    pathPolicy === "text_only" ||
+    (pathPolicy === "video_only" && !video) ||
+    (showChoice && selectedPath === "text");
+
   return (
     <>
-      {video && (
+      {showChoice && (
+        <section className="rounded-card border-border bg-surface-1 mb-5 border p-4">
+          <h2 className="text-[16px] font-semibold">Как пройти урок?</h2>
+          <p className="text-text-2 mt-1 text-[13px]">
+            Выбери видео или текст. Контрольные вопросы и завершение урока общие для обоих
+            вариантов.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Путь урока">
+            {video && (
+              <Button
+                variant={selectedPath === "video" ? "primary" : "secondary"}
+                loading={selecting && selectedPath === "video"}
+                disabled={selecting}
+                onClick={() => void choosePath("video")}
+              >
+                Смотреть видео
+              </Button>
+            )}
+            {hasText && (
+              <Button
+                variant={selectedPath === "text" ? "primary" : "secondary"}
+                loading={selecting && selectedPath === "text"}
+                disabled={selecting}
+                onClick={() => void choosePath("text")}
+              >
+                Читать текст
+              </Button>
+            )}
+          </div>
+        </section>
+      )}
+      {showVideo && video && (
         <VideoEmbed
           url={video.url}
           title={video.title}
@@ -108,7 +181,7 @@ export function LessonReader({
           eager
         />
       )}
-      {children}
+      {showText && children}
     </>
   );
 }

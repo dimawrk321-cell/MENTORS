@@ -1,9 +1,16 @@
-import type { ContentStatus, CourseGating, LessonDifficulty, PrismaClient } from "@prisma/client";
+import type {
+  ContentStatus,
+  CourseGating,
+  LessonDifficulty,
+  LessonPathPolicy,
+  PrismaClient,
+} from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { writeAudit } from "@/lib/services/audit";
 import { notify } from "@/lib/services/notifications";
 import { canOpenCourse } from "@/lib/services/course-access";
 import { getDefaultCourseGating } from "@/lib/services/settings";
+import { hasUnsafeRecordingReference } from "@/lib/utils/content-safety";
 import { computeReadingMinutes } from "@/lib/utils/markdown";
 import { slugify, uniqueSlug } from "@/lib/utils/slug";
 
@@ -100,7 +107,17 @@ export async function createCourse(
 }
 
 export type AdminContentResult =
-  { ok: true } | { ok: false; code: "not_found" | "slug_taken" | "not_draft" | "has_student_data" };
+  | { ok: true }
+  | {
+      ok: false;
+      code:
+        | "not_found"
+        | "slug_taken"
+        | "not_draft"
+        | "has_student_data"
+        | "invalid_learning_path"
+        | "unsafe_recording_reference";
+    };
 
 // 13.2 audit: the "draft-only" delete guard is bypassable (unpublish→draft→delete),
 // and the Cascade FKs would then wipe student history (LessonProgress / QuizAnswer /
@@ -474,6 +491,9 @@ export async function saveLessonContent(
   const now = input.now ?? new Date();
   const lesson = await db.lesson.findUnique({ where: { id: input.lessonId } });
   if (!lesson) return { ok: false, code: "not_found" };
+  if (lesson.status === "published" && hasUnsafeRecordingReference(input.contentMd)) {
+    return { ok: false, code: "unsafe_recording_reference" };
+  }
 
   const changed = lesson.contentMd !== input.contentMd;
   const readingMinutes = computeReadingMinutes(input.contentMd);
@@ -500,11 +520,21 @@ export async function updateLessonMeta(
       videoUrl: string | null;
       difficulty: LessonDifficulty;
       isOptional: boolean;
+      pathPolicy: LessonPathPolicy;
+      textMinutes: number | null;
+      videoMinutes: number | null;
+      practiceMinutes: number | null;
     };
   },
 ): Promise<AdminContentResult> {
   const lesson = await db.lesson.findUnique({ where: { id: input.lessonId } });
   if (!lesson) return { ok: false, code: "not_found" };
+  const needsVideo =
+    input.data.pathPolicy === "choose_one" || input.data.pathPolicy === "video_only";
+  const needsText = input.data.pathPolicy === "choose_one" || input.data.pathPolicy === "text_only";
+  if ((needsVideo && !input.data.videoUrl) || (needsText && !lesson.contentMd.trim())) {
+    return { ok: false, code: "invalid_learning_path" };
+  }
   const slugOwner = await db.lesson.findUnique({
     where: { moduleId_slug: { moduleId: lesson.moduleId, slug: input.data.slug } },
   });
@@ -531,6 +561,10 @@ export async function updateLessonMeta(
       videoUrl: lesson.videoUrl,
       difficulty: lesson.difficulty,
       isOptional: lesson.isOptional,
+      pathPolicy: lesson.pathPolicy,
+      textMinutes: lesson.textMinutes,
+      videoMinutes: lesson.videoMinutes,
+      practiceMinutes: lesson.practiceMinutes,
     },
     after: { ...input.data },
   });
@@ -547,6 +581,9 @@ export async function setLessonStatus(
     include: { module: { include: { course: { select: { slug: true } } } } },
   });
   if (!lesson) return { ok: false, code: "not_found" };
+  if (input.status === "published" && hasUnsafeRecordingReference(lesson.contentMd)) {
+    return { ok: false, code: "unsafe_recording_reference" };
+  }
 
   const firstPublish = input.status === "published" && lesson.publishedAt === null;
   await db.lesson.update({
@@ -577,7 +614,7 @@ export async function setLessonStatus(
  * action can filter without rendering every lesson.
  */
 export function isLessonPublishable(lesson: { contentMd: string }): boolean {
-  return lesson.contentMd.trim().length > 0;
+  return lesson.contentMd.trim().length > 0 && !hasUnsafeRecordingReference(lesson.contentMd);
 }
 
 export type BulkPublishScope =

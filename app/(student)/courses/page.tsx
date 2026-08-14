@@ -116,16 +116,18 @@ export default async function CoursesPage() {
                       />
                     )}
                   </div>
-                  {course.description && (
-                    <p
-                      className={cn(
-                        "line-clamp-2 text-[13px]",
-                        course.locked ? "text-text-3" : "text-text-2",
-                      )}
-                    >
-                      {course.description}
-                    </p>
-                  )}
+                  <p
+                    className={cn(
+                      "line-clamp-2 min-h-10 text-[13px] break-words",
+                      course.description
+                        ? course.locked
+                          ? "text-text-3"
+                          : "text-text-2"
+                        : "text-text-3 italic",
+                    )}
+                  >
+                    {course.description || "Описание курса готовится"}
+                  </p>
                   <div className="mt-auto flex flex-col gap-2">
                     {course.locked ? (
                       <p className="text-text-3 flex items-center gap-1.5 text-[12px]">

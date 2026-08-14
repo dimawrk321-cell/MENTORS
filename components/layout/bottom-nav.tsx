@@ -11,6 +11,7 @@ import {
   Layers,
   Library,
   Menu,
+  MessageCircleQuestion,
   UserRound,
   Video,
   type LucideIcon,
@@ -41,6 +42,11 @@ const guidesItem: NavItem = { href: "/guides", label: "Справочник", ic
 const resumeItem: NavItem = { href: "/resume", label: "Резюме", icon: FileText };
 const legendItem: NavItem = { href: "/legend", label: "Легенда", icon: Feather };
 const libraryItem: NavItem = { href: "/library", label: "Библиотека", icon: Library };
+const questionsItem: NavItem = {
+  href: "/questions",
+  label: "Вопросы",
+  icon: MessageCircleQuestion,
+};
 const profileItem: NavItem = { href: "/profile", label: "Профиль", icon: UserRound };
 
 function isActive(pathname: string, href: string): boolean {
@@ -68,6 +74,7 @@ export function BottomNav({
   const dockRef = useBottomDock<HTMLElement>();
 
   const moreItems: NavItem[] = [
+    questionsItem,
     ...(guidesEnabled ? [guidesItem] : []),
     ...(guidesResumeEnabled ? [resumeItem] : []),
     ...(guidesLegendEnabled ? [legendItem] : []),

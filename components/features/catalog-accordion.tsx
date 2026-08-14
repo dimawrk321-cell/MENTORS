@@ -153,11 +153,12 @@ export function CatalogAccordion({
   const inSrs = new Set(inSrsIds);
   return (
     <div className="flex flex-col gap-2">
-      {groups.map((group, index) => (
-        // По умолчанию открыта первая секция; при активном фильтре — все (spec 1.1).
+      {groups.map((group) => (
+        // Обзор банка по умолчанию компактный: ученик сначала выбирает тему.
+        // После поиска/фильтра совпадения раскрываются, чтобы результат был виден сразу.
         <details
           key={group.categoryId}
-          open={anyFilter || index === 0}
+          open={anyFilter}
           className="rounded-card border-border bg-surface-1 group/cat overflow-hidden border"
         >
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 select-none [&::-webkit-details-marker]:hidden">

@@ -9,6 +9,7 @@ import {
   reportContent,
   saveOnboarding,
   savePosition,
+  selectLearningPath,
   startLesson,
 } from "@/lib/services/content";
 import {
@@ -58,6 +59,7 @@ export async function completeLessonAction(lessonId: string): Promise<
         // Block 2v2: the chain is enforced in the service, so a crafted request
         // cannot complete a lesson inside a course the student may not open.
         course_locked: "Курс ещё закрыт",
+        path_required: "Сначала выбери: смотреть видео или читать текст",
         not_found: "Урок не найден",
       };
       throw new ActionError(res.code, messages[res.code]);
@@ -82,6 +84,25 @@ export async function savePositionAction(input: unknown): Promise<ActionResult<u
       scrollPos: parsed.scroll,
       videoPos: parsed.video,
     });
+    return undefined;
+  });
+}
+
+export async function selectLearningPathAction(
+  lessonId: string,
+  path: "video" | "text",
+): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionStudent();
+    if (auth.impersonated || auth.accessExpired) return undefined;
+    const ok = await selectLearningPath(prisma, {
+      userId: auth.user.id,
+      lessonId: parseInput(z.string().min(1), lessonId),
+      path: parseInput(z.enum(["video", "text"]), path),
+    });
+    if (!ok) {
+      throw new ActionError("invalid_lesson_path", "Этот путь для урока недоступен");
+    }
     return undefined;
   });
 }

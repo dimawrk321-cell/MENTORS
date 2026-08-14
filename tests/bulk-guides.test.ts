@@ -6,10 +6,10 @@ import { bulkSetGuideStatus } from "@/lib/services/guides";
 // C2 (spec 13.1): bulk publish/draft for guides — only changed rows count, one audit.
 
 let seq = 0;
-async function makeGuide(section: GuideSection, status: ContentStatus) {
+async function makeGuide(section: GuideSection, status: ContentStatus, contentMd = "x") {
   seq += 1;
   return testDb.guide.create({
-    data: { slug: `g${seq}`, section, title: `G${seq}`, order: seq, contentMd: "x", status },
+    data: { slug: `g${seq}`, section, title: `G${seq}`, order: seq, contentMd, status },
   });
 }
 
@@ -47,5 +47,26 @@ describe("bulk guides (spec 13.1/C2)", () => {
     });
     expect(res.updated).toBe(2);
     expect(await testDb.guide.count({ where: { status: "draft" } })).toBe(2);
+  });
+
+  it("skips direct interview recordings that bypass Library", async () => {
+    const owner = await createTestUser({ email: "o3@x.io", role: "owner" });
+    const safe = await makeGuide("stages", "draft");
+    const unsafe = await makeGuide(
+      "stages",
+      "draft",
+      "Запись собеседования\nhttps://disk.yandex.ru/i/example\nПароль: demo-123",
+    );
+
+    const res = await bulkSetGuideStatus(testDb, {
+      actorId: owner.id,
+      guideIds: [safe.id, unsafe.id],
+      status: "published",
+    });
+
+    expect(res).toEqual({ updated: 1, skipped: 1 });
+    expect((await testDb.guide.findUniqueOrThrow({ where: { id: unsafe.id } })).status).toBe(
+      "draft",
+    );
   });
 });

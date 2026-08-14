@@ -35,12 +35,29 @@ interface EditorLesson {
   isOptional: boolean;
   status: "draft" | "published";
   readingMinutes: number;
+  pathPolicy: "combined" | "choose_one" | "video_only" | "text_only";
+  textMinutes: number | null;
+  videoMinutes: number | null;
+  practiceMinutes: number | null;
 }
 
 const DIFFICULTY_OPTIONS = [
   { value: "intro", label: "Интро" },
   { value: "base", label: "База" },
   { value: "advanced", label: "Продвинутый" },
+] as const;
+
+const PATH_POLICY_OPTIONS = [
+  { value: "combined", label: "Видео и текст подряд" },
+  { value: "choose_one", label: "Видео или текст на выбор" },
+  { value: "video_only", label: "Только видео" },
+  { value: "text_only", label: "Только текст" },
+] as const;
+
+const DURATION_FIELDS = [
+  { key: "textMinutes", label: "Текст, мин", placeholder: "Автооценка" },
+  { key: "videoMinutes", label: "Видео, мин", placeholder: "Не указано" },
+  { key: "practiceMinutes", label: "Практика, мин", placeholder: "Не указано" },
 ] as const;
 
 // Directive insert panel (spec 8.5 / 12.1-C10): grouped, human names + hints.
@@ -173,6 +190,10 @@ export function LessonEditor({
     videoUrl: lesson.videoUrl,
     difficulty: lesson.difficulty as string,
     isOptional: lesson.isOptional,
+    pathPolicy: lesson.pathPolicy as string,
+    textMinutes: lesson.textMinutes ?? "",
+    videoMinutes: lesson.videoMinutes ?? "",
+    practiceMinutes: lesson.practiceMinutes ?? "",
   });
   const [pending, startTransition] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -472,6 +493,48 @@ export function LessonEditor({
               необязательный
             </label>
           </div>
+          <div className="flex flex-col gap-1.5 md:col-span-2">
+            <span className="text-text-2 text-[13px]">Путь прохождения</span>
+            <Select
+              value={meta.pathPolicy}
+              onValueChange={(pathPolicy) => setMeta({ ...meta, pathPolicy })}
+            >
+              <SelectTrigger aria-label="Путь прохождения">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PATH_POLICY_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-text-3 text-[11px]">
+              «На выбор» сохраняет выбранный учеником путь; квиз и завершение остаются общими.
+            </p>
+          </div>
+          {DURATION_FIELDS.map(({ key, label, placeholder }) => (
+            <div key={key} className="flex flex-col gap-1.5">
+              <label htmlFor={`lesson-${key}`} className="text-text-2 text-[13px]">
+                {label}
+              </label>
+              <Input
+                id={`lesson-${key}`}
+                type="number"
+                min={1}
+                max={1440}
+                value={meta[key]}
+                onChange={(event) =>
+                  setMeta({
+                    ...meta,
+                    [key]: event.target.value === "" ? "" : Number(event.target.value),
+                  })
+                }
+                placeholder={placeholder}
+              />
+            </div>
+          ))}
           <div className="md:col-span-2 lg:col-span-4">
             <Button variant="secondary" size="sm" loading={pending} onClick={saveMeta}>
               Сохранить метаданные

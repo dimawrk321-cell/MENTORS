@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { ProgressSegment } from "@/components/ui/progress-bar";
+import { lessonDurationLabel } from "@/lib/utils/lesson-path";
 
 const DIFFICULTY_LABEL = { intro: "интро", base: "база", advanced: "продвинутый" } as const;
 
@@ -85,6 +86,14 @@ export default async function LessonPage({ params }: LessonPageProps) {
   }
 
   const { content, headings } = await renderLessonContent(view.lesson.contentMd);
+  const durationLabel = lessonDurationLabel({
+    readingMinutes: view.lesson.readingMinutes,
+    textMinutes: view.lesson.textMinutes,
+    videoMinutes: view.lesson.videoMinutes,
+    practiceMinutes: view.lesson.practiceMinutes,
+    pathPolicy: view.lesson.pathPolicy,
+    hasVideo: Boolean(view.lesson.videoUrl),
+  });
   const [keyQuestions, quizQuestions] = await Promise.all([
     getKeyQuestionsForLesson(prisma, view.lesson.id),
     getQuizQuestionsForLesson(prisma, { lessonId: view.lesson.id, userId: user.id }),
@@ -159,7 +168,7 @@ export default async function LessonPage({ params }: LessonPageProps) {
             {view.lesson.title}
           </h1>
           <div className="mt-2.5 mb-5 flex flex-wrap items-center gap-2">
-            <Badge>{view.lesson.readingMinutes} мин</Badge>
+            <Badge>{durationLabel}</Badge>
             <Badge>{DIFFICULTY_LABEL[view.lesson.difficulty]}</Badge>
             {view.lesson.isOptional && <Badge>необязательный</Badge>}
             {view.state.updatedSinceCompletion && <Badge variant="accent">обновлён</Badge>}
@@ -175,6 +184,9 @@ export default async function LessonPage({ params }: LessonPageProps) {
             initialVideoPos={view.progress.videoPos}
             completed={view.progress.completedAt !== null}
             impersonated={impersonated}
+            pathPolicy={view.lesson.pathPolicy}
+            initialSelectedPath={view.progress.selectedPath}
+            hasText={Boolean(view.lesson.contentMd.trim())}
             video={
               view.lesson.videoUrl
                 ? {

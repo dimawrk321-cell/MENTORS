@@ -42,6 +42,9 @@ const slugSchema = z
   .trim()
   .regex(/^[a-z0-9-]{1,60}$/, "Адрес — латиница, цифры и дефисы");
 const statusSchema = z.enum(["draft", "published"]);
+const optionalMinutesSchema = z
+  .union([z.literal(""), z.coerce.number().int().min(1).max(1440)])
+  .transform((value) => (value === "" ? null : value));
 
 const courseUpdateSchema = z.object({
   courseId: idSchema,
@@ -65,6 +68,10 @@ const lessonMetaSchema = z.object({
     .transform((value) => value || null),
   difficulty: z.enum(["intro", "base", "advanced"]),
   isOptional: z.boolean(),
+  pathPolicy: z.enum(["combined", "choose_one", "video_only", "text_only"]),
+  textMinutes: optionalMinutesSchema,
+  videoMinutes: optionalMinutesSchema,
+  practiceMinutes: optionalMinutesSchema,
 });
 
 const reorderSchema = z.object({
@@ -83,6 +90,10 @@ function failWith(res: { ok: false; code: string }): never {
     not_draft: "Удалять можно только черновики — сначала сними с публикации",
     has_student_data:
       "Нельзя удалить: есть история учеников (прогресс, ответы, попытки). Так безопаснее — данные сохранены.",
+    invalid_learning_path:
+      "Для выбранного пути нужны соответствующие материалы: видео и/или текст урока",
+    unsafe_recording_reference:
+      "Прямую ссылку или пароль от записи интервью публиковать нельзя. Добавь запись в Библиотеку и пройди чеклист 4/4.",
   };
   throw new ActionError(res.code, messages[res.code] ?? "Не получилось выполнить действие");
 }
@@ -268,6 +279,10 @@ export async function updateLessonMetaAction(input: unknown): Promise<ActionResu
         videoUrl: parsed.videoUrl,
         difficulty: parsed.difficulty,
         isOptional: parsed.isOptional,
+        pathPolicy: parsed.pathPolicy,
+        textMinutes: parsed.textMinutes,
+        videoMinutes: parsed.videoMinutes,
+        practiceMinutes: parsed.practiceMinutes,
       },
     });
     if (!res.ok) failWith(res);

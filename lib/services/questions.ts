@@ -104,11 +104,14 @@ export interface CatalogFilters {
    * пустой доступ — честный ноль строк, а не «показать всё».
    */
   access?: QuestionAccess;
+  /** Optional window for the student catalog; omitted in admin/tests that need all rows. */
+  offset?: number;
+  limit?: number;
 }
 
 // --- Grouped catalog (walk 13.5 block 1): categories → collapsible sections ---
-// (The paginated flat catalog listQuestionsCatalog was retired this walk — the
-// grouped accordion below is the only student catalog surface.)
+// The grouped accordion is the only student catalog surface. It supports a
+// question window so a large bank does not mount hundreds of rows at once.
 
 export interface CatalogGroupQuestion {
   id: string;
@@ -131,8 +134,8 @@ export interface CatalogGroup {
 
 /**
  * Grouped catalog (walk 13.5 block 1.1): all matching published questions grouped
- * under their ROOT category, in category `order`. No pagination — the accordion
- * (collapsed sections) is what keeps the full bank navigable; filters narrow the set.
+ * under their ROOT category, in category `order`. Optional pagination limits the
+ * mounted rows; collapsed sections keep each page navigable.
  * A subcategory's questions fold into its parent (root) section.
  *
  * The эталон (answer_md) is NOT loaded here — only a cheap teaser per row. The full
@@ -196,7 +199,10 @@ export async function listQuestionsCatalogGrouped(
   // Второй рубеж фильтра эталона (SQL не умеет trim): только на ученическом
   // пути — админские экраны банка обязаны видеть и недописанные вопросы.
   const visible = filters.access ? questions.filter(hasReferenceAnswer) : questions;
-  for (const q of visible) {
+  const offset = Math.max(0, filters.offset ?? 0);
+  const limit = filters.limit === undefined ? undefined : Math.max(1, filters.limit);
+  const pageQuestions = limit === undefined ? visible : visible.slice(offset, offset + limit);
+  for (const q of pageQuestions) {
     // Root = the question's category or, for a subcategory, its parent.
     const rootId = q.category.parentId ?? q.category.id;
     const header = rootMap.get(rootId) ?? {

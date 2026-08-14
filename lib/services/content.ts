@@ -1,4 +1,10 @@
-import type { CourseGating, PrismaClient, Track } from "@prisma/client";
+import type {
+  CourseGating,
+  LessonPathPolicy,
+  LessonPathSelection,
+  PrismaClient,
+  Track,
+} from "@prisma/client";
 import type { Db } from "@/lib/db";
 import {
   computeCourseState,
@@ -49,7 +55,14 @@ async function getProgressMap(db: Db, userId: string, lessonIds: string[]) {
   const rows = await db.lessonProgress.findMany({
     where: { userId, lessonId: { in: lessonIds } },
   });
-  return new Map<string, ProgressInput & { scrollPos: number | null; videoPos: number | null }>(
+  return new Map<
+    string,
+    ProgressInput & {
+      scrollPos: number | null;
+      videoPos: number | null;
+      selectedPath: LessonPathSelection | null;
+    }
+  >(
     rows.map((row) => [
       row.lessonId,
       {
@@ -57,6 +70,7 @@ async function getProgressMap(db: Db, userId: string, lessonIds: string[]) {
         completedAt: row.completedAt,
         scrollPos: row.scrollPos,
         videoPos: row.videoPos,
+        selectedPath: row.selectedPath,
       },
     ]),
   );
@@ -158,6 +172,10 @@ export interface LessonView {
     title: string;
     contentMd: string;
     readingMinutes: number;
+    pathPolicy: LessonPathPolicy;
+    textMinutes: number | null;
+    videoMinutes: number | null;
+    practiceMinutes: number | null;
     difficulty: "intro" | "base" | "advanced";
     isOptional: boolean;
     videoUrl: string | null;
@@ -171,7 +189,12 @@ export interface LessonView {
   unlockReason: UnlockReason | null;
   prev: { id: string; title: string; unlocked: boolean } | null;
   next: { id: string; title: string; unlocked: boolean } | null;
-  progress: { scrollPos: number | null; videoPos: number | null; completedAt: Date | null };
+  progress: {
+    scrollPos: number | null;
+    videoPos: number | null;
+    selectedPath: LessonPathSelection | null;
+    completedAt: Date | null;
+  };
   /**
    * Позиция урока в СВОЁМ модуле для шапки «Урок X из Y» и сегментированного
    * индикатора («Читалка v2»). Чистое представление — уже вычисленное состояние
@@ -274,6 +297,10 @@ export async function getLessonView(
       title: lesson.title,
       contentMd: lesson.contentMd,
       readingMinutes: lesson.readingMinutes,
+      pathPolicy: lesson.pathPolicy,
+      textMinutes: lesson.textMinutes,
+      videoMinutes: lesson.videoMinutes,
+      practiceMinutes: lesson.practiceMinutes,
       difficulty: lesson.difficulty,
       isOptional: lesson.isOptional,
       videoUrl: lesson.videoUrl,
@@ -293,6 +320,7 @@ export async function getLessonView(
     progress: {
       scrollPos: progressRow?.scrollPos ?? null,
       videoPos: progressRow?.videoPos ?? null,
+      selectedPath: progressRow?.selectedPath ?? null,
       completedAt: progressRow?.completedAt ?? null,
     },
     position: {
@@ -334,7 +362,7 @@ export type CompleteLessonResult =
       leveledUpTo: number | null;
       earnedAchievements: EarnedAchievement[];
     }
-  | { ok: false; code: "not_found" | "locked" | "course_locked" };
+  | { ok: false; code: "not_found" | "locked" | "course_locked" | "path_required" };
 
 const NO_GAMIFICATION: EmitResult = {
   recorded: true,
@@ -456,6 +484,14 @@ export async function completeLesson(
   if (!input.systemAction && !(await canOpenCourse(db, input.userId, view.course.id))) {
     return { ok: false, code: "course_locked" };
   }
+  if (
+    !input.systemAction &&
+    view.progress.completedAt === null &&
+    view.lesson.pathPolicy === "choose_one" &&
+    view.progress.selectedPath === null
+  ) {
+    return { ok: false, code: "path_required" };
+  }
 
   let gamification = NO_GAMIFICATION;
   if (view.progress.completedAt === null) {
@@ -537,6 +573,30 @@ export async function savePosition(
       ...(video !== undefined ? { videoPos: video } : {}),
     },
   });
+}
+
+/** Persist an explicit choice only for a lesson configured as video-or-text. */
+export async function selectLearningPath(
+  db: Db,
+  input: { userId: string; lessonId: string; path: LessonPathSelection },
+): Promise<boolean> {
+  const view = await getLessonView(db, input.lessonId, input.userId);
+  if (!view || !view.unlocked || view.lesson.pathPolicy !== "choose_one") return false;
+  if (!(await canOpenCourse(db, input.userId, view.course.id))) return false;
+  if (input.path === "video" && !view.lesson.videoUrl) return false;
+  if (input.path === "text" && !view.lesson.contentMd.trim()) return false;
+
+  await db.lessonProgress.upsert({
+    where: { userId_lessonId: { userId: input.userId, lessonId: input.lessonId } },
+    create: {
+      userId: input.userId,
+      lessonId: input.lessonId,
+      status: "in_progress",
+      selectedPath: input.path,
+    },
+    update: { selectedPath: input.path },
+  });
+  return true;
 }
 
 /** «⚑ Нашёл ошибку / непонятно» → content_reports (spec 7.3). */

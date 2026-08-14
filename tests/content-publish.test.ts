@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { testDb, resetDb, createTestUser } from "./helpers/db";
 import {
   publishLessonsInScope,
+  setLessonStatus,
   unpublishLessonsInScope,
   isLessonPublishable,
 } from "@/lib/services/content-admin";
@@ -57,6 +58,32 @@ describe("publishLessonsInScope", () => {
     expect(isLessonPublishable({ contentMd: "" })).toBe(false);
     expect(isLessonPublishable({ contentMd: "  \n\t " })).toBe(false);
     expect(isLessonPublishable({ contentMd: "есть" })).toBe(true);
+    expect(
+      isLessonPublishable({
+        contentMd: "Реальный лайфкодинг\nhttps://disk.yandex.ru/i/example\nПароль: demo-123",
+      }),
+    ).toBe(false);
+  });
+
+  it("refuses a direct interview recording outside Library", async () => {
+    const { owner, m1 } = await makeCourse();
+    const unsafe = await testDb.lesson.create({
+      data: {
+        moduleId: m1.id,
+        slug: "unsafe-recording",
+        title: "Запись собеседования",
+        status: "draft",
+        contentMd: "Запись собеседования\nhttps://disk.yandex.ru/i/example\nПароль: demo-123",
+      },
+    });
+
+    expect(
+      await setLessonStatus(testDb, {
+        actorId: owner.id,
+        lessonId: unsafe.id,
+        status: "published",
+      }),
+    ).toEqual({ ok: false, code: "unsafe_recording_reference" });
   });
 
   it("publishes only non-empty drafts in a module, audits once with the count", async () => {

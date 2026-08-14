@@ -102,6 +102,17 @@ describe("listQuestionsCatalogGrouped (walk 13.5 block 1)", () => {
     expect(res.groups[0]!.questions[0]!.id).toBe(keep.id);
   });
 
+  it("offset/limit ограничивают число строк, сохраняя полный total", async () => {
+    await makeQuestion({ categoryId: root0, text: "Первый" });
+    await makeQuestion({ categoryId: root0, text: "Второй" });
+    await makeQuestion({ categoryId: root1, text: "Третий" });
+
+    const res = await listQuestionsCatalogGrouped(testDb, { offset: 1, limit: 1 });
+    expect(res.total).toBe(3);
+    expect(res.groups.flatMap((group) => group.questions)).toHaveLength(1);
+    expect(res.groups[0]!.questions[0]!.teaser).toBe("Второй");
+  });
+
   it("строки несут teaser + isShort (эталон не грузится здесь)", async () => {
     await makeQuestion({ categoryId: root0, text: "Что такое точность?" }); // короткий
     const longText =

@@ -10,6 +10,7 @@ import rehypeShiki, { type RehypeShikiOptions } from "@shikijs/rehype";
 import { visit } from "unist-util-visit";
 import type { Root as MdastRoot } from "mdast";
 import type { Element, Root as HastRoot } from "hast";
+import { sanitizeProtectedRecordingMarkdown } from "@/lib/utils/content-safety";
 
 // Lesson/guide markdown pipeline (spec 7.3): GFM tables, KaTeX ($...$ / $$...$$),
 // Shiki code highlighting (SSR, dual theme), and the custom directives
@@ -178,7 +179,7 @@ export interface RenderedLesson {
 
 /** Full pipeline run: markdown → hast + collected h2/h3 for the table of contents. */
 export async function renderLessonHast(markdown: string): Promise<RenderedLesson> {
-  const mdast = processor.parse(markdown);
+  const mdast = processor.parse(sanitizeProtectedRecordingMarkdown(markdown));
   const hast = (await processor.run(mdast)) as HastRoot;
 
   const headings: LessonHeading[] = [];
@@ -213,7 +214,7 @@ export async function renderMarkdownHtml(markdown: string): Promise<string> {
     .use(rehypeSafeUrls)
     .use(rehypeKatex)
     .use(rehypeStringify);
-  const file = await htmlProcessor.process(markdown);
+  const file = await htmlProcessor.process(sanitizeProtectedRecordingMarkdown(markdown));
   return String(file);
 }
 

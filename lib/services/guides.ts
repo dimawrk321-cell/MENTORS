@@ -4,6 +4,7 @@ import { emitEvent } from "@/lib/services/events";
 import { writeAudit } from "@/lib/services/audit";
 import { HEADLINE_OPTS, renderSnippet } from "@/lib/services/search";
 import { computeReadingMinutes } from "@/lib/utils/markdown";
+import { hasUnsafeRecordingReference } from "@/lib/utils/content-safety";
 import { slugify } from "@/lib/utils/slug";
 import { GUIDE_HUB_SECTIONS } from "@/lib/constants";
 
@@ -316,7 +317,11 @@ export async function createGuide(
 }
 
 export type GuideMutationResult =
-  { ok: true } | { ok: false; code: "not_found" | "slug_taken" | "not_draft" };
+  | { ok: true }
+  | {
+      ok: false;
+      code: "not_found" | "slug_taken" | "not_draft" | "unsafe_recording_reference";
+    };
 
 /** Content autosave (no audit — mirrors lesson autosave, spec changelog 7.13). */
 export async function saveGuideContent(
@@ -325,9 +330,12 @@ export async function saveGuideContent(
 ): Promise<GuideMutationResult & { readingMinutes?: number }> {
   const guide = await db.guide.findUnique({
     where: { id: input.guideId },
-    select: { id: true },
+    select: { id: true, status: true },
   });
   if (!guide) return { ok: false, code: "not_found" };
+  if (guide.status === "published" && hasUnsafeRecordingReference(input.contentMd)) {
+    return { ok: false, code: "unsafe_recording_reference" };
+  }
   await db.guide.update({
     where: { id: input.guideId },
     data: { contentMd: input.contentMd },
@@ -385,6 +393,9 @@ export async function setGuideStatus(
 ): Promise<GuideMutationResult> {
   const before = await db.guide.findUnique({ where: { id: input.guideId } });
   if (!before) return { ok: false, code: "not_found" };
+  if (input.status === "published" && hasUnsafeRecordingReference(before.contentMd)) {
+    return { ok: false, code: "unsafe_recording_reference" };
+  }
   await db.$transaction(async (tx) => {
     await tx.guide.update({
       where: { id: input.guideId },
@@ -410,19 +421,33 @@ export async function setGuideStatus(
 export async function bulkSetGuideStatus(
   db: PrismaClient,
   input: { actorId: string; guideIds: string[]; status: ContentStatus },
-): Promise<{ updated: number }> {
-  const result = await db.guide.updateMany({
+): Promise<{ updated: number; skipped: number }> {
+  const candidates = await db.guide.findMany({
     where: { id: { in: input.guideIds }, status: { not: input.status } },
+    select: { id: true, contentMd: true },
+  });
+  const valid =
+    input.status === "published"
+      ? candidates.filter((guide) => !hasUnsafeRecordingReference(guide.contentMd))
+      : candidates;
+  const result = await db.guide.updateMany({
+    where: { id: { in: valid.map((guide) => guide.id) } },
     data: { status: input.status },
   });
+  const skipped = candidates.length - valid.length;
   await writeAudit(db, {
     actorId: input.actorId,
     action: "guide.bulk_status",
     entityType: "guide",
     entityId: "bulk",
-    after: { requested: input.guideIds.length, updated: result.count, status: input.status },
+    after: {
+      requested: input.guideIds.length,
+      updated: result.count,
+      skipped,
+      status: input.status,
+    },
   });
-  return { updated: result.count };
+  return { updated: result.count, skipped };
 }
 
 /** Delete — drafts only (spec changelog 8.5: published content is never deleted). */

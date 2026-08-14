@@ -410,6 +410,18 @@ enum LessonDifficulty {
   advanced
 }
 
+enum LessonPathPolicy {
+  combined
+  choose_one
+  video_only
+  text_only
+}
+
+enum LessonPathSelection {
+  video
+  text
+}
+
 enum VideoStatus {
   ok
   unavailable
@@ -510,6 +522,12 @@ model Lesson {
   contentMd        String                   @default("") @map("content_md")
   // Recomputed on save: words / 180 (spec 6).
   readingMinutes   Int                      @default(1) @map("reading_minutes")
+  // Pilot «Понятный путь»: reading_minutes stays the automatic text estimate;
+  // these nullable values are mentor overrides / explicit video and practice time.
+  pathPolicy       LessonPathPolicy         @default(combined) @map("path_policy")
+  textMinutes      Int?                     @map("text_minutes")
+  videoMinutes     Int?                     @map("video_minutes")
+  practiceMinutes  Int?                     @map("practice_minutes")
   videoUrl         String?                  @map("video_url")
   videoStatus      VideoStatus              @default(unchecked) @map("video_status")
   videoCheckedAt   DateTime?                @map("video_checked_at")
@@ -557,6 +575,7 @@ model LessonProgress {
   completedAt DateTime?            @map("completed_at")
   scrollPos   Float?               @map("scroll_pos")
   videoPos    Int?                 @map("video_pos")
+  selectedPath LessonPathSelection? @map("selected_path")
   createdAt   DateTime             @default(now()) @map("created_at")
   updatedAt   DateTime             @updatedAt @map("updated_at")
 
