@@ -33,10 +33,14 @@ beforeEach(async () => {
 describe("countStreakDay: засчёт дня (spec 7.7)", () => {
   it("первый день → current 1; повтор в тот же день — no-op", async () => {
     const user = await createTestUser({ email: "s1@test.local", timezone: TZ });
-    const first = await countStreakDay(testDb, { userId: user.id, now: at("2026-07-13") });
+    const first = await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-13") }),
+    );
     expect(first).toMatchObject({ counted: true, current: 1 });
 
-    const again = await countStreakDay(testDb, { userId: user.id, now: at("2026-07-13", 20) });
+    const again = await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-13", 20) }),
+    );
     expect(again).toMatchObject({ counted: false, current: 1 });
 
     const streak = await testDb.streak.findUniqueOrThrow({ where: { userId: user.id } });
@@ -45,9 +49,15 @@ describe("countStreakDay: засчёт дня (spec 7.7)", () => {
 
   it("подряд идущие учебные дни наращивают серию", async () => {
     const user = await createTestUser({ email: "s2@test.local", timezone: TZ });
-    await countStreakDay(testDb, { userId: user.id, now: at("2026-07-13") });
-    await countStreakDay(testDb, { userId: user.id, now: at("2026-07-14") });
-    const third = await countStreakDay(testDb, { userId: user.id, now: at("2026-07-15") });
+    await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-13") }),
+    );
+    await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-14") }),
+    );
+    const third = await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-15") }),
+    );
     expect(third.current).toBe(3);
   });
 
@@ -56,32 +66,46 @@ describe("countStreakDay: засчёт дня (spec 7.7)", () => {
     const studyDays = ALL_DAYS.filter((d) => d !== excluded);
     const user = await createTestUser({ email: "s3@test.local", timezone: TZ, studyDays });
 
-    await countStreakDay(testDb, { userId: user.id, now: at("2026-07-13") });
-    const onExcluded = await countStreakDay(testDb, { userId: user.id, now: at("2026-07-14") });
+    await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-13") }),
+    );
+    const onExcluded = await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-14") }),
+    );
     expect(onExcluded.counted).toBe(false); // не учебный день
 
-    const next = await countStreakDay(testDb, { userId: user.id, now: at("2026-07-15") });
+    const next = await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-15") }),
+    );
     expect(next.current).toBe(2); // 07-13 и 07-15; 07-14 пропущен прозрачно
   });
 
   it("заморозки: +1 за 7 подряд, cap 2; веха 7 достигнута", async () => {
     const user = await createTestUser({ email: "s4@test.local", timezone: TZ });
-    let last = await countStreakDay(testDb, { userId: user.id, now: at(dayStr("2026-07-13", 0)) });
+    let last = await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at(dayStr("2026-07-13", 0)) }),
+    );
     for (let i = 1; i < 7; i += 1) {
-      last = await countStreakDay(testDb, { userId: user.id, now: at(dayStr("2026-07-13", i)) });
+      last = await testDb.$transaction((tx) =>
+        countStreakDay(tx, { userId: user.id, now: at(dayStr("2026-07-13", i)) }),
+      );
     }
     expect(last.current).toBe(7);
     expect(last.milestonesReached).toEqual([7]);
     expect((await testDb.streak.findUniqueOrThrow({ where: { userId: user.id } })).freezes).toBe(1);
 
     for (let i = 7; i < 14; i += 1) {
-      await countStreakDay(testDb, { userId: user.id, now: at(dayStr("2026-07-13", i)) });
+      await testDb.$transaction((tx) =>
+        countStreakDay(tx, { userId: user.id, now: at(dayStr("2026-07-13", i)) }),
+      );
     }
     expect((await testDb.streak.findUniqueOrThrow({ where: { userId: user.id } })).freezes).toBe(2);
 
     // 15..21 день — заморозки уже на cap 2, новых не добавляется.
     for (let i = 14; i < 21; i += 1) {
-      last = await countStreakDay(testDb, { userId: user.id, now: at(dayStr("2026-07-13", i)) });
+      last = await testDb.$transaction((tx) =>
+        countStreakDay(tx, { userId: user.id, now: at(dayStr("2026-07-13", i)) }),
+      );
     }
     expect(last.current).toBe(21);
     expect((await testDb.streak.findUniqueOrThrow({ where: { userId: user.id } })).freezes).toBe(2);
@@ -98,7 +122,9 @@ describe("countStreakDay: засчёт дня (spec 7.7)", () => {
           lastCountedDate: dateOnlyUtc("2026-07-12"),
         },
       });
-      const result = await countStreakDay(testDb, { userId: user.id, now: at("2026-07-13") });
+      const result = await testDb.$transaction((tx) =>
+        countStreakDay(tx, { userId: user.id, now: at("2026-07-13") }),
+      );
       expect(result.milestonesReached).toEqual([milestone]);
     }
   });
@@ -160,7 +186,9 @@ describe("processStreakDay: конец дня — заморозка / обну�
       },
     });
 
-    const counted = await countStreakDay(testDb, { userId: user.id, now: at("2026-07-14") });
+    const counted = await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-14") }),
+    );
     expect(counted.counted).toBe(false);
     await processStreakDay(testDb, { userId: user.id, now: at("2026-07-20") });
 
@@ -202,18 +230,88 @@ describe("processStreakDay: конец дня — заморозка / обну�
     expect(streak.freezes).toBe(2);
   });
 
-  it("гонка двух первых событий нового пользователя не роняет действие; день засчитан один раз", async () => {
+  // Заход A.2. Оба кейса ниже утверждают ПРИЧИНУ (день засчитан ровно один раз),
+  // а не живучесть вызова. Прежняя версия начиналась с
+  // `expect(settled.every(fulfilled)).toBe(true)` и падала на нём раньше, чем
+  // доходила до инварианта, — из-за этого дефект полтора года читался как флейк.
+  // Порядок проверок теперь обратный: сначала данные, потом отсутствие отказов.
+
+  it("сценарий А (строки ещё нет): два параллельных вызова — день засчитан один раз, без P2002", async () => {
     const user = await createTestUser({ email: "conc@test.local", timezone: TZ });
-    // ensureStreak через upsert (ON CONFLICT DO UPDATE) не отравляет транзакцию
-    // вызывающего действия; строчная блокировка сериализует засчёт дня.
     const settled = await Promise.allSettled([
       testDb.$transaction((tx) => countStreakDay(tx, { userId: user.id, now: at("2026-07-13") })),
       testDb.$transaction((tx) => countStreakDay(tx, { userId: user.id, now: at("2026-07-13") })),
     ]);
-    expect(settled.every((s) => s.status === "fulfilled")).toBe(true);
+
+    // Инвариант — первым: ровно одно событие и серия 1.
+    expect(await testDb.streakEvent.count({ where: { userId: user.id, kind: "counted" } })).toBe(1);
     const streak = await testDb.streak.findUniqueOrThrow({ where: { userId: user.id } });
     expect(streak.current).toBe(1);
-    expect(await testDb.streakEvent.count({ where: { userId: user.id, kind: "counted" } })).toBe(1);
+
+    // Ровно один вызов сообщает «день засчитан», второй — штатное counted:false.
+    const counted = settled.filter((s) => s.status === "fulfilled" && s.value.counted);
+    expect(counted).toHaveLength(1);
+
+    // И только потом — что никто не упал. Причина отказа попадает в сообщение:
+    // без этого P2002 из upsert виден как безымянное «expected false to be true».
+    const rejected = settled.filter((s) => s.status === "rejected") as PromiseRejectedResult[];
+    expect(rejected.map((r) => String(r.reason)).join(" | ")).toBe("");
+  });
+
+  it("сценарий Б (строка есть): два параллельных вызова на новый день — ровно одно событие counted", async () => {
+    const user = await createTestUser({ email: "conc2@test.local", timezone: TZ });
+    // День 1 обычным путём: строка streaks теперь существует, и upsert больше не
+    // падает — значит обе транзакции доходят до записи. Здесь прежний код давал
+    // ДВА события counted за один день в 24 прогонах из 25.
+    await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-13") }),
+    );
+
+    const settled = await Promise.allSettled([
+      testDb.$transaction((tx) => countStreakDay(tx, { userId: user.id, now: at("2026-07-14") })),
+      testDb.$transaction((tx) => countStreakDay(tx, { userId: user.id, now: at("2026-07-14") })),
+    ]);
+
+    const day2 = { userId: user.id, kind: "counted" as const, date: dateOnlyUtc("2026-07-14") };
+    expect(await testDb.streakEvent.count({ where: day2 })).toBe(1);
+    const streak = await testDb.streak.findUniqueOrThrow({ where: { userId: user.id } });
+    expect(streak.current).toBe(2);
+
+    const counted = settled.filter((s) => s.status === "fulfilled" && s.value.counted);
+    expect(counted).toHaveLength(1);
+    const rejected = settled.filter((s) => s.status === "rejected") as PromiseRejectedResult[];
+    expect(rejected.map((r) => String(r.reason)).join(" | ")).toBe("");
+  });
+
+  it("сценарий В (ночная пара): джоба streakProcess против действия ученика", async () => {
+    const user = await createTestUser({ email: "conc3@test.local", timezone: TZ });
+    // Ученик закрыл день 13-го, следующий учебный день пропущен, заморозка есть.
+    await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: at("2026-07-13") }),
+    );
+    await testDb.streak.update({ where: { userId: user.id }, data: { freezes: 1 } });
+
+    // 15-е: воркер разбирает вчерашний пропуск, ученик в ту же секунду
+    // засчитывает сегодняшний день. processStreakDay берёт FOR UPDATE — теперь
+    // его берёт и countStreakDay, иначе catch-up применился бы дважды.
+    const settled = await Promise.allSettled([
+      processStreakDay(testDb, { userId: user.id, now: at("2026-07-15") }),
+      testDb.$transaction((tx) => countStreakDay(tx, { userId: user.id, now: at("2026-07-15") })),
+    ]);
+    expect(settled.filter((s) => s.status === "rejected")).toHaveLength(0);
+
+    // Заморозка списана ровно один раз — иначе ученик получил бы два
+    // уведомления «Серия спасена заморозкой».
+    expect(
+      await testDb.streakEvent.count({ where: { userId: user.id, kind: "freeze_used" } }),
+    ).toBe(1);
+    expect(
+      await testDb.streakEvent.count({
+        where: { userId: user.id, kind: "counted", date: dateOnlyUtc("2026-07-15") },
+      }),
+    ).toBe(1);
+    const streak = await testDb.streak.findUniqueOrThrow({ where: { userId: user.id } });
+    expect(streak.freezes).toBe(0);
   });
 });
 

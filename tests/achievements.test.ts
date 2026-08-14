@@ -320,7 +320,9 @@ describe("вехи серии и скрытые (spec 7.7)", () => {
 
     // Днём — не выдаётся.
     const day = await createTestUser({ email: "ns2@test.local", timezone: TZ });
-    await emitEvent(testDb, "lesson.completed", { lessonId: "l1" }, { userId: day.id, now: NOW });
+    await testDb.$transaction((tx) =>
+      emitEvent(tx, "lesson.completed", { lessonId: "l1" }, { userId: day.id, now: NOW }),
+    );
     expect((await earnedKeys(day.id)).has("night_shift")).toBe(false);
   });
 
@@ -330,14 +332,18 @@ describe("вехи серии и скрытые (spec 7.7)", () => {
     // которое в бою совпадает с now — поэтому тест работает в реальном времени.
     const now = new Date();
     const day = localDateStr(now, TZ);
-    await emitEvent(testDb, "lesson.completed", { lessonId: "l1" }, { userId: user.id, now });
+    await testDb.$transaction((tx) =>
+      emitEvent(tx, "lesson.completed", { lessonId: "l1" }, { userId: user.id, now }),
+    );
     await emitEvent(
       testDb,
       "test.passed",
       { moduleId: "m1", kind: "module", attemptNumber: 2, score: 90 },
       { userId: user.id, now },
     );
-    await emitEvent(testDb, "queue.completed", { day }, { userId: user.id, now });
+    await testDb.$transaction((tx) =>
+      emitEvent(tx, "queue.completed", { day }, { userId: user.id, now }),
+    );
     expect((await earnedKeys(user.id)).has("combo")).toBe(false); // без мока недостижимо
 
     await emitEvent(testDb, "mock.completed", { bookingId: "b1" }, { userId: user.id, now });

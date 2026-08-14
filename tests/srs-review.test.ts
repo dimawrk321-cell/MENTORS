@@ -455,7 +455,11 @@ describe("reviewSrsCard — сигнал продления серии для п
     const card = await makeCard(user.id, category.id);
 
     // День уже засчитан ранее сегодня (напр. завершён урок) — считаем его напрямую.
-    const pre = await countStreakDay(testDb, { userId: user.id, now: NOW });
+    // Заход A.2: countStreakDay берёт строчную блокировку и потому требует
+    // транзакции; на корневом клиенте она снималась бы сразу и не защищала бы.
+    const pre = await testDb.$transaction((tx) =>
+      countStreakDay(tx, { userId: user.id, now: NOW }),
+    );
     expect(pre).toMatchObject({ counted: true, current: 1 });
 
     // Закрытие очереди: день уже засчитан → серия не продлевается (XP-пилюля

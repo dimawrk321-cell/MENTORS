@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import { dateOnlyUtc, localDateStr } from "@/lib/utils/dates";
 import { getTotalXp, levelForXp, planXp, xpEventRow } from "@/lib/services/xp";
@@ -80,6 +80,25 @@ export async function emitEvent(
   type: string,
   payload: Prisma.InputJsonValue,
   opts: { userId?: string | null; now?: Date } = {},
+): Promise<EmitResult> {
+  // Заход A.2: диспетчер обещает разделом 7.13 «всё в одной транзакции с
+  // вызывающим действием». Обещание держалось соглашением: вызовы из действий
+  // передавали `tx`, но подпись принимала и корневой клиент — и тогда стрик
+  // считался БЕЗ строчной блокировки, а `countStreakDay` не могла этого
+  // заметить. Теперь: дали корневой клиент — открываем транзакцию сами, дали
+  // `tx` — работаем в ней. Рекурсивный эмит вехи (streak.milestone) уходит
+  // вторым путём и вложенной транзакции не создаёт.
+  if (typeof (db as PrismaClient).$transaction === "function") {
+    return (db as PrismaClient).$transaction((tx) => emitEventInTx(tx, type, payload, opts));
+  }
+  return emitEventInTx(db, type, payload, opts);
+}
+
+async function emitEventInTx(
+  db: Prisma.TransactionClient,
+  type: string,
+  payload: Prisma.InputJsonValue,
+  opts: { userId?: string | null; now?: Date },
 ): Promise<EmitResult> {
   const userId = opts.userId ?? null;
   const now = opts.now ?? new Date();

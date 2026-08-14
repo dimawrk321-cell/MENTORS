@@ -46,8 +46,12 @@ describe("XP-идемпотентность: двойной эмит = одна 
   for (const testCase of cases) {
     it(`${testCase.type} → ровно одна запись xp_events (${testCase.xpType})`, async () => {
       const user = await createTestUser({ email: `${testCase.xpType}@test.local` });
-      await emitEvent(testDb, testCase.type, testCase.payload, { userId: user.id, now: NOW });
-      await emitEvent(testDb, testCase.type, testCase.payload, { userId: user.id, now: NOW });
+      await testDb.$transaction((tx) =>
+        emitEvent(tx, testCase.type, testCase.payload, { userId: user.id, now: NOW }),
+      );
+      await testDb.$transaction((tx) =>
+        emitEvent(tx, testCase.type, testCase.payload, { userId: user.id, now: NOW }),
+      );
 
       const rows = await testDb.xpEvent.findMany({
         where: { userId: user.id, type: testCase.xpType },
@@ -60,8 +64,12 @@ describe("XP-идемпотентность: двойной эмит = одна 
   it("test.passed_first_try (+50) начисляется один раз при повторном эмите", async () => {
     const user = await createTestUser({ email: "firsttry@test.local" });
     const payload = { moduleId: "m1", kind: "module", attemptNumber: 1, score: 80 };
-    await emitEvent(testDb, "test.passed", payload, { userId: user.id, now: NOW });
-    await emitEvent(testDb, "test.passed", payload, { userId: user.id, now: NOW });
+    await testDb.$transaction((tx) =>
+      emitEvent(tx, "test.passed", payload, { userId: user.id, now: NOW }),
+    );
+    await testDb.$transaction((tx) =>
+      emitEvent(tx, "test.passed", payload, { userId: user.id, now: NOW }),
+    );
     expect(
       await testDb.xpEvent.count({ where: { userId: user.id, type: "test.passed_first_try" } }),
     ).toBe(1);
@@ -69,8 +77,12 @@ describe("XP-идемпотентность: двойной эмит = одна 
 
   it("разные ссылки/дни не дедуплицируются", async () => {
     const user = await createTestUser({ email: "distinct@test.local" });
-    await emitEvent(testDb, "lesson.completed", { lessonId: "l1" }, { userId: user.id, now: NOW });
-    await emitEvent(testDb, "lesson.completed", { lessonId: "l2" }, { userId: user.id, now: NOW });
+    await testDb.$transaction((tx) =>
+      emitEvent(tx, "lesson.completed", { lessonId: "l1" }, { userId: user.id, now: NOW }),
+    );
+    await testDb.$transaction((tx) =>
+      emitEvent(tx, "lesson.completed", { lessonId: "l2" }, { userId: user.id, now: NOW }),
+    );
     await emitEvent(
       testDb,
       "queue.completed",

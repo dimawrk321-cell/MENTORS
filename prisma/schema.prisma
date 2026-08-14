@@ -940,6 +940,11 @@ model StreakEvent {
   kind      StreakEventKind
   createdAt DateTime        @default(now()) @map("created_at")
 
+  // Заход A.2: ремень поверх подтяжек к строчной блокировке в countStreakDay.
+  // До неё параллельные вызовы писали два события `counted` за один день (24
+  // прогона из 25) — останавливать было нечему, уникальности не существовало.
+  // Блокировка это чинит, индекс делает повтор невозможным на уровне БД.
+  @@unique([userId, date, kind])
   @@index([userId, date])
   @@map("streak_events")
 }

@@ -1,5 +1,6 @@
-import type { PrismaClient, Streak } from "@prisma/client";
+import type { Prisma, PrismaClient, Streak } from "@prisma/client";
 import type { Db } from "@/lib/db";
+import { assertInTransaction } from "@/lib/utils/tx";
 import { addDays, dateOnlyUtc, isoWeekday, localDateStr, localHour } from "@/lib/utils/dates";
 import { notify } from "@/lib/services/notifications";
 import { getNumericSetting, OPS_STREAK_FREEZE_CAP_KEY } from "@/lib/services/settings";
@@ -47,12 +48,31 @@ function studyDatesBetween(afterStr: string, beforeStr: string, studyDays: numbe
   return result;
 }
 
-async function ensureStreak(db: Db, userId: string): Promise<Streak> {
-  // Гонка двух первых событий (две вкладки): upsert = INSERT ... ON CONFLICT DO
-  // UPDATE — не бросает P2002 и не отравляет транзакцию вызывающего действия
-  // (в отличие от create+catch, где второй INSERT абортит tx). Пустой update —
-  // «строка уже есть, ничего не меняем».
-  return db.streak.upsert({ where: { userId }, create: { userId }, update: {} });
+/**
+ * Гарантирует строку стрика и БЛОКИРУЕТ её до конца транзакции.
+ *
+ * История (заход A.2): здесь стоял `upsert` с ПУСТЫМ `update: {}` и комментарий,
+ * что это «INSERT … ON CONFLICT DO UPDATE, не бросает P2002». Комментарий был
+ * неверен — при пустом `update` Prisma компилирует upsert в неатомарную пару
+ * `SELECT id FROM streaks WHERE user_id = $1` + `INSERT INTO streaks …`, и
+ * параллельный вызов ронял транзакцию с P2002.
+ *
+ * Проверено логом запросов (принцип 0.9), а не документацией: с НЕПУСТЫМ
+ * `update` уходит именно
+ *   INSERT INTO "streaks" (…) VALUES (…)
+ *   ON CONFLICT ("user_id") DO UPDATE SET "user_id" = $9, "updated_at" = $10 …
+ * — то есть настоящий ON CONFLICT, который проигравшую гонку не роняет.
+ * `update: { userId }` пишет то же значение: это «ничего не меняем», но так,
+ * чтобы у выражения был SET и Prisma не ушла на запасной путь.
+ *
+ * Дальше — `FOR UPDATE` и перечитывание свежего состояния, как в
+ * `processStreakDay`: без этого обе транзакции читают один снимок и обе доходят
+ * до записи (24 прогона из 25 давали два события `counted` за один день).
+ */
+async function lockStreak(db: Prisma.TransactionClient, userId: string): Promise<Streak> {
+  await db.streak.upsert({ where: { userId }, create: { userId }, update: { userId } });
+  await db.$queryRaw`SELECT id FROM streaks WHERE user_id = ${userId} FOR UPDATE`;
+  return db.streak.findUniqueOrThrow({ where: { userId } });
 }
 
 interface StreakSnapshot {
@@ -130,16 +150,24 @@ export interface CountStreakResult {
  * их эмитит диспетчер (streak.milestone), чтобы стрик не зависел от events.ts.
  */
 export async function countStreakDay(
-  db: Db,
+  db: Prisma.TransactionClient,
   input: { userId: string; now: Date },
 ): Promise<CountStreakResult> {
+  // Контракт (заход A.2): только внутри транзакции. На корневом клиенте
+  // `FOR UPDATE` ниже снимался бы сразу после своего запроса и не защищал бы
+  // ничего — а выглядел бы как защита. Проверка рантаймовая: типом не закрыть,
+  // PrismaClient структурно присваиваем к TransactionClient (см. lib/utils/tx.ts).
+  assertInTransaction(db, "countStreakDay");
+
   const user = await db.user.findUnique({
     where: { id: input.userId },
     select: { timezone: true, studyDays: true },
   });
   if (!user) return { milestonesReached: [], counted: false, current: 0 };
 
-  const streak = await ensureStreak(db, input.userId);
+  // Строка гарантирована и заблокирована до конца транзакции; всё, что ниже,
+  // считается по СВЕЖЕМУ состоянию, а не по снимку до блокировки.
+  const streak = await lockStreak(db, input.userId);
   if (streak.paused) return { milestonesReached: [], counted: false, current: streak.current };
 
   const todayStr = localDateStr(input.now, user.timezone);
