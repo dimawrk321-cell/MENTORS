@@ -28,8 +28,10 @@ import { writeAudit } from "@/lib/services/audit";
 // Тексты вопросов (`text_md`) скрипт НЕ трогает: десять «заголовков вместо
 // вопросов» правятся отдельным прогоном по решению владельца.
 //
-// Run:  pnpm exec tsx scripts/apply-python-answers.ts --file=<path> --dry-run
-//       pnpm exec tsx scripts/apply-python-answers.ts --file=<path> --commit
+// Входной файл лежит в репозитории — `content-source/` (иначе прогон
+// невоспроизводим). Run:
+//   pnpm exec tsx scripts/apply-python-answers.ts --file=content-source/Python_для_Senior_ML_Engineer_—_вопросы_и_понятные_ответы.md --dry-run
+//   … --commit
 
 type Mode = "replace" | "codeTail" | "split";
 
