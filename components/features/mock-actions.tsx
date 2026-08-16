@@ -21,6 +21,7 @@ import {
   transferBookingAction,
 } from "@/lib/actions/mocks";
 import { useViewOnly, ViewOnlyNote, VIEW_ONLY_TITLE } from "@/components/features/view-only";
+import { MOCK_LOCKED_TITLE } from "@/lib/constants";
 
 // Клиентские кнопки моков (spec 8.3): подтверждение брони, клейм предложения,
 // лист ожидания, отмена/перенос по правилам 24ч. Все идут через server actions.
@@ -134,6 +135,11 @@ interface CancelControlsProps {
   bookingId: string;
   /** До старта меньше 24 часов — отмена засчитает страйк (spec 7.8). */
   late: boolean;
+  /**
+   * Заход B.1: перенос создаёт новую бронь, поэтому подчиняется правилу «после
+   * первого курса». Отмена — нет: отнимать выход из уже занятого слота нельзя.
+   */
+  transferOpen?: boolean;
 }
 
 /**
@@ -141,7 +147,11 @@ interface CancelControlsProps {
  * «Перенести» больше НЕ отменяет бронь заранее — ведёт к мастеру выбора нового
  * слота (атомарный перенос на шаге подтверждения). «Отменить» — по правилам 24ч.
  */
-export function CancelBookingControls({ bookingId, late }: CancelControlsProps) {
+export function CancelBookingControls({
+  bookingId,
+  late,
+  transferOpen = true,
+}: CancelControlsProps) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -166,8 +176,12 @@ export function CancelBookingControls({ bookingId, late }: CancelControlsProps) 
     <>
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap gap-2">
-          {viewOnly ? (
-            <Button variant="secondary" disabled title={VIEW_ONLY_TITLE}>
+          {viewOnly || !transferOpen ? (
+            <Button
+              variant="secondary"
+              disabled
+              title={viewOnly ? VIEW_ONLY_TITLE : MOCK_LOCKED_TITLE}
+            >
               Перенести
             </Button>
           ) : (
@@ -186,6 +200,11 @@ export function CancelBookingControls({ bookingId, late }: CancelControlsProps) 
           </Button>
         </div>
         {viewOnly && <ViewOnlyNote>Режим просмотра: бронь ученика не меняется.</ViewOnlyNote>}
+        {!viewOnly && !transferOpen && (
+          <p className="text-text-3 text-[13px]">
+            {MOCK_LOCKED_TITLE}. Эту бронь можно провести или отменить.
+          </p>
+        )}
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

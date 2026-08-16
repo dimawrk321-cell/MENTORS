@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 // Route-scoped: the editor renders KaTeX itself, and the styled live preview is
 // a separate document (iframe), so its stylesheet cannot reach this page.
@@ -11,8 +11,10 @@ import {
   ChevronUp,
   Code2,
   Copy,
+  EyeOff,
   FileText,
   Info,
+  ListChecks,
   Plus,
   Sigma,
   Table as TableIcon,
@@ -32,6 +34,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { QuestionBankPicker } from "@/components/features/question-bank-picker";
+import { lookupQuizQuestionAction, type QuizPickerRow } from "@/lib/actions/questions-admin";
 import {
   parse,
   renderBlock,
@@ -77,6 +81,8 @@ const KIND_META: Record<BlockKind, { label: string; icon: LucideIcon }> = {
   mock: { label: "Мок-интервью", icon: VideoIcon },
   math: { label: "Формула", icon: Sigma },
   table: { label: "Таблица", icon: TableIcon },
+  spoiler: { label: "Скрытый ответ", icon: EyeOff },
+  question: { label: "Вопрос из банка", icon: ListChecks },
 };
 
 function youtubeId(url: string): string | null {
@@ -190,6 +196,11 @@ function isEmptyBlock(block: Block): boolean {
   switch (block.kind) {
     case "video":
       return block.url.trim() === "" && block.title.trim() === "";
+    case "question":
+      // Директива без id вопроса — пустая плашка у ученика.
+      return block.questionId.trim() === "";
+    case "spoiler":
+      return block.body.trim() === "" && block.title.trim() === "";
     case "mock":
     case "table":
       // Мок — маркер без тела; таблицу с пустыми ячейками ментор мог завести
@@ -446,6 +457,29 @@ function BlockCard({
           </div>
         )}
 
+        {block.kind === "spoiler" && (
+          <>
+            <Input
+              value={block.title}
+              onChange={(e) => onChange(withEdit(block, { title: e.target.value }))}
+              onBlur={onBlurBlock}
+              placeholder="Вопрос — его ученик видит всегда"
+              aria-label="Заголовок скрытого ответа"
+            />
+            <AutoTextarea
+              value={block.body}
+              onChange={(body) => onChange(withEdit(block, { body }))}
+              onBlur={onBlurBlock}
+              ariaLabel="Скрытый ответ"
+            />
+            <p className="text-text-3 text-[12px]">
+              Ученик видит заголовок и кнопку «Показать ответ»; тело разворачивается по клику.
+            </p>
+          </>
+        )}
+
+        {block.kind === "question" && <QuestionBlockField block={block} onChange={onChange} />}
+
         {block.kind === "practice" && (
           <AutoTextarea
             value={block.body}
@@ -467,6 +501,87 @@ function BlockCard({
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Поле блока «Вопрос из банка» (заход B.1, блок 2.4). id ментор не набирает —
+ * он выбирает вопрос поиском; в карточке видно текст выбранного вопроса, а не
+ * cuid, иначе блок нечитаем.
+ */
+function QuestionBlockField({
+  block,
+  onChange,
+}: {
+  block: Block;
+  onChange: (next: Block) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const [row, setRow] = useState<QuizPickerRow | null>(null);
+  // Стартуем в «загружаю», если id уже есть: иначе первый кадр (в т.ч. SSR
+  // редактора) показывал бы «вопрос не найден» на совершенно рабочем вопросе.
+  const [loading, setLoading] = useState(block.questionId.trim() !== "");
+  const id = block.questionId.trim();
+
+  useEffect(() => {
+    if (!id) {
+      setRow(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    void lookupQuizQuestionAction(id).then((result) => {
+      if (cancelled) return;
+      setLoading(false);
+      setRow(result?.ok ? result.data : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {id ? (
+        <div className="rounded-control border-border bg-surface-2 border px-3 py-2 text-[13px]">
+          {loading ? (
+            <span className="text-text-3">Загружаю вопрос…</span>
+          ) : row ? (
+            <>
+              <span className="block">{row.teaser}</span>
+              <span className="text-text-3 mt-0.5 block text-[12px]">
+                {row.category} · {row.type}
+              </span>
+            </>
+          ) : (
+            // Тот же край, что у ученика (2.3): вопрос удалён из банка, а
+            // директива осталась — ментор должен видеть причину, а не пустоту.
+            <span className="text-warning">
+              Вопрос не найден в банке — выбери другой, иначе ученик увидит заглушку.
+            </span>
+          )}
+        </div>
+      ) : (
+        <p className="text-text-3 text-[13px]">Вопрос ещё не выбран.</p>
+      )}
+      <div>
+        <Button variant="secondary" size="sm" onClick={() => setPicking(true)}>
+          {id ? "Заменить вопрос" : "Выбрать вопрос"}
+        </Button>
+      </div>
+      <p className="text-text-3 text-[12px]">
+        Вопрос отвечается прямо в тексте: варианты перемешиваются, проверка серверная. Если он же
+        привязан к уроку ролью «в квизе», внизу в «Проверь себя» он больше не повторится.
+      </p>
+      <QuestionBankPicker
+        open={picking}
+        onOpenChange={setPicking}
+        onPick={(picked) => {
+          setRow(picked);
+          onChange(withEdit(block, { questionId: picked.id }));
+        }}
+      />
     </div>
   );
 }
@@ -526,10 +641,23 @@ function TableGrid({ block, onChange }: { block: Block; onChange: (next: Block) 
   );
 }
 
-type NewBlockTemplate = { kind: BlockKind; label: string; variant?: string; body?: string };
+type NewBlockTemplate = {
+  kind: BlockKind;
+  label: string;
+  variant?: string;
+  body?: string;
+  title?: string;
+};
 
 const NEW_BLOCKS: NewBlockTemplate[] = [
   { kind: "prose", label: "Текст", body: "Новый абзац." },
+  {
+    kind: "spoiler",
+    label: "Скрытый ответ",
+    title: "Как ты думаешь, почему?",
+    body: "Ответ, который открывается по клику.",
+  },
+  { kind: "question", label: "Вопрос из банка" },
   { kind: "callout", label: "Совет", variant: "tip", body: "Текст совета." },
   { kind: "callout", label: "Важное", variant: "important", body: "Важный текст." },
   { kind: "callout", label: "Предупреждение", variant: "warning", body: "Предупреждение." },
@@ -554,7 +682,8 @@ function makeBlock(template: NewBlockTemplate): Block {
     variant: template.variant ?? "",
     lang: template.kind === "code" ? "python" : "",
     url: "",
-    title: "",
+    title: template.title ?? "",
+    questionId: "",
     editable: true,
     dirty: true,
     eol: "\n",
@@ -653,7 +782,11 @@ export function BlockEditor({
     onChange(serialize(next));
   };
 
-  const available = NEW_BLOCKS.filter((b) => zone === "lesson" || b.kind !== "mock");
+  // В гайде нет ни мока, ни квиза: ответ вопроса пишется в `quiz_answers` с
+  // lesson_id, а у гайда его нет — вопрос там отвечать негде.
+  const available = NEW_BLOCKS.filter(
+    (b) => zone === "lesson" || (b.kind !== "mock" && b.kind !== "question"),
+  );
 
   const insertAt = (template: NewBlockTemplate, index: number) => {
     const seed = makeBlock(template);

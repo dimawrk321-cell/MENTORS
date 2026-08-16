@@ -9,6 +9,8 @@ import { VideoEmbed } from "@/components/blocks/video-embed";
 import { PracticeBlock } from "@/components/blocks/practice-block";
 import { MockCta } from "@/components/blocks/mock-cta";
 import { MaterialLinkCard } from "@/components/blocks/material-link";
+import { Spoiler } from "@/components/blocks/spoiler";
+import { InlineQuestionUnavailable } from "@/components/blocks/inline-question-slot";
 
 // The single markdown render path (spec 8.5: admin preview is identical to the
 // student view — both call exactly this).
@@ -59,33 +61,68 @@ function ImageFrame({ src, alt, ...props }: React.ComponentProps<"img">) {
   );
 }
 
-const components = {
+const baseComponents = {
   "callout-block": Callout,
   "video-embed": VideoEmbed,
   "practice-block": PracticeBlock,
-  "mock-cta": MockCta,
   "material-link": MaterialLinkCard,
+  "spoiler-block": Spoiler,
   pre: CodeBlock,
   table: TableWrap,
   a: SmartLink,
   img: ImageFrame,
-} as unknown as Partial<Components>;
+};
 
 export interface RenderedLessonContent {
   content: ReactNode;
   headings: LessonHeading[];
 }
 
+export interface LessonRenderOptions {
+  /**
+   * Заход B.1: чем рисовать `:::question{id}`. Данные вопросов приходят СНАРУЖИ
+   * (страница загружает их одним запросом), поэтому путь рендера остаётся
+   * чистым, а предпросмотр студии и страница ученика используют один и тот же
+   * компонент — «zero drift» раздела 8.5 сохраняется.
+   */
+  inlineQuestion?: (questionId: string) => ReactNode;
+  /**
+   * Заход B.1, блок 3.4: CTA внутри `:::mock` подчиняется правилу «бронь после
+   * первого курса». Не задано — CTA как раньше (предпросмотр студии: ученика
+   * там нет, гейтить нечего).
+   */
+  mockLocked?: { nextCourseTitle: string | null } | null;
+}
+
 /** Renders markdown to React + returns headings for the table of contents. */
-export async function renderLessonContent(markdown: string): Promise<RenderedLessonContent> {
+export async function renderLessonContent(
+  markdown: string,
+  options: LessonRenderOptions = {},
+): Promise<RenderedLessonContent> {
   const { hast, headings } = await renderLessonHast(markdown);
+  const InlineQuestionSlot = ({ qid }: { qid?: string }) =>
+    options.inlineQuestion?.(qid ?? "") ?? <InlineQuestionUnavailable reason="missing" />;
+  const MockCtaSlot = (props: { type?: string; children?: ReactNode }) => (
+    <MockCta {...props} locked={options.mockLocked ?? null} />
+  );
+  const components = {
+    ...baseComponents,
+    "question-embed": InlineQuestionSlot,
+    "mock-cta": MockCtaSlot,
+  } as unknown as Partial<Components>;
   const content = toJsxRuntime(hast, { Fragment, jsx, jsxs, components });
   return { content, headings };
 }
 
 /** Convenience component for places that do not need the TOC (admin preview). */
-export async function LessonRenderer({ markdown }: { markdown: string }) {
-  const { content } = await renderLessonContent(markdown);
+export async function LessonRenderer({
+  markdown,
+  options,
+}: {
+  markdown: string;
+  options?: LessonRenderOptions;
+}) {
+  const { content } = await renderLessonContent(markdown, options);
   return <>{content}</>;
 }
 
@@ -133,9 +170,12 @@ function RenderError({ error }: { error: unknown }) {
  * Same shape as `renderLessonContent` — the preview ignores the headings today
  * (no table of contents in the studio pane), but the two paths stay symmetric.
  */
-export async function renderLessonContentSafe(markdown: string): Promise<RenderedLessonContent> {
+export async function renderLessonContentSafe(
+  markdown: string,
+  options: LessonRenderOptions = {},
+): Promise<RenderedLessonContent> {
   try {
-    return await renderLessonContent(markdown);
+    return await renderLessonContent(markdown, options);
   } catch (error) {
     return { content: <RenderError error={error} />, headings: [] };
   }

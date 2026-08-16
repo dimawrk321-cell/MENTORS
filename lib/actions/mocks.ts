@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { MOCK_LOCKED_MESSAGE } from "@/lib/constants";
 import {
   bookMock,
   cancelBooking,
@@ -46,6 +47,7 @@ const BOOK_ERROR: Record<string, string> = {
   locked: "Бронирование пока недоступно из-за страйков — открой /mocks, чтобы увидеть дату",
   held: "Слот придержан для другого ученика — выбери другой",
   no_room: "У интервьюера пока не настроена комната — выбери другого",
+  course_required: MOCK_LOCKED_MESSAGE,
   not_found: "Не получилось забронировать — попробуй ещё раз",
 };
 
@@ -97,6 +99,7 @@ const TRANSFER_ERROR: Record<string, string> = {
   held: "Слот придержан для другого ученика — выбери другой",
   no_room: "У интервьюера пока не настроена комната — выбери другого",
   locked: "Перенос пока недоступен из-за страйков — открой /mocks, чтобы увидеть дату",
+  course_required: MOCK_LOCKED_MESSAGE,
 };
 
 /** «Перенести» (changelog 13.4 block 3): атомарная замена брони на новый слот. */
@@ -134,7 +137,14 @@ export async function joinWaitlistAction(
       type: parsed.type,
       interviewerId: parsed.interviewerId ?? null,
     });
-    if (!res.ok) throw new ActionError(res.code, "Не получилось встать в лист ожидания");
+    if (!res.ok) {
+      throw new ActionError(
+        res.code,
+        res.code === "course_required"
+          ? MOCK_LOCKED_MESSAGE
+          : "Не получилось встать в лист ожидания",
+      );
+    }
     revalidateMocks();
     return { created: res.created };
   });
@@ -156,6 +166,7 @@ export async function claimOfferAction(
         slot_taken: "Слот уже занят — жди следующего предложения",
         already_booked: "У тебя уже есть активная бронь",
         locked: "Бронирование пока заблокировано из-за страйков",
+        course_required: MOCK_LOCKED_MESSAGE,
       };
       throw new ActionError(res.code, messages[res.code]);
     }

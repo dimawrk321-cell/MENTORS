@@ -15,6 +15,7 @@ import {
   deleteQuestion,
   listQuestionIdsForFilter,
   removeQuestionLessonLink,
+  searchClosedQuestions,
   searchQuestionsForLink,
   setQuestionStatus,
   updateQuestion,
@@ -23,6 +24,7 @@ import {
 import { upsertModuleTestConfig } from "@/lib/services/tests";
 import { releaseChainAfterTestChange } from "@/lib/services/content";
 import { renderMarkdownHtml } from "@/lib/utils/markdown";
+import { stripMarkdown } from "@/lib/utils/text";
 import {
   isValidQuestionLinkFlags,
   questionLinkSchema,
@@ -336,6 +338,63 @@ export async function searchQuestionsAction(
       category: item.category.title,
       status: item.status,
     }));
+  });
+}
+
+export interface QuizPickerRow {
+  id: string;
+  teaser: string;
+  category: string;
+  type: string;
+}
+
+const QUESTION_TYPE_LABEL: Record<string, string> = {
+  single: "один вариант",
+  multi: "несколько",
+  tf: "да/нет",
+  short_text: "короткий ответ",
+};
+
+function toPickerRow(row: {
+  id: string;
+  textMd: string;
+  type: string;
+  category: { title: string };
+}): QuizPickerRow {
+  return {
+    id: row.id,
+    teaser: stripMarkdown(row.textMd, 140) || "— без текста —",
+    category: row.category.title,
+    type: QUESTION_TYPE_LABEL[row.type] ?? row.type,
+  };
+}
+
+/**
+ * Поиск вопроса для вставки в текст урока (заход B.1, блок 2.4): ментору не
+ * нужно знать id — он ищет по тексту и выбирает из списка.
+ */
+export async function searchQuizQuestionsAction(q: string): Promise<ActionResult<QuizPickerRow[]>> {
+  return runAction(async () => {
+    await requireActionPermission("content.manage");
+    const query = parseInput(z.string().max(200), q);
+    const rows = await searchClosedQuestions(prisma, query.trim());
+    return rows.map(toPickerRow);
+  });
+}
+
+/** Подпись уже вставленного вопроса (редактор показывает текст, а не id). */
+export async function lookupQuizQuestionAction(
+  id: string,
+): Promise<ActionResult<QuizPickerRow | null>> {
+  return runAction(async () => {
+    await requireActionPermission("content.manage");
+    const questionId = parseInput(z.string().max(100), id).trim();
+    if (!questionId) return null;
+    const row = await prisma.question.findUnique({
+      where: { id: questionId },
+      include: { category: { select: { title: true } } },
+    });
+    return row ? toPickerRow(row) : null;
   });
 }
 

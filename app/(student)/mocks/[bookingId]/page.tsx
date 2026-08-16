@@ -23,6 +23,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { MockBookingCard } from "@/components/features/mock-booking-card";
 import { CancelBookingControls } from "@/components/features/mock-actions";
+import { getMockBookingAccess } from "@/lib/services/mock-access";
 
 export const metadata: Metadata = {
   title: "Мок",
@@ -100,7 +101,11 @@ export default async function BookingDetailPage({
             startsAtMs={booking.startsAt.getTime()}
             endsAtMs={booking.startsAt.getTime() + MOCK_DURATION_MINUTES * MINUTE_MS}
           />
-          <CancelBookingControls bookingId={booking.id} late={late} />
+          <CancelBookingControls
+            bookingId={booking.id}
+            late={late}
+            transferOpen={(await getMockBookingAccess(prisma, user.id)).open}
+          />
         </section>
       ) : null}
 

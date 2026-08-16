@@ -17,7 +17,8 @@ import { toast } from "@/components/ui/toast";
 import { BackButton } from "@/components/ui/back-button";
 import { ActionButton } from "@/components/features/action-button";
 import { cn } from "@/lib/utils/cn";
-import { applySnippet, type SnippetDef } from "@/lib/utils/editor-insert";
+import { applySnippet } from "@/lib/utils/editor-insert";
+import { snippetsFor, type SnippetDef } from "@/lib/content/editor-snippets";
 import { BlockEditor } from "@/components/features/block-editor";
 import {
   deleteGuideAction,
@@ -40,73 +41,7 @@ interface EditorGuide {
 // Directive panel (spec 8.5 / 12.1-C10) — guides share the markdown pipeline but
 // have no video-lesson/mock semantics; grouped with human names + hints.
 // D5 (spec 13.1): `%s` marks where the selection is wrapped (or `placeholder`).
-interface Snippet {
-  group: string;
-  label: string;
-  hint: string;
-  snippet: string;
-  placeholder: string;
-}
-
-const SNIPPETS: Snippet[] = [
-  {
-    group: "Врезки",
-    label: "Совет",
-    hint: "Зелёная врезка с подсказкой (обернёт выделение)",
-    snippet: '\n:::callout{type="tip"}\n%s\n:::\n',
-    placeholder: "Текст совета.",
-  },
-  {
-    group: "Врезки",
-    label: "Важное",
-    hint: "Жёлтая врезка-акцент (обернёт выделение)",
-    snippet: '\n:::callout{type="important"}\n%s\n:::\n',
-    placeholder: "Важный текст.",
-  },
-  {
-    group: "Врезки",
-    label: "Материал",
-    hint: "Серая врезка со ссылками на источники (обернёт выделение)",
-    snippet: '\n:::callout{type="material"}\n%s\n:::\n',
-    placeholder: "- [Ссылка](https://)",
-  },
-  {
-    group: "Медиа",
-    label: "Видео",
-    hint: "Встроенный YouTube-плеер",
-    snippet: '\n:::video{url="https://youtu.be/..." title="Название"}\n:::\n',
-    placeholder: "",
-  },
-  {
-    group: "Медиа",
-    label: "Практика",
-    hint: "Блок практических заданий (обернёт выделение)",
-    snippet: "\n:::practice\n%s\n:::\n",
-    placeholder: "- [Задание](https://)",
-  },
-  {
-    group: "Блоки",
-    label: "Код",
-    hint: "Подсветка Shiki (обернёт выделение)",
-    snippet: "\n```python\n%s\n```\n",
-    placeholder: 'print("hello")',
-  },
-  {
-    // D5 (spec 13.1): guide editor gains the inline-formula button for parity.
-    group: "Блоки",
-    label: "Формула",
-    hint: "Инлайн-формула $…$ (курсор внутри; обернёт выделение)",
-    snippet: "$%s$",
-    placeholder: "",
-  },
-  {
-    group: "Блоки",
-    label: "Таблица",
-    hint: "GFM-таблица (скроллится по горизонтали)",
-    snippet: "\n| Колонка | Колонка |\n| --- | --- |\n| Ячейка | Ячейка |\n",
-    placeholder: "",
-  },
-];
+const SNIPPETS: SnippetDef[] = snippetsFor("guide");
 
 const SNIPPET_GROUPS = ["Врезки", "Медиа", "Блоки"];
 

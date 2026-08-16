@@ -6,9 +6,16 @@ import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getLessonView } from "@/lib/services/content";
 import { canOpenCourse } from "@/lib/services/course-access";
-import { getKeyQuestionsForLesson, getQuizQuestionsForLesson } from "@/lib/services/questions";
+import { getMockBookingAccess } from "@/lib/services/mock-access";
+import {
+  getInlineQuestionsForLesson,
+  getKeyQuestionsForLesson,
+  getQuizQuestionsForLesson,
+} from "@/lib/services/questions";
 import { KeyQuestions } from "@/components/features/key-questions";
 import { QuizWidget } from "@/components/features/quiz/quiz-widget";
+import { InlineQuestion } from "@/components/features/quiz/inline-question";
+import { InlineQuestionUnavailable } from "@/components/blocks/inline-question-slot";
 import { renderLessonContent } from "@/components/blocks/lesson-renderer";
 import { Watermark } from "@/components/features/watermark";
 import { LessonReader } from "@/components/features/lesson-reader";
@@ -85,7 +92,30 @@ export default async function LessonPage({ params }: LessonPageProps) {
     );
   }
 
-  const { content, headings } = await renderLessonContent(view.lesson.contentMd);
+  // Заход B.1: вопросы, вставленные в текст директивами, грузятся ОДНИМ
+  // запросом до рендера — путь рендера остаётся без обращений к БД.
+  const inlineQuestions = await getInlineQuestionsForLesson(prisma, view.lesson.contentMd);
+  // Блок 3.4: CTA внутри `:::mock` подчиняется правилу «бронь после первого
+  // курса». Считаем доступ только для уроков, где директива есть, — прогресс по
+  // всем курсам ради урока без мока читать незачем.
+  const mockAccess = view.lesson.contentMd.includes(":::mock")
+    ? await getMockBookingAccess(prisma, user.id)
+    : null;
+  const { content, headings } = await renderLessonContent(view.lesson.contentMd, {
+    mockLocked:
+      mockAccess && !mockAccess.open
+        ? { nextCourseTitle: mockAccess.nextCourse?.title ?? null }
+        : null,
+    inlineQuestion: (questionId) => {
+      const entry = inlineQuestions.get(questionId);
+      if (!entry?.question) {
+        return <InlineQuestionUnavailable reason={entry?.problem ?? "no_id"} />;
+      }
+      return (
+        <InlineQuestion question={entry.question} lessonId={view.lesson.id} userId={user.id} />
+      );
+    },
+  });
   const durationLabel = lessonDurationLabel({
     readingMinutes: view.lesson.readingMinutes,
     textMinutes: view.lesson.textMinutes,
@@ -96,7 +126,11 @@ export default async function LessonPage({ params }: LessonPageProps) {
   });
   const [keyQuestions, quizQuestions] = await Promise.all([
     getKeyQuestionsForLesson(prisma, view.lesson.id),
-    getQuizQuestionsForLesson(prisma, { lessonId: view.lesson.id, userId: user.id }),
+    getQuizQuestionsForLesson(prisma, {
+      lessonId: view.lesson.id,
+      userId: user.id,
+      contentMd: view.lesson.contentMd,
+    }),
   ]);
 
   // Сегменты шапки «Урок X из Y» — уже посчитанное состояние гейтинга модуля.

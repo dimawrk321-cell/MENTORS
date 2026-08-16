@@ -22,7 +22,17 @@
 // markdown, so the mock attributes must stay inside the same braces.
 
 export type BlockKind =
-  "prose" | "code" | "callout" | "video" | "practice" | "mock" | "math" | "table";
+  | "prose"
+  | "code"
+  | "callout"
+  | "video"
+  | "practice"
+  | "mock"
+  | "math"
+  | "table"
+  // Заход B.1: «Скрытый ответ» и вопрос из банка внутри текста урока.
+  | "spoiler"
+  | "question";
 
 export type CalloutType = "tip" | "important" | "warning" | "material";
 
@@ -37,9 +47,11 @@ export interface Block {
   variant: string;
   /** code fence language. */
   lang: string;
-  /** video url + title. */
+  /** video url + title; title — ещё и заголовок «Скрытого ответа». */
   url: string;
   title: string;
+  /** id вопроса из банка для `:::question{id="…"}`. */
+  questionId: string;
   /**
    * false when re-rendering the parsed fields would not reproduce `raw`; such a
    * block is edited as plain text so no bytes shift underneath the mentor.
@@ -77,6 +89,7 @@ function base(kind: BlockKind, raw: string): Block {
     lang: "",
     url: "",
     title: "",
+    questionId: "",
     editable: false,
     eol: /\r?\n$/.exec(raw)?.[0] ?? "",
   };
@@ -149,6 +162,15 @@ export function renderBlock(block: Block): string {
       return `:::practice\n${block.body}\n:::${end}`;
     case "mock":
       return `:::mock{type="${attr(block.variant)}"}\n:::${end}`;
+    case "spoiler":
+      // Заголовок опускается, когда его нет, — по образцу `video` без title:
+      // иначе блок без заголовка не воспроизвёл бы свой raw и деградировал бы
+      // в сырой текст.
+      return block.title
+        ? `:::spoiler{title="${attr(block.title)}"}\n${block.body}\n:::${end}`
+        : `:::spoiler\n${block.body}\n:::${end}`;
+    case "question":
+      return `:::question{id="${attr(block.questionId)}"}\n:::${end}`;
     case "code":
       return `\`\`\`${block.lang}\n${block.body}\n\`\`\`${end}`;
     case "math":
@@ -244,16 +266,15 @@ export function parse(markdown: string): Block[] {
         .join("")
         .replace(/\r?\n$/, "");
 
-      const kind: BlockKind =
-        name === "callout"
-          ? "callout"
-          : name === "video"
-            ? "video"
-            : name === "practice"
-              ? "practice"
-              : name === "mock"
-                ? "mock"
-                : "prose";
+      const KNOWN: Record<string, BlockKind> = {
+        callout: "callout",
+        video: "video",
+        practice: "practice",
+        mock: "mock",
+        spoiler: "spoiler",
+        question: "question",
+      };
+      const kind: BlockKind = KNOWN[name] ?? "prose";
 
       const block = base(kind, raw);
       block.body = inner;
@@ -263,6 +284,8 @@ export function parse(markdown: string): Block[] {
         block.url = attrs.url ?? "";
         block.title = attrs.title ?? "";
       }
+      if (kind === "spoiler") block.title = attrs.title ?? "";
+      if (kind === "question") block.questionId = attrs.id ?? "";
       block.editable = closed && kind !== "prose" && renderBlock(block) === raw;
       if (!block.editable) {
         block.kind = "prose";

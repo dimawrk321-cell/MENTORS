@@ -4,6 +4,7 @@ import { getAuth } from "@/lib/auth/guards";
 import { isApiRateLimited } from "@/lib/utils/rate-limit";
 import { getContinueTarget } from "@/lib/services/dashboard";
 import { getRecentItems } from "@/lib/services/recent";
+import { getMockBookingAccess } from "@/lib/services/mock-access";
 
 // Palette first-screen data (spec 7.11): «Продолжить урок» (hero logic) + the
 // last opened entities. Fetched lazily when the palette opens (data is lazy,
@@ -25,10 +26,10 @@ export async function GET() {
   // (they're gated out of the student zone) — the admin palette opens straight
   // to search (spec 7.11 integration note).
   if (auth.user.role !== "student") {
-    return NextResponse.json({ continueLesson: null, recent: [] });
+    return NextResponse.json({ continueLesson: null, recent: [], mockBookingOpen: true });
   }
 
-  const [target, recent] = await Promise.all([
+  const [target, recent, mockAccess] = await Promise.all([
     getContinueTarget(prisma, auth.user.id),
     getRecentItems(prisma, {
       userId: auth.user.id,
@@ -36,6 +37,9 @@ export async function GET() {
       guidesResumeEnabled: auth.user.guidesResumeEnabled,
       guidesLegendEnabled: auth.user.guidesLegendEnabled,
     }),
+    // Заход B.1: действие «Забронировать мок» подчиняется тому же условию, что
+    // и страница моков — палитра не должна вести в закрытый мастер.
+    getMockBookingAccess(prisma, auth.user.id),
   ]);
 
   return NextResponse.json({
@@ -43,5 +47,6 @@ export async function GET() {
       ? { title: target.lessonTitle, url: `/lessons/${target.lessonId}` }
       : null,
     recent,
+    mockBookingOpen: mockAccess.open,
   });
 }

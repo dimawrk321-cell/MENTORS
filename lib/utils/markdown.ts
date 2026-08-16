@@ -29,6 +29,10 @@ const DIRECTIVE_ELEMENTS: Record<string, string> = {
   video: "video-embed",
   practice: "practice-block",
   mock: "mock-cta",
+  // Заход B.1: «Скрытый ответ» (заголовок виден, тело под кликом) и вопрос из
+  // банка прямо в тексте урока.
+  spoiler: "spoiler-block",
+  question: "question-embed",
 };
 
 interface DirectiveNode {
@@ -71,6 +75,11 @@ const remarkDirectiveBlocks: Plugin<[], MdastRoot> = () => (tree) => {
           ? { url: attributes.url ?? "", title: attributes.title ?? "" }
           : {}),
         ...(directive.name === "mock" ? { type: attributes.type ?? "legend" } : {}),
+        ...(directive.name === "spoiler" ? { title: attributes.title ?? "" } : {}),
+        // `qid`, а не `id`: `id` в hast — это DOM-идентификатор (его ставит
+        // rehypeSlug), а имя в одно слово строчными не переименовывается
+        // property-information при сборке пропсов компонента.
+        ...(directive.name === "question" ? { qid: attributes.id ?? "" } : {}),
       },
     };
   });
@@ -177,16 +186,38 @@ export interface RenderedLesson {
   headings: LessonHeading[];
 }
 
+/**
+ * Заголовки внутри «Скрытого ответа» (заход B.1) — их id.
+ *
+ * DECISION: rehypeSlug ставит якорь любому заголовку, и заголовок из свёрнутого
+ * спойлера полез бы в оглавление урока — пункт, который ведёт в закрытый блок и
+ * ломает scroll-spy (цель прокрутки невидима). Такие заголовки из оглавления
+ * ИСКЛЮЧАЮТСЯ, но якорь у них остаётся: прямая ссылка на #anchor по-прежнему
+ * работает, а «Читалка v2» перестаёт обещать раздел, которого на экране нет.
+ */
+function headingIdsInsideSpoilers(hast: HastRoot): Set<string> {
+  const hidden = new Set<string>();
+  visit(hast, "element", (element: Element) => {
+    if (element.tagName !== "spoiler-block") return;
+    visit(element, "element", (inner: Element) => {
+      if (inner.tagName !== "h2" && inner.tagName !== "h3") return;
+      if (typeof inner.properties?.id === "string") hidden.add(inner.properties.id);
+    });
+  });
+  return hidden;
+}
+
 /** Full pipeline run: markdown → hast + collected h2/h3 for the table of contents. */
 export async function renderLessonHast(markdown: string): Promise<RenderedLesson> {
   const mdast = processor.parse(sanitizeProtectedRecordingMarkdown(markdown));
   const hast = (await processor.run(mdast)) as HastRoot;
 
+  const hiddenHeadingIds = headingIdsInsideSpoilers(hast);
   const headings: LessonHeading[] = [];
   visit(hast, "element", (element: Element) => {
     if (element.tagName !== "h2" && element.tagName !== "h3") return;
     const id = typeof element.properties?.id === "string" ? element.properties.id : null;
-    if (!id) return;
+    if (!id || hiddenHeadingIds.has(id)) return;
     headings.push({
       id,
       text: extractText(element as unknown as { children?: unknown[] }),

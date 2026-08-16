@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
 import { getLessonForEditor } from "@/lib/services/content-admin";
 import { renderLessonContentSafe } from "@/components/blocks/lesson-renderer";
+import { getInlineQuestionsForLesson } from "@/lib/services/questions";
+import { InlineQuestion } from "@/components/features/quiz/inline-question";
+import { InlineQuestionUnavailable } from "@/components/blocks/inline-question-slot";
 import { VideoEmbed } from "@/components/blocks/video-embed";
 import { Watermark } from "@/components/features/watermark";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +30,21 @@ export default async function ContentPreviewPage({ params }: PreviewPageProps) {
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();
 
-  const { content } = await renderLessonContentSafe(lesson.contentMd);
+  // Заход B.1: вставленные в текст вопросы рисуются тем же компонентом, что у
+  // ученика (spec 8.5 «предпросмотр идентичен виду ученика»), но отвечать в
+  // предпросмотре некому — режим только чтение.
+  const inlineQuestions = await getInlineQuestionsForLesson(prisma, lesson.contentMd);
+  const { content } = await renderLessonContentSafe(lesson.contentMd, {
+    inlineQuestion: (questionId) => {
+      const entry = inlineQuestions.get(questionId);
+      if (!entry?.question) {
+        return <InlineQuestionUnavailable reason={entry?.problem ?? "no_id"} />;
+      }
+      return (
+        <InlineQuestion question={entry.question} lessonId={lesson.id} userId={null} readOnly />
+      );
+    },
+  });
 
   return (
     <main className="mx-auto w-full max-w-[680px] px-4 py-8">

@@ -492,3 +492,22 @@
     --deck-chrome: 13rem;
   }
 }
+
+/* --- «Скрытый ответ» при печати (заход B.1) --------------------------------
+
+   Напечатанный урок — статичная бумага: свёрнутый спойлер прячет ответ
+   НАВСЕГДА, кликнуть по нему на листе нельзя. Поэтому при печати блок
+   раскрывается. Основной путь — `beforeprint` в самом компоненте (он ставит
+   `open` на <details>); эти правила — страховка для печати без JS: Firefox
+   скрывает тело через `display: none`, Chrome — через `content-visibility`,
+   поэтому перекрываются оба. Подсказка «Показать ответ» на бумаге бессмысленна. */
+@media print {
+  .lesson-spoiler > .spoiler-body {
+    display: block !important;
+    content-visibility: visible !important;
+  }
+
+  .lesson-spoiler .spoiler-hint {
+    display: none;
+  }
+}

@@ -26,8 +26,11 @@ export async function createInterviewer(
   return user;
 }
 
-export async function createStudent(email: string, opts: { accessUntil?: Date | null } = {}) {
-  return createTestUser({
+export async function createStudent(
+  email: string,
+  opts: { accessUntil?: Date | null; completedCourse?: boolean } = {},
+) {
+  const user = await createTestUser({
     email,
     role: "student",
     status: "active",
@@ -35,6 +38,62 @@ export async function createStudent(email: string, opts: { accessUntil?: Date | 
       opts.accessUntil === undefined ? new Date("2027-01-01T00:00:00.000Z") : opts.accessUntil,
     name: "Ученик",
   });
+  // Заход B.1: бронь мока открыта только ученику с пройденным курсом. Фикстуры
+  // моков по умолчанию дают его — иначе каждый набор о бронях проверял бы не то,
+  // что проверяет. Гейт как таковой закрыт отдельным набором (mock-course-gate).
+  if (opts.completedCourse !== false) await completeStarterCourse(user.id);
+  return user;
+}
+
+/**
+ * Минимальный пройденный курс: один модуль, один обязательный урок, без
+ * модульного теста. «Пройден» считает `isCourseComplete` — тот же предикат, что
+ * у цепи курсов и у гейта брони, поэтому фикстура ничего не имитирует.
+ */
+export async function completeStarterCourse(userId: string): Promise<string> {
+  const existing = await testDb.course.findUnique({
+    where: { slug: "starter" },
+    include: { modules: { include: { lessons: true } } },
+  });
+  const course =
+    existing ??
+    (await testDb.course.create({
+      data: {
+        slug: "starter",
+        title: "Стартовый курс",
+        gating: "free",
+        status: "published",
+        order: -1,
+        modules: {
+          create: [
+            {
+              title: "Модуль",
+              order: 0,
+              status: "published",
+              lessons: {
+                create: [
+                  { slug: "s1", title: "Урок", order: 0, status: "published", contentMd: "текст" },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      include: { modules: { include: { lessons: true } } },
+    }));
+
+  const lessonId = course.modules[0]!.lessons[0]!.id;
+  await testDb.lessonProgress.upsert({
+    where: { userId_lessonId: { userId, lessonId } },
+    update: { status: "completed", completedAt: new Date("2026-01-01T00:00:00.000Z") },
+    create: {
+      userId,
+      lessonId,
+      status: "completed",
+      completedAt: new Date("2026-01-01T00:00:00.000Z"),
+    },
+  });
+  return course.id;
 }
 
 export async function createSlot(

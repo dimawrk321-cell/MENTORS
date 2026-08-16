@@ -13,13 +13,20 @@ import { useViewOnly, ViewOnlyNote } from "@/components/features/view-only";
 interface QuizQuestionProps {
   lessonId: string;
   questionId: string;
-  index: number;
-  total: number;
+  /** Нумерация «Вопрос N из M» — только у блока «Проверь себя». */
+  index?: number;
+  total?: number;
   type: "single" | "multi" | "tf" | "short_text" | "open";
   options: Array<{ id: string; text: string }>;
   questionNode: ReactNode;
   /** Разбор — заранее отрендерен сервером, показывается после ответа. */
   explanationNode: ReactNode | null;
+  /**
+   * Заход B.1: предпросмотр студии рендерит тот же островок, но отвечать в нём
+   * некому (нет ученика) — поведение то же, что у «Глазами ученика».
+   */
+  readOnly?: boolean;
+  readOnlyNote?: string;
 }
 
 /** Один вопрос квиза: ответ → сразу верно/неверно + разбор (spec 7.5). */
@@ -32,11 +39,13 @@ export function QuizQuestion({
   options,
   questionNode,
   explanationNode,
+  readOnly = false,
+  readOnlyNote,
 }: QuizQuestionProps) {
   // «Глазами ученика»: проверить ответ нельзя — вердикт считает сервер, а он
   // мутацию отобьёт. Закрываемся на входе, чтобы ментор не выбирал вариант
   // впустую (spec 7.2).
-  const viewOnly = useViewOnly();
+  const viewOnly = useViewOnly() || readOnly;
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState("");
   const [result, setResult] = useState<{ correct: boolean } | null>(null);
@@ -79,9 +88,11 @@ export function QuizQuestion({
         result?.correct === false && "border-danger/50",
       )}
     >
-      <p className="text-text-3 mb-2 text-[12px]">
-        Вопрос {index} из {total}
-      </p>
+      {index !== undefined && total !== undefined && (
+        <p className="text-text-3 mb-2 text-[12px]">
+          Вопрос {index} из {total}
+        </p>
+      )}
       <div className="lesson-prose mb-3 font-medium">{questionNode}</div>
 
       {type === "short_text" ? (
@@ -127,7 +138,7 @@ export function QuizQuestion({
       {!answered &&
         (viewOnly ? (
           <ViewOnlyNote className="mt-3">
-            Режим просмотра: ответить нельзя — вердикт и разбор считает сервер.
+            {readOnlyNote ?? "Режим просмотра: ответить нельзя — вердикт и разбор считает сервер."}
           </ViewOnlyNote>
         ) : (
           <div className="mt-3">

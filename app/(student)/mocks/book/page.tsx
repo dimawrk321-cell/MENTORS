@@ -37,6 +37,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IconTile } from "@/components/features/icon-tile";
 import { SlotPicker } from "@/components/features/slot-picker";
+import { MockLockedNote } from "@/components/features/mock-locked-note";
+import { getMockBookingAccess } from "@/lib/services/mock-access";
 import {
   ConfirmBookButton,
   JoinWaitlistButton,
@@ -161,6 +163,26 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
   // Гейты: лок за страйки — общий; «одна активная бронь» — только для новой брони
   // (при переносе активная бронь и есть та, что переносим) (spec 7.8/13.4 block 3.2).
   const state = await getMocksPageData(prisma, user.id, now);
+
+  // Заход B.1, блок 3.2: бронь открывается после первого пройденного курса.
+  // Не редирект и не пустая страница — объяснение с дорогой к нему. Гейт стоит
+  // ПЕРЕД локом за страйки, но текстами они не смешиваются: сообщение одно и
+  // касается ровно того, что мешает прямо сейчас.
+  const access = await getMockBookingAccess(prisma, user.id);
+  if (!access.open) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">{heading}</h1>
+        <MockLockedNote access={access} />
+        <p className="text-text-3 text-[13px]">
+          <Link href="/mocks" className="hover:text-text-1 underline underline-offset-2">
+            Вернуться к мокам →
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
   if (state.lock) {
     return (
       <div className="flex flex-col gap-4">

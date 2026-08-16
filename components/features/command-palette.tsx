@@ -59,6 +59,8 @@ interface RecentEntry {
 interface HomeData {
   continueLesson: { title: string; url: string } | null;
   recent: RecentEntry[];
+  /** Заход B.1: бронь мока открыта (пройден хотя бы один курс). */
+  mockBookingOpen?: boolean;
 }
 
 interface Row {
@@ -188,9 +190,25 @@ export function CommandPalette({ zone }: { zone: "student" | "admin" }) {
         icon: PlayCircle,
       });
     }
+    rows.push({
+      key: "act:repeat",
+      title: "Начать повторения",
+      url: "/trainer/session",
+      icon: Layers,
+    });
+    // Заход B.1: то же условие, что на /mocks. Действие не прячем — палитра
+    // молча пропавшим пунктом объяснить ничего не может; ведём на /mocks, где
+    // написано, когда бронь откроется.
     rows.push(
-      { key: "act:repeat", title: "Начать повторения", url: "/trainer/session", icon: Layers },
-      { key: "act:mock", title: "Забронировать мок", url: "/mocks/book", icon: Video },
+      home?.mockBookingOpen === false
+        ? {
+            key: "act:mock",
+            title: "Забронировать мок",
+            meta: "Откроется после первого курса",
+            url: "/mocks",
+            icon: Video,
+          }
+        : { key: "act:mock", title: "Забронировать мок", url: "/mocks/book", icon: Video },
       { key: "act:bookmarks", title: "Мои закладки", url: "/guides", icon: BookMarked },
     );
     return rows;

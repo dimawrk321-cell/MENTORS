@@ -1,4 +1,4 @@
-import type { ContentStatus, PrismaClient, QuestionType } from "@prisma/client";
+import type { ContentStatus, PrismaClient, Question, QuestionType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import type { Db } from "@/lib/db";
 import {
@@ -8,6 +8,11 @@ import {
   CLOSED_QUESTION_TYPES,
 } from "@/lib/utils/answers";
 import { catalogTeaser } from "@/lib/utils/text";
+import {
+  extractInlineQuestionIds,
+  isInlineQuestionOfLesson,
+  type InlineQuestionProblem,
+} from "@/lib/content/inline-questions";
 import { renderMarkdownHtml } from "@/lib/utils/markdown";
 import { seededShuffle } from "@/lib/utils/shuffle";
 import { slugify, uniqueSlug } from "@/lib/utils/slug";
@@ -364,7 +369,7 @@ export async function getKeyQuestionsForLesson(db: Db, lessonId: string) {
  */
 export async function getQuizQuestionsForLesson(
   db: Db,
-  input: { lessonId: string; userId: string },
+  input: { lessonId: string; userId: string; contentMd?: string },
 ) {
   const links = await db.questionLesson.findMany({
     where: {
@@ -375,8 +380,76 @@ export async function getQuizQuestionsForLesson(
     include: { question: true },
     orderBy: { createdAt: "asc" },
   });
-  const questions = links.map((link) => link.question);
+  // Заход B.1, край 2.3: вопрос, стоящий ВНУТРИ текста урока, из блока
+  // «Проверь себя» исключается — иначе ученик отвечает на него дважды на одной
+  // странице. XP от дубля и так защищён (ref начисления — вопрос, уникальный
+  // индекс xp_events), но два одинаковых вопроса подряд читаются как баг.
+  const inline = new Set(
+    input.contentMd ? extractInlineQuestionIds(input.contentMd) : ([] as string[]),
+  );
+  const questions = links.map((link) => link.question).filter((q) => !inline.has(q.id));
   return seededShuffle(questions, `${input.userId}:${input.lessonId}`).slice(0, QUIZ_MAX_QUESTIONS);
+}
+
+export interface InlineQuestionEntry {
+  id: string;
+  /** null — вопрос удалён из банка / снят с публикации / не с вариантами. */
+  question: Question | null;
+  /** null — вопрос рабочий. */
+  problem: InlineQuestionProblem | null;
+}
+
+/**
+ * Вопросы, вставленные в текст урока директивами (заход B.1, блок 2).
+ *
+ * Возвращает запись на КАЖДУЮ директиву, включая нерабочие: удалённый из банка
+ * вопрос уносит с собой каскадную связь `question_lessons`, но директива в
+ * тексте остаётся — и вместо пустоты или ошибки ученик должен увидеть
+ * осмысленную заглушку (край 2.3).
+ */
+export async function getInlineQuestionsForLesson(
+  db: Db,
+  contentMd: string,
+): Promise<Map<string, InlineQuestionEntry>> {
+  const ids = extractInlineQuestionIds(contentMd);
+  const out = new Map<string, InlineQuestionEntry>();
+  if (ids.length === 0) return out;
+
+  const rows = await db.question.findMany({ where: { id: { in: ids } } });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  for (const id of ids) {
+    const question = byId.get(id) ?? null;
+    const problem: InlineQuestionProblem | null = !question
+      ? "missing"
+      : question.status !== "published"
+        ? "unpublished"
+        : !CLOSED_QUESTION_TYPES.includes(question.type as (typeof CLOSED_QUESTION_TYPES)[number])
+          ? "not_closed"
+          : null;
+    out.set(id, { id, question: problem === null ? question : null, problem });
+  }
+  return out;
+}
+
+/**
+ * Поиск по банку для вставки вопроса в текст урока (заход B.1, блок 2.4).
+ *
+ * Только опубликованные вопросы С ВАРИАНТАМИ: у открытого вопроса нет
+ * автопроверки, а черновик у ученика не отрисуется — предлагать в выборе то,
+ * что заведомо не доедет, значит закладывать ту же молчаливую пропажу, что
+ * ловили в заходе «Читалка v2» на ключевых вопросах.
+ */
+export async function searchClosedQuestions(db: Db, q: string, take = 20) {
+  return db.question.findMany({
+    where: {
+      status: "published",
+      type: { in: [...CLOSED_QUESTION_TYPES] },
+      ...(q ? { textMd: { contains: q, mode: "insensitive" } } : {}),
+    },
+    include: { category: { select: { title: true } } },
+    orderBy: { createdAt: "desc" },
+    take,
+  });
 }
 
 export type QuizAnswerResult =
@@ -391,21 +464,51 @@ export type QuizAnswerResult =
     }
   | { ok: false; code: "not_found" };
 
+/**
+ * Вопрос, на который ученику РАЗРЕШЕНО отвечать в этом уроке (spec 7.5).
+ *
+ * Два законных источника, оба серверные: привязка `question_lessons.in_quiz`
+ * (блок «Проверь себя») и директива `:::question{id}` в тексте самого урока
+ * (заход B.1). Второй путь намеренно не заводит строку в `question_lessons` —
+ * иначе открытие редактора молча мутировало бы привязки; источник правды тот
+ * же, что у `:::mock`, — сохранённый `content_md`.
+ */
+async function resolveQuizQuestion(
+  db: PrismaClient,
+  lessonId: string,
+  questionId: string,
+): Promise<Question | null> {
+  const link = await db.questionLesson.findUnique({
+    where: { questionId_lessonId: { questionId, lessonId } },
+    include: { question: true },
+  });
+  if (link?.inQuiz && link.question.status === "published") return link.question;
+
+  const lesson = await db.lesson.findUnique({
+    where: { id: lessonId },
+    select: { contentMd: true },
+  });
+  if (!lesson || !isInlineQuestionOfLesson(lesson.contentMd, questionId)) return null;
+
+  const question = await db.question.findUnique({ where: { id: questionId } });
+  if (!question || question.status !== "published") return null;
+  // Открытый вопрос автопроверить нечем — в тексте он рисуется заглушкой.
+  if (!CLOSED_QUESTION_TYPES.includes(question.type as (typeof CLOSED_QUESTION_TYPES)[number])) {
+    return null;
+  }
+  return question;
+}
+
 /** Поштучный ответ квиза (spec 7.5): +5 XP за первый правильный (spec 7.7). */
 export async function answerQuizQuestion(
   db: PrismaClient,
   input: { userId: string; lessonId: string; questionId: string; answer: unknown; now?: Date },
 ): Promise<QuizAnswerResult> {
   const now = input.now ?? new Date();
-  const link = await db.questionLesson.findUnique({
-    where: { questionId_lessonId: { questionId: input.questionId, lessonId: input.lessonId } },
-    include: { question: true },
-  });
-  if (!link || !link.inQuiz || link.question.status !== "published") {
-    return { ok: false, code: "not_found" };
-  }
+  const question = await resolveQuizQuestion(db, input.lessonId, input.questionId);
+  if (!question) return { ok: false, code: "not_found" };
 
-  const correct = checkAnswer(link.question, input.answer);
+  const correct = checkAnswer(question, input.answer);
   // «Первый правильный ответ на вопрос» — разово на (user, question).
   const hadFirst =
     correct &&

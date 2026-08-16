@@ -22,6 +22,7 @@ import { notify } from "@/lib/services/notifications";
 import { signalOwner } from "@/lib/services/telegram/owner-signals";
 import { addSrsCardForFailure } from "@/lib/services/srs";
 import { completeLesson } from "@/lib/services/content";
+import { canBookMocks } from "@/lib/services/mock-access";
 import { writeAudit } from "@/lib/services/audit";
 import {
   getNumericSetting,
@@ -208,7 +209,8 @@ async function prioritizeWaitlistForVictim(
 }
 
 export type JoinWaitlistResult =
-  { ok: true; waitlistId: string; created: boolean } | { ok: false; code: "not_found" };
+  | { ok: true; waitlistId: string; created: boolean }
+  | { ok: false; code: "not_found" | "course_required" };
 
 /** «Сообщить, когда появится слот» (spec 7.8): заявка (тип, интервьюер?, +14 дней). */
 export async function joinWaitlist(
@@ -223,6 +225,8 @@ export async function joinWaitlist(
   if (!user || user.role !== "student" || user.status !== "active") {
     return { ok: false, code: "not_found" };
   }
+  // Заход B.1: лист ожидания ведёт ровно к брони — гейт тот же.
+  if (!(await canBookMocks(db, input.userId))) return { ok: false, code: "course_required" };
   const interviewerId = input.interviewerId ?? null;
   const existing = await db.waitlist.findFirst({
     where: {
@@ -248,7 +252,11 @@ export async function joinWaitlist(
 
 export type ClaimOfferResult =
   | { ok: true; bookingId: string }
-  | { ok: false; code: "not_found" | "expired" | "slot_taken" | "already_booked" | "locked" };
+  | {
+      ok: false;
+      code:
+        "not_found" | "expired" | "slot_taken" | "already_booked" | "locked" | "course_required";
+    };
 
 /** Клейм предложения из уведомления/страницы моков (spec 7.8). */
 export async function claimOffer(
@@ -275,7 +283,9 @@ export async function claimOffer(
         ? "already_booked"
         : booked.code === "locked"
           ? "locked"
-          : "slot_taken";
+          : booked.code === "course_required"
+            ? "course_required"
+            : "slot_taken";
     return { ok: false, code };
   }
   await db.$transaction(async (tx) => {
@@ -339,7 +349,8 @@ export type BookResult =
         | "already_booked"
         | "locked"
         | "held"
-        | "no_room";
+        | "no_room"
+        | "course_required";
     };
 
 /**
@@ -360,6 +371,13 @@ export async function bookMock(
   if (!user || user.role !== "student" || user.status !== "active") {
     return { ok: false, code: "not_found" };
   }
+  // Заход B.1, блок 3: бронь открыта только после первого пройденного курса.
+  // Проверка стоит ДО транзакции сознательно: это авторизация, а не гвард
+  // идемпотентности — она ничего не записывает, и «устареть» может лишь в
+  // сторону ученика, который прямо сейчас дозакрыл курс (следующий клик
+  // пройдёт). Держать тяжёлое чтение прогресса внутри транзакции со строчными
+  // локами слота дороже, чем этот край.
+  if (!(await canBookMocks(db, input.userId))) return { ok: false, code: "course_required" };
 
   return db.$transaction(async (tx) => {
     // Сериализуем брони одного ученика: без блокировки строки user две параллельные
@@ -559,7 +577,8 @@ export type TransferBookingResult =
         | "already_booked"
         | "held"
         | "no_room"
-        | "locked";
+        | "locked"
+        | "course_required";
     };
 
 /**
@@ -588,6 +607,10 @@ export async function transferBooking(
   if (!user || user.role !== "student" || user.status !== "active") {
     return { ok: false, code: "not_found" };
   }
+  // Заход B.1: перенос создаёт НОВУЮ бронь, поэтому подчиняется тому же гейту,
+  // что и первичная. Существующую бронь он не отнимает — её по-прежнему можно
+  // провести или отменить.
+  if (!(await canBookMocks(db, input.userId))) return { ok: false, code: "course_required" };
 
   const cancelFreeHours = await getNumericSetting(
     db,

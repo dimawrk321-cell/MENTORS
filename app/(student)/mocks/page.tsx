@@ -10,6 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { IconTile } from "@/components/features/icon-tile";
 import { MockBookingCard } from "@/components/features/mock-booking-card";
+import { MockLockedNote } from "@/components/features/mock-locked-note";
+import { getMockBookingAccess } from "@/lib/services/mock-access";
 import { ClaimOfferButton } from "@/components/features/mock-actions";
 
 // Tile per mock type (design handoff): accent «шестерёнка» for theory, violet «книга» for legend.
@@ -28,7 +30,10 @@ const TYPES = ["theory", "legend"] as const;
 export default async function MocksPage() {
   const { user } = await requireStudentZone();
   const now = new Date();
-  const data = await getMocksPageData(prisma, user.id, now);
+  const [data, access] = await Promise.all([
+    getMocksPageData(prisma, user.id, now),
+    getMockBookingAccess(prisma, user.id),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -96,36 +101,44 @@ export default async function MocksPage() {
         </section>
       )}
 
-      {/* Две карточки типов (spec 8.3) */}
-      <section className="flex flex-col gap-3">
-        <h2 className="text-[18px] font-semibold">Забронировать мок</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {TYPES.map((type) => (
-            <Link key={type} href={`/mocks/book?type=${type}`} className="group block min-w-0">
-              <Card interactive className="h-full">
-                <CardContent className="flex h-full flex-col gap-2 p-5">
-                  <div className="flex items-center gap-3">
-                    <IconTile icon={TYPE_TILE[type].icon} colorVar={TYPE_TILE[type].colorVar} />
-                    <p className="group-hover:text-accent min-w-0 flex-1 text-[16px] font-semibold">
-                      {MOCK_TYPE_LABEL[type]}
+      {/* Заход B.1: бронь открывается после первого пройденного курса. Плашка
+          страйков (выше) остаётся отдельной — это два разных сообщения. */}
+      {!access.open ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-[18px] font-semibold">Забронировать мок</h2>
+          <MockLockedNote access={access} />
+        </section>
+      ) : (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-[18px] font-semibold">Забронировать мок</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {TYPES.map((type) => (
+              <Link key={type} href={`/mocks/book?type=${type}`} className="group block min-w-0">
+                <Card interactive className="h-full">
+                  <CardContent className="flex h-full flex-col gap-2 p-5">
+                    <div className="flex items-center gap-3">
+                      <IconTile icon={TYPE_TILE[type].icon} colorVar={TYPE_TILE[type].colorVar} />
+                      <p className="group-hover:text-accent min-w-0 flex-1 text-[16px] font-semibold">
+                        {MOCK_TYPE_LABEL[type]}
+                      </p>
+                      <ArrowRight
+                        size={16}
+                        strokeWidth={1.75}
+                        className="text-text-3 group-hover:text-accent shrink-0"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <p className="text-text-2 text-[14px]">{MOCK_TYPE_DESCRIPTION[type]}</p>
+                    <p className="text-text-3 mt-auto text-[12px]">
+                      {MOCK_DURATION_MINUTES} минут с живым интервьюером
                     </p>
-                    <ArrowRight
-                      size={16}
-                      strokeWidth={1.75}
-                      className="text-text-3 group-hover:text-accent shrink-0"
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <p className="text-text-2 text-[14px]">{MOCK_TYPE_DESCRIPTION[type]}</p>
-                  <p className="text-text-3 mt-auto text-[12px]">
-                    {MOCK_DURATION_MINUTES} минут с живым интервьюером
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </section>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <p className="text-text-3 text-[13px]">
         <Link href="/mocks/mine" className="hover:text-text-1 underline underline-offset-2">

@@ -17,8 +17,10 @@ import {
 import { toast } from "@/components/ui/toast";
 import { BackButton } from "@/components/ui/back-button";
 import { cn } from "@/lib/utils/cn";
-import { applySnippet, type SnippetDef } from "@/lib/utils/editor-insert";
+import { applySnippet } from "@/lib/utils/editor-insert";
+import { snippetsFor, type SnippetDef } from "@/lib/content/editor-snippets";
 import { BlockEditor } from "@/components/features/block-editor";
+import { QuestionBankPicker } from "@/components/features/question-bank-picker";
 import {
   saveLessonContentAction,
   setLessonStatusAction,
@@ -64,87 +66,7 @@ const DURATION_FIELDS = [
 // D5 (spec 13.1): `%s` in a snippet marks where the current selection is wrapped
 // (or `placeholder` when nothing is selected) and then re-selected — so clicking a
 // directive with text selected wraps it instead of discarding it.
-interface Snippet {
-  group: string;
-  label: string;
-  hint: string;
-  snippet: string;
-  placeholder: string;
-}
-
-const SNIPPETS: Snippet[] = [
-  {
-    group: "Врезки",
-    label: "Совет",
-    hint: "Зелёная врезка с подсказкой (обернёт выделение)",
-    snippet: '\n:::callout{type="tip"}\n%s\n:::\n',
-    placeholder: "Текст совета.",
-  },
-  {
-    group: "Врезки",
-    label: "Важное",
-    hint: "Жёлтая врезка-акцент (обернёт выделение)",
-    snippet: '\n:::callout{type="important"}\n%s\n:::\n',
-    placeholder: "Важный текст.",
-  },
-  {
-    group: "Врезки",
-    label: "Предупреждение",
-    hint: "Красная врезка-предостережение (обернёт выделение)",
-    snippet: '\n:::callout{type="warning"}\n%s\n:::\n',
-    placeholder: "Предупреждение.",
-  },
-  {
-    group: "Врезки",
-    label: "Материал",
-    hint: "Серая врезка со ссылками на источники (обернёт выделение)",
-    snippet: '\n:::callout{type="material"}\n%s\n:::\n',
-    placeholder: "- [Ссылка](https://)",
-  },
-  {
-    group: "Медиа",
-    label: "Видео",
-    hint: "Встроенный YouTube-плеер",
-    snippet: '\n:::video{url="https://youtu.be/..." title="Название"}\n:::\n',
-    placeholder: "",
-  },
-  {
-    group: "Медиа",
-    label: "Практика",
-    hint: "Блок практических заданий (обернёт выделение)",
-    snippet: "\n:::practice\n%s\n:::\n",
-    placeholder: "- [Задание](https://)",
-  },
-  {
-    group: "Медиа",
-    label: "Мок-интервью",
-    hint: "CTA «Забронировать мок» (legend / theory)",
-    snippet: '\n:::mock{type="legend"}\n:::\n',
-    placeholder: "",
-  },
-  {
-    group: "Блоки",
-    label: "Код",
-    hint: "Подсветка Shiki (обернёт выделение)",
-    snippet: "\n```python\n%s\n```\n",
-    placeholder: 'print("hello")',
-  },
-  {
-    // D5 (spec 13.1): inline formula $…$ with the caret inside (no $$-block).
-    group: "Блоки",
-    label: "Формула",
-    hint: "Инлайн-формула $…$ (курсор внутри; обернёт выделение)",
-    snippet: "$%s$",
-    placeholder: "",
-  },
-  {
-    group: "Блоки",
-    label: "Таблица",
-    hint: "GFM-таблица (скроллится по горизонтали)",
-    snippet: "\n| Колонка | Колонка |\n| --- | --- |\n| Ячейка | Ячейка |\n",
-    placeholder: "",
-  },
-];
+const SNIPPETS: SnippetDef[] = snippetsFor("lesson");
 
 const SNIPPET_GROUPS = ["Врезки", "Медиа", "Блоки"];
 
@@ -179,6 +101,7 @@ export function LessonEditor({
   const [previewVersion, setPreviewVersion] = useState(0);
   const [readingMinutes, setReadingMinutes] = useState(lesson.readingMinutes);
   const [fullscreen, setFullscreen] = useState(false);
+  const [pickingQuestion, setPickingQuestion] = useState(false);
   // Walk 13.6 rail 1: the block editor is offered ONLY when segmentation is
   // provably lossless for this exact document. Computed once from the stored
   // markdown; a document that fails opens in plain text mode instead of having
@@ -266,6 +189,17 @@ export function LessonEditor({
     requestAnimationFrame(() => {
       textarea.focus();
       textarea.setSelectionRange(res.selectionStart, res.selectionEnd);
+    });
+  }
+
+  /** Заход B.1: выбранный в диалоге вопрос становится директивой в тексте. */
+  function insertQuestion(questionId: string): void {
+    insertSnippet({
+      snippet: `\n:::question{id="${questionId}"}\n:::\n`,
+      placeholder: "",
+      group: "Блоки",
+      label: "Вопрос из банка",
+      hint: "",
     });
   }
 
@@ -589,6 +523,19 @@ export function LessonEditor({
             ))}
           </div>
         ))}
+        {/* Заход B.1: вопрос из банка вставляется ВЫБОРОМ, а не набором id —
+            поэтому это не сниппет-шаблон, а кнопка с диалогом поиска. */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-text-3 text-[11px] uppercase">Вопрос</span>
+          <button
+            type="button"
+            title="Вопрос с вариантами прямо в тексте урока (выбор из банка)"
+            onClick={() => setPickingQuestion(true)}
+            className="rounded-pill border-border text-text-2 ease-app hover:border-border-strong hover:text-text-1 h-7 border px-3 text-[12px] transition-colors duration-150"
+          >
+            Вопрос из банка
+          </button>
+        </div>
         <div className="flex items-center gap-1.5">
           <span className="text-text-3 text-[11px] uppercase">Инлайн</span>
           {INLINE_MARKS.map((m) => (
@@ -651,6 +598,12 @@ export function LessonEditor({
           )}
         />
       </div>
+
+      <QuestionBankPicker
+        open={pickingQuestion}
+        onOpenChange={setPickingQuestion}
+        onPick={(row) => insertQuestion(row.id)}
+      />
     </div>
   );
 }
