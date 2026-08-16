@@ -38,62 +38,82 @@ export async function createStudent(
       opts.accessUntil === undefined ? new Date("2027-01-01T00:00:00.000Z") : opts.accessUntil,
     name: "Ученик",
   });
-  // Заход B.1: бронь мока открыта только ученику с пройденным курсом. Фикстуры
-  // моков по умолчанию дают его — иначе каждый набор о бронях проверял бы не то,
-  // что проверяет. Гейт как таковой закрыт отдельным набором (mock-course-gate).
-  if (opts.completedCourse !== false) await completeStarterCourse(user.id);
+  // Заход B.1: бронь мока открыта только ученику, прошедшему курс, который НЕ
+  // был доступен ему с самого начала. Фикстуры моков по умолчанию дают такой
+  // курс — иначе каждый набор о бронях проверял бы не то, что проверяет. Сам
+  // гейт закрыт отдельным набором (mock-course-gate).
+  if (opts.completedCourse !== false) await grantMockAccess(user.id);
   return user;
 }
 
-/**
- * Минимальный пройденный курс: один модуль, один обязательный урок, без
- * модульного теста. «Пройден» считает `isCourseComplete` — тот же предикат, что
- * у цепи курсов и у гейта брони, поэтому фикстура ничего не имитирует.
- */
-export async function completeStarterCourse(userId: string): Promise<string> {
+/** Курс с одним обязательным опубликованным уроком, без модульного теста. */
+async function ensureCourse(slug: string, title: string, order: number) {
   const existing = await testDb.course.findUnique({
-    where: { slug: "starter" },
+    where: { slug },
     include: { modules: { include: { lessons: true } } },
   });
-  const course =
-    existing ??
-    (await testDb.course.create({
-      data: {
-        slug: "starter",
-        title: "Стартовый курс",
-        gating: "free",
-        status: "published",
-        order: -1,
-        modules: {
-          create: [
-            {
-              title: "Модуль",
-              order: 0,
-              status: "published",
-              lessons: {
-                create: [
-                  { slug: "s1", title: "Урок", order: 0, status: "published", contentMd: "текст" },
-                ],
-              },
+  if (existing) return existing;
+  return testDb.course.create({
+    data: {
+      slug,
+      title,
+      gating: "free",
+      status: "published",
+      order,
+      modules: {
+        create: [
+          {
+            title: "Модуль",
+            order: 0,
+            status: "published",
+            lessons: {
+              create: [
+                {
+                  slug: slug + "-l1",
+                  title: "Урок",
+                  order: 0,
+                  status: "published",
+                  contentMd: "текст",
+                },
+              ],
             },
-          ],
-        },
+          },
+        ],
       },
-      include: { modules: { include: { lessons: true } } },
-    }));
-
-  const lessonId = course.modules[0]!.lessons[0]!.id;
-  await testDb.lessonProgress.upsert({
-    where: { userId_lessonId: { userId, lessonId } },
-    update: { status: "completed", completedAt: new Date("2026-01-01T00:00:00.000Z") },
-    create: {
-      userId,
-      lessonId,
-      status: "completed",
-      completedAt: new Date("2026-01-01T00:00:00.000Z"),
     },
+    include: { modules: { include: { lessons: true } } },
   });
-  return course.id;
+}
+
+async function completeCourse(
+  userId: string,
+  course: { modules: { lessons: { id: string }[] }[] },
+) {
+  const completedAt = new Date("2026-01-01T00:00:00.000Z");
+  for (const courseModule of course.modules) {
+    for (const lesson of courseModule.lessons) {
+      await testDb.lessonProgress.upsert({
+        where: { userId_lessonId: { userId, lessonId: lesson.id } },
+        update: { status: "completed", completedAt },
+        create: { userId, lessonId: lesson.id, status: "completed", completedAt },
+      });
+    }
+  }
+}
+
+/**
+ * Минимальная цепь под гейт брони (заход B.1): вводный курс, открытый с самого
+ * начала, и следующий за ним «заработанный». Проходятся оба — бронь открывает
+ * именно второй. Отрицательные `order` держат пару в голове цепи, чтобы курсы,
+ * которые заводит сам набор тестов, оказывались ЗА ними и стартовыми не
+ * считались. «Пройден» считает `isCourseComplete` — фикстура ничего не имитирует.
+ */
+export async function grantMockAccess(userId: string): Promise<string> {
+  const starting = await ensureCourse("starter", "Вводный курс", -100);
+  const earned = await ensureCourse("earned", "Заработанный курс", -99);
+  await completeCourse(userId, starting);
+  await completeCourse(userId, earned);
+  return earned.id;
 }
 
 export async function createSlot(

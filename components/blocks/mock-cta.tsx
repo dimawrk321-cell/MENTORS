@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Lock, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MOCK_LOCKED_TEXT, MOCK_LOCKED_TITLE } from "@/lib/constants";
+import { mockLockedText, MOCK_LOCKED_TITLE } from "@/lib/constants";
 
 const TYPE_LABEL: Record<string, string> = {
   theory: "ML-теория",
@@ -26,7 +26,7 @@ export function MockCta({
   type?: string;
   children?: ReactNode;
   /** null/undefined — бронь открыта (и предпросмотр студии, где ученика нет). */
-  locked?: { nextCourseTitle: string | null } | null;
+  locked?: { unlockingCourseTitle: string | null } | null;
 }) {
   const label = TYPE_LABEL[type] ?? type;
   return (
@@ -50,9 +50,7 @@ export function MockCta({
             {MOCK_LOCKED_TITLE}
           </p>
           <p className="text-text-2 mt-1 text-[13px]">
-            {locked.nextCourseTitle
-              ? `Сейчас в работе «${locked.nextCourseTitle}» — заверши его, и бронирование откроется.`
-              : MOCK_LOCKED_TEXT}
+            {mockLockedText(locked.unlockingCourseTitle)}
           </p>
           <Link
             href="/courses"

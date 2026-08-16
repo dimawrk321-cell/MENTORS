@@ -148,6 +148,23 @@ export async function listCourseAccess(db: Db, userId: string): Promise<CourseAc
 }
 
 /**
+ * Курсы, открытые ученику С САМОГО НАЧАЛА — стартовый префикс цепи (заход B.1).
+ *
+ * Это та же rowless-достижимость, что применяет `listCourseAccess`, но
+ * посчитанная для НУЛЯ строк доступа, то есть для только что заведённого
+ * ученика: `hasRow: () => false`. Признак позиционный, а не по слагу — по той же
+ * причине, по которой правило 3 выше не смотрит на `welcome`: снятие вводного
+ * курса с публикации или его переименование не должно менять смысл.
+ *
+ * Потребитель — гейт брони мока (7.8/B.1): «прошёл курс, который не был доступен
+ * с самого начала» = прошёл курс, которого в этом множестве нет.
+ */
+export async function listStartingCourseIds(db: Db): Promise<Set<string>> {
+  const [courses, counts] = await Promise.all([chainCourses(db), requiredLessonCounts(db)]);
+  return reachableWithoutRow(courses, counts, () => false);
+}
+
+/**
  * «Откроется после {курс}» — the nearest EARLIER course that actually gates this
  * one. Not simply `courses[index - 1]`: an empty course is a pass-through link
  * (chainTargetsAfter), so naming it would promise the student something they can

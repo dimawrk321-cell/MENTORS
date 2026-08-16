@@ -104,7 +104,7 @@ export default async function LessonPage({ params }: LessonPageProps) {
   const { content, headings } = await renderLessonContent(view.lesson.contentMd, {
     mockLocked:
       mockAccess && !mockAccess.open
-        ? { nextCourseTitle: mockAccess.nextCourse?.title ?? null }
+        ? { unlockingCourseTitle: mockAccess.unlockingCourse?.title ?? null }
         : null,
     inlineQuestion: (questionId) => {
       const entry = inlineQuestions.get(questionId);

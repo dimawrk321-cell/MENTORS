@@ -2,7 +2,7 @@ import Link from "next/link";
 import { GraduationCap, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { MOCK_LOCKED_TEXT, MOCK_LOCKED_TITLE } from "@/lib/constants";
+import { mockLockedText, MOCK_LOCKED_TITLE } from "@/lib/constants";
 import type { MockBookingAccess } from "@/lib/services/mock-access";
 
 // Объяснение закрытой брони (заход B.1, блок 3.2). Ученик без пройденного курса
@@ -22,7 +22,9 @@ export function MockLockedNote({ access }: { access: MockBookingAccess }) {
           <Lock size={17} strokeWidth={1.75} className="text-text-3 shrink-0" aria-hidden="true" />
           {MOCK_LOCKED_TITLE}
         </p>
-        <p className="text-text-2 text-[14px]">{MOCK_LOCKED_TEXT}</p>
+        <p className="text-text-2 text-[14px]">
+          {mockLockedText(access.unlockingCourse?.title ?? null)}
+        </p>
         {next && (
           <p className="text-text-3 flex items-center gap-2 text-[13px]">
             <GraduationCap size={15} strokeWidth={1.75} aria-hidden="true" />

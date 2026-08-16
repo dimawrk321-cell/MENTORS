@@ -91,7 +91,7 @@ export interface LessonRenderOptions {
    * первого курса». Не задано — CTA как раньше (предпросмотр студии: ученика
    * там нет, гейтить нечего).
    */
-  mockLocked?: { nextCourseTitle: string | null } | null;
+  mockLocked?: { unlockingCourseTitle: string | null } | null;
 }
 
 /** Renders markdown to React + returns headings for the table of contents. */
