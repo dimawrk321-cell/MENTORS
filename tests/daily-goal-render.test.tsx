@@ -32,13 +32,7 @@ describe("блок дневной цели", () => {
 
   it("главное объяснение: день засчитывает действие, а не закрытая цель", () => {
     const open = render(
-      <DailyGoal
-        todayXp={0}
-        goal={60}
-        dayKey="d"
-        todayCounted={false}
-        xpMap={DEFAULT_XP_MAP}
-      />,
+      <DailyGoal todayXp={0} goal={60} dayKey="d" todayCounted={false} xpMap={DEFAULT_XP_MAP} />,
     );
     expect(open).toContain("День в серии засчитает любое учебное действие");
 

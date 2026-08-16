@@ -26,9 +26,16 @@
 		}
 		# json даёт всё требуемое: ts, request>method, request>uri, status,
 		# duration, size, request>remote_ip, request>headers>User-Agent.
+		#
+		# СТРОКА ЗАПРОСА НЕ ПИШЕТСЯ (решение владельца, заход B.2): у ученических
+		# GET-роутов она содержательна — `/questions?q=…` это поисковый запрос по
+		# банку, то есть перечень пробелов конкретного человека. Режется у пути И
+		# у Referer: иначе тот же запрос приезжал бы в лог со следующей страницы.
 		format filter {
 			wrap json
 			fields {
+				request>uri regexp "\?.*" ""
+				request>headers>Referer regexp "\?.*" ""
 				request>headers>Cookie delete
 				request>headers>Authorization delete
 				resp_headers>Set-Cookie delete

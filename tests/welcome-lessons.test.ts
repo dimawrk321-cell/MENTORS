@@ -68,6 +68,37 @@ describe("addMissingWelcomeLessons", () => {
     expect(added.order).toBeGreaterThan(after[after.length - 2]!.order);
   });
 
+  // Тот самый инвариант, ради которого дозаливка сверяется по slug, а не по
+  // содержимому: ментор переписал «Правила игры» под себя — повторный прогон
+  // скрипта обязан оставить его текст в покое.
+  it("переписанный ментором урок повторный прогон НЕ трогает", async () => {
+    await ensureWelcomeCourse(testDb);
+    const rules = (await welcomeLessons()).find((l) => l.slug === "pravila-igry")!;
+    await testDb.lesson.update({
+      where: { id: rules.id },
+      data: {
+        title: "Правила игры (версия Димы)",
+        contentMd: "Полностью свой текст ментора.\n\nВторой абзац.",
+        status: "draft",
+        order: 1,
+      },
+    });
+    const edited = await testDb.lesson.findUniqueOrThrow({ where: { id: rules.id } });
+
+    const result = await addMissingWelcomeLessons(testDb);
+    expect(result.added).toEqual([]);
+
+    const after = await testDb.lesson.findUniqueOrThrow({ where: { id: rules.id } });
+    expect(after.contentMd).toBe("Полностью свой текст ментора.\n\nВторой абзац.");
+    expect(after.title).toBe("Правила игры (версия Димы)");
+    // Ни статус, ни порядок, ни отметка изменения не тронуты — записи не было.
+    expect(after.status).toBe("draft");
+    expect(after.order).toBe(1);
+    expect(after.updatedAt.getTime()).toBe(edited.updatedAt.getTime());
+    // Дубликата рядом тоже не появилось.
+    expect((await welcomeLessons()).filter((l) => l.slug === "pravila-igry")).toHaveLength(1);
+  });
+
   it("повторный прогон — ноль изменений", async () => {
     await ensureWelcomeCourse(testDb);
     const first = await addMissingWelcomeLessons(testDb);

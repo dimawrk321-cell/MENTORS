@@ -20,16 +20,29 @@ vi.mock("@/lib/actions/questions-admin", () => ({
   searchQuizQuestionsAction: async () => ({ ok: true, data: [] }),
 }));
 
-const BASE = {
+const BASE: {
+  id: string;
+  title: string;
+  slug: string;
+  contentMd: string;
+  videoUrl: string;
+  difficulty: "intro" | "base" | "advanced";
+  isOptional: boolean;
+  readingMinutes: number;
+  pathPolicy: "combined" | "choose_one" | "video_only" | "text_only";
+  textMinutes: number | null;
+  videoMinutes: number | null;
+  practiceMinutes: number | null;
+} = {
   id: "l1",
   title: "Урок про метрики",
   slug: "metriki",
   contentMd: "Текст урока.\n",
   videoUrl: "",
-  difficulty: "base" as const,
+  difficulty: "base",
   isOptional: false,
   readingMinutes: 7,
-  pathPolicy: "combined" as const,
+  pathPolicy: "combined",
   textMinutes: null,
   videoMinutes: null,
   practiceMinutes: null,
@@ -37,11 +50,7 @@ const BASE = {
 
 function render(overrides: Partial<typeof BASE> & { status: "draft" | "published" }): string {
   return renderToStaticMarkup(
-    <LessonEditor
-      lesson={{ ...BASE, ...overrides }}
-      courseTitle="Курс"
-      moduleTitle="Модуль"
-    />,
+    <LessonEditor lesson={{ ...BASE, ...overrides }} courseTitle="Курс" moduleTitle="Модуль" />,
   );
 }
 
