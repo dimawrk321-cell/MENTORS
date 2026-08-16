@@ -113,6 +113,20 @@ describe("listQuestionsCatalogGrouped (walk 13.5 block 1)", () => {
     expect(res.groups[0]!.questions[0]!.teaser).toBe("Второй");
   });
 
+  it("без глобального лимита возвращает все доступные категории и их вопросы", async () => {
+    for (let i = 0; i < 15; i += 1) {
+      await makeQuestion({ categoryId: root0, text: `Classic ${i}` });
+    }
+    await makeQuestion({ categoryId: root1, text: "Python one" });
+
+    const res = await listQuestionsCatalogGrouped(testDb, {});
+
+    expect(res.total).toBe(16);
+    expect(res.groups.map((group) => group.title)).toEqual(["Classic ML", "Python"]);
+    expect(res.groups[0]!.questions).toHaveLength(15);
+    expect(res.groups[1]!.questions).toHaveLength(1);
+  });
+
   it("строки несут teaser + isShort (эталон не грузится здесь)", async () => {
     await makeQuestion({ categoryId: root0, text: "Что такое точность?" }); // короткий
     const longText =

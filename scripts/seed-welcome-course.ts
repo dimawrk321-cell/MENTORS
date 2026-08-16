@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
-import { ensureWelcomeCourse, pinWelcomeFirstInTracks } from "@/lib/services/welcome-course";
+import {
+  addMissingWelcomeLessons,
+  ensureWelcomeCourse,
+  pinWelcomeFirstInTracks,
+} from "@/lib/services/welcome-course";
 
 // Thin CLI wrapper (walk 12.3 P4). Since walk 13.2 block 4 the welcome course is
 // part of the main seed (prisma/seed.ts); this script remains for one-off runs
@@ -11,6 +15,10 @@ async function main(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
 
   const welcomeId = await ensureWelcomeCourse(prisma, dryRun);
+  // Существующий курс ensureWelcomeCourse не трогает (инвариант: правки ментора
+  // не затираем), поэтому недостающие уроки доносим отдельно — сверкой по slug.
+  console.log(`Уроки курса (${dryRun ? "предпросмотр" : "дозаливка"}):`);
+  await addMissingWelcomeLessons(prisma, dryRun);
   console.log(`Треки (${dryRun ? "предпросмотр" : "обновление"} course_ids):`);
   await pinWelcomeFirstInTracks(prisma, welcomeId, dryRun);
 

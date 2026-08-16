@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import type { QuestionType } from "@prisma/client";
 import { MessageCircleQuestion, Search } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -31,11 +30,8 @@ interface QuestionsPageProps {
     difficulty?: string;
     lagging?: string;
     category?: string;
-    page?: string;
   }>;
 }
-
-const PAGE_SIZE = 40;
 
 function filterHref(
   params: Record<string, string | undefined>,
@@ -63,8 +59,6 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
     ? (Number(params.difficulty) as 1 | 2 | 3)
     : undefined;
   const lagging = params.lagging === "1";
-  const requestedPage = /^\d+$/.test(params.page ?? "") ? Number(params.page) : 1;
-  const currentPage = Math.max(1, requestedPage);
   const anyFilter = Boolean(params.q?.trim() || type || difficulty || lagging || params.category);
   // «Мои западающие» — единственный активный фильтр (для пустого состояния 5.5):
   // отдельный предикат, т.к. lagging входит в anyFilter (иначе ветка недостижима).
@@ -85,24 +79,7 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
     difficulty,
     ids: laggingIds,
     access,
-    offset: (currentPage - 1) * PAGE_SIZE,
-    limit: PAGE_SIZE,
   });
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (currentPage > totalPages) {
-    redirect(
-      filterHref(
-        {
-          q: params.q,
-          type: params.type,
-          difficulty: params.difficulty,
-          lagging: params.lagging,
-          category: params.category,
-        },
-        { page: totalPages > 1 ? String(totalPages) : undefined },
-      ),
-    );
-  }
   const inSrs = await getUserCardQuestionIds(
     prisma,
     user.id,
@@ -198,10 +175,16 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
-        <p className="text-text-3">
-          {total} {pluralRu(total, "вопрос", "вопроса", "вопросов")}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-2 text-[13px]">
+        <div>
+          <p className="text-text-2 font-medium">
+            {total} {pluralRu(total, "вопрос", "вопроса", "вопросов")} в {groups.length}{" "}
+            {pluralRu(groups.length, "категории", "категориях", "категориях")}
+          </p>
+          {total > 0 && (
+            <p className="text-text-3 mt-0.5">Раскрой тему — вопросы загружаются порциями.</p>
+          )}
+        </div>
         {anyFilter && (
           <Link href="/questions" className="text-accent hover:text-accent-hover font-medium">
             Сбросить поиск и фильтры
@@ -230,37 +213,20 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
           />
         </Card>
       ) : (
-        <>
-          {/* Аккордеон + ленивая подгрузка эталона при раскрытии (walk 13.5). */}
-          <CatalogAccordion groups={groups} inSrsIds={[...inSrs]} anyFilter={anyFilter} />
-          {totalPages > 1 && (
-            <nav aria-label="Страницы банка вопросов" className="flex items-center justify-between">
-              {currentPage > 1 ? (
-                <Button asChild variant="secondary">
-                  <Link
-                    href={filterHref(plain, {
-                      page: currentPage === 2 ? undefined : String(currentPage - 1),
-                    })}
-                  >
-                    Назад
-                  </Link>
-                </Button>
-              ) : (
-                <span />
-              )}
-              <span className="text-text-3 text-[13px]">
-                Страница {currentPage} из {totalPages}
-              </span>
-              {currentPage < totalPages ? (
-                <Button asChild variant="secondary">
-                  <Link href={filterHref(plain, { page: String(currentPage + 1) })}>Дальше</Link>
-                </Button>
-              ) : (
-                <span />
-              )}
-            </nav>
-          )}
-        </>
+        /* Все доступные категории видны сразу. Вопросы и эталоны раскрываются
+           порциями уже внутри выбранной категории. */
+        <CatalogAccordion
+          groups={groups}
+          inSrsIds={[...inSrs]}
+          anyFilter={anyFilter}
+          resultKey={[
+            params.q?.trim() ?? "",
+            params.type ?? "",
+            params.difficulty ?? "",
+            params.lagging ?? "",
+            params.category ?? "",
+          ].join(":")}
+        />
       )}
     </div>
   );

@@ -74,6 +74,9 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      # Заход B.2: access-log на именованном томе — пересоздание контейнера при
+      # деплое не уносит историю; ротацию держит сам Caddy (см. Caddyfile).
+      - caddy_logs:/var/log/caddy
 
   # One-shot dev-seed (owner + 2 mentors, tracks, demo course, 8 categories,
   # achievements — spec 18 / seed.ts). Uses the builder target because the seed
@@ -121,3 +124,4 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  caddy_logs:

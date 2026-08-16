@@ -34,6 +34,7 @@ type RowState =
 // Module-level cache: survives collapse/reopen and re-renders within the session
 // (spec: «кэш на клиенте»). Keyed by question id — ids are unique.
 const answerCache = new Map<string, CatalogPayload>();
+const CATEGORY_CHUNK_SIZE = 12;
 
 function AnswerSkeleton() {
   return (
@@ -145,44 +146,86 @@ export function CatalogAccordion({
   groups,
   inSrsIds,
   anyFilter,
+  resultKey,
 }: {
   groups: CatalogGroup[];
   inSrsIds: string[];
   anyFilter: boolean;
+  resultKey: string;
 }) {
   const inSrs = new Set(inSrsIds);
   return (
     <div className="flex flex-col gap-2">
       {groups.map((group) => (
-        // Обзор банка по умолчанию компактный: ученик сначала выбирает тему.
-        // После поиска/фильтра совпадения раскрываются, чтобы результат был виден сразу.
-        <details
-          key={group.categoryId}
-          open={anyFilter}
-          className="rounded-card border-border bg-surface-1 group/cat overflow-hidden border"
-        >
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 select-none [&::-webkit-details-marker]:hidden">
-            <ChevronDown
-              size={16}
-              strokeWidth={1.75}
-              className="text-text-3 ease-app shrink-0 transition-transform duration-200 group-open/cat:rotate-180"
-              aria-hidden="true"
-            />
-            <CategoryChip title={group.title} colorIndex={group.colorIndex} />
-            <span className="text-text-3 shrink-0 text-[13px] tabular-nums">
-              {group.questions.length}
-            </span>
-          </summary>
-
-          <ul className="border-border border-t px-3 sm:px-4">
-            {group.questions.map((question) => (
-              <li key={question.id}>
-                <CatalogRow question={question} inSrs={inSrs.has(question.id)} />
-              </li>
-            ))}
-          </ul>
-        </details>
+        <CatalogCategory
+          key={`${group.categoryId}:${resultKey}`}
+          group={group}
+          inSrs={inSrs}
+          defaultOpen={anyFilter}
+        />
       ))}
     </div>
+  );
+}
+
+function CatalogCategory({
+  group,
+  inSrs,
+  defaultOpen,
+}: {
+  group: CatalogGroup;
+  inSrs: Set<string>;
+  defaultOpen: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [visibleCount, setVisibleCount] = useState(CATEGORY_CHUNK_SIZE);
+  const visibleQuestions = group.questions.slice(0, visibleCount);
+  const remaining = group.questions.length - visibleQuestions.length;
+  const nextChunk = Math.min(CATEGORY_CHUNK_SIZE, remaining);
+
+  return (
+    // Обзор банка по умолчанию компактный: все темы видны, но закрыты. После
+    // поиска/фильтра совпавшие темы раскрываются, чтобы результат был виден сразу.
+    <details
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      className="rounded-card border-border bg-surface-1 group/cat overflow-hidden border"
+    >
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 select-none [&::-webkit-details-marker]:hidden">
+        <ChevronDown
+          size={16}
+          strokeWidth={1.75}
+          className="text-text-3 ease-app shrink-0 transition-transform duration-200 group-open/cat:rotate-180"
+          aria-hidden="true"
+        />
+        <CategoryChip title={group.title} colorIndex={group.colorIndex} />
+        <span className="text-text-3 ml-auto shrink-0 text-[13px] tabular-nums">
+          {group.questions.length}
+        </span>
+      </summary>
+
+      <ul className="border-border border-t px-3 sm:px-4">
+        {visibleQuestions.map((question) => (
+          <li key={question.id}>
+            <CatalogRow question={question} inSrs={inSrs.has(question.id)} />
+          </li>
+        ))}
+      </ul>
+
+      {remaining > 0 && (
+        <div className="border-border flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2 sm:px-4">
+          <span className="text-text-3 text-[12px] tabular-nums">
+            Показано {visibleQuestions.length} из {group.questions.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => setVisibleCount((count) => count + CATEGORY_CHUNK_SIZE)}
+            className="text-accent hover:text-accent-hover focus-visible:ring-accent rounded-control min-h-10 px-2 text-[13px] font-medium focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Показать ещё {nextChunk}
+          </button>
+        </div>
+      )}
+    </details>
   );
 }

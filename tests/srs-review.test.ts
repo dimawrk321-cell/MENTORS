@@ -331,6 +331,39 @@ describe("статистика и агрегаторы", () => {
     });
   });
 
+  // Заход B.2, хвост 4.4: «выучено» — про текущую колоду, а не про историю.
+  it("getTrainerStats: снятый с публикации вопрос уходит из «выучено», но история остаётся", async () => {
+    const user = await makeStudent();
+    const category = await makeCategory({ slug: "c", title: "C" });
+    const learned = await makeCard(user.id, category.id, { step: 5 });
+    const alsoLearned = await makeCard(user.id, category.id, { step: 5 });
+    await testDb.srsReview.create({
+      data: {
+        cardId: learned.id,
+        grade: "good",
+        reviewedAt: addDays(NOW, -1),
+        prevStep: 4,
+        newStep: 5,
+      },
+    });
+
+    expect((await getTrainerStats(testDb, { userId: user.id, now: NOW })).learnedCount).toBe(2);
+
+    await testDb.question.update({
+      where: { id: learned.questionId },
+      data: { status: "draft" },
+    });
+
+    const after = await getTrainerStats(testDb, { userId: user.id, now: NOW });
+    // Счётчик сошёлся с тем, что ученик реально видит в очереди…
+    expect(after.learnedCount).toBe(1);
+    // …а «отвечено всего» осталось историей: ответ был, его не отменяли.
+    expect(after.answeredTotal).toBe(1);
+    // Карточка не удалена — вернётся, если вопрос опубликуют снова.
+    expect(await testDb.srsCard.count({ where: { id: alsoLearned.id } })).toBe(1);
+    expect(await testDb.srsCard.count({ where: { id: learned.id } })).toBe(1);
+  });
+
   it("западающие темы: топ-3 корневых по доле again, скрыт при <20 ответов", async () => {
     const user = await makeStudent();
     const rootA = await makeCategory({ slug: "a", title: "A" });

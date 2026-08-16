@@ -25,7 +25,7 @@ import { listCoursesForStudent } from "@/lib/services/content";
 import { hasVisibleGuides } from "@/lib/services/guides";
 import { getStreakState, processStreakDay } from "@/lib/services/streak";
 import { getTodayXp, getXpSummary } from "@/lib/services/xp";
-import { getLevelTitles } from "@/lib/services/settings";
+import { getLevelTitles, getXpMap } from "@/lib/services/settings";
 import { titleForLevel } from "@/lib/services/level-titles";
 import { formatDateOnlyRu, formatDateTimeRu, localDateStr, pluralRu } from "@/lib/utils/dates";
 import { CategoryChip } from "@/components/features/category-chip";
@@ -34,7 +34,7 @@ import { ProgressRing } from "@/components/features/progress-ring";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { GoalRing } from "@/components/features/goal-ring";
+import { DailyGoal } from "@/components/features/daily-goal";
 import { StreakBadge } from "@/components/features/streak-badge";
 import { LevelBadge } from "@/components/features/level-badge";
 import { ActivityBar } from "@/components/features/activity-bar";
@@ -84,6 +84,7 @@ export default async function DashboardPage() {
     activityBar,
     activeMock,
     levelTitles,
+    xpMap,
     guidesEnabled,
   ] = await Promise.all([
     getStreakState(prisma, {
@@ -101,6 +102,8 @@ export default async function DashboardPage() {
     loadActivityBar(user.id, user.timezone, todayStr),
     getActiveBooking(prisma, user.id, now),
     getLevelTitles(prisma),
+    // Заход B.2: значения начислений — из настроек платформы, не из вёрстки.
+    getXpMap(prisma),
     // Same D6 gate the layout applies to the sidebar and bottom nav.
     hasVisibleGuides(prisma, {
       resume: user.guidesResumeEnabled,
@@ -205,7 +208,15 @@ export default async function DashboardPage() {
             </span>
           </div>
         </div>
-        <GoalRing value={todayXp} goal={user.dailyGoalXp} dayKey={todayStr} size={88} />
+        {/* Заход B.2: цель с числами и объяснением — кольцо само по себе не
+            отвечало на вопрос «что сделать, чтобы день засчитался». */}
+        <DailyGoal
+          todayXp={todayXp}
+          goal={user.dailyGoalXp}
+          dayKey={todayStr}
+          todayCounted={streak.todayCounted}
+          xpMap={xpMap}
+        />
       </section>
 
       {/* Hero «Продолжить» — полноградиентная карточка (design «Главная v2») */}

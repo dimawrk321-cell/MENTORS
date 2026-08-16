@@ -538,9 +538,24 @@ export async function getTrainerStats(
 ): Promise<TrainerStats> {
   const now = input.now ?? new Date();
   const since = addDays(now, -30);
+  // Заход B.2, хвост 4.4: «выучено» — утверждение о ТЕКУЩЕМ состоянии колоды, а
+  // не история, поэтому оно обязано считать ровно те карточки, которые ученик
+  // видит в очереди. Раньше фильтра не было, и счётчик расходился с очередью у
+  // всех, кто успел выучить снятый с публикации вопрос (или чью категорию
+  // закрыла цепь курсов). Предикат тот же, что у `getSrsQueue`, — второго
+  // определения видимости не заводим.
+  // «Отвечено всего» и точность 30 дней остаются без фильтра осознанно: это
+  // история ответов, и она не меняется от того, что вопрос позже спрятали.
+  const access = await getQuestionAccess(db, input.userId);
   const [answeredTotal, learnedCount, reviews30, good30] = await Promise.all([
     db.srsReview.count({ where: { card: { userId: input.userId } } }),
-    db.srsCard.count({ where: { userId: input.userId, step: SRS_LEARNED_STEP } }),
+    db.srsCard.count({
+      where: {
+        userId: input.userId,
+        step: SRS_LEARNED_STEP,
+        question: { status: "published", ...visibleQuestionWhere(access) },
+      },
+    }),
     db.srsReview.count({ where: { card: { userId: input.userId }, reviewedAt: { gte: since } } }),
     db.srsReview.count({
       where: { card: { userId: input.userId }, grade: "good", reviewedAt: { gte: since } },

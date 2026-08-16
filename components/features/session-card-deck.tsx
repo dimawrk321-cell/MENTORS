@@ -96,6 +96,7 @@ export function SessionCardDeck({
   exitHref,
   exitLabel,
   exitConfirm,
+  note,
   onFlip,
   onGrade,
 }: {
@@ -109,6 +110,8 @@ export function SessionCardDeck({
   exitHref: string;
   exitLabel: string;
   exitConfirm: string;
+  /** Строка режима под счётчиком (заход B.2): чем этот прогон отличается. */
+  note?: string;
   onFlip: (next: boolean) => void;
   onGrade: (grade: DeckGrade) => void;
 }) {
@@ -236,6 +239,7 @@ export function SessionCardDeck({
         <div className="flex items-center justify-between">
           <p className="text-text-2 text-[13px]" aria-live="polite">
             {index + 1} / {total}
+            {note && <span className="text-text-3 ml-2 text-[12px]">{note}</span>}
           </p>
           {/* Hierarchical exit with confirm (spec 12.1/C7). */}
           <BackButton href={exitHref} label={exitLabel} confirmMessage={exitConfirm} />

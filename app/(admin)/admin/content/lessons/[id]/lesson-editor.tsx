@@ -2,8 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronRight, Copy, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  ExternalLink,
+  EyeOff,
+  Maximize2,
+  Minimize2,
+  Save,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -17,6 +25,7 @@ import {
 import { toast } from "@/components/ui/toast";
 import { BackButton } from "@/components/ui/back-button";
 import { cn } from "@/lib/utils/cn";
+import { lessonDurationLabel } from "@/lib/utils/lesson-path";
 import { applySnippet } from "@/lib/utils/editor-insert";
 import { snippetsFor, type SnippetDef } from "@/lib/content/editor-snippets";
 import { BlockEditor } from "@/components/features/block-editor";
@@ -126,6 +135,28 @@ export function LessonEditor({
   const wordCount = useMemo(
     () => (content.trim() ? content.trim().split(/\s+/).length : 0),
     [content],
+  );
+
+  // Ровно та строка, что стоит чипом на странице урока, — считается тем же
+  // `lessonDurationLabel`, второй формулы длительности нет (заход B.2, 3.2).
+  const durationPreview = useMemo(
+    () =>
+      lessonDurationLabel({
+        readingMinutes,
+        textMinutes: meta.textMinutes === "" ? null : Number(meta.textMinutes),
+        videoMinutes: meta.videoMinutes === "" ? null : Number(meta.videoMinutes),
+        practiceMinutes: meta.practiceMinutes === "" ? null : Number(meta.practiceMinutes),
+        pathPolicy: meta.pathPolicy as EditorLesson["pathPolicy"],
+        hasVideo: meta.videoUrl.trim().length > 0,
+      }),
+    [
+      readingMinutes,
+      meta.textMinutes,
+      meta.videoMinutes,
+      meta.practiceMinutes,
+      meta.pathPolicy,
+      meta.videoUrl,
+    ],
   );
 
   const flushSave = useCallback((): Promise<boolean> => {
@@ -312,7 +343,7 @@ export function LessonEditor({
         fullscreen && "bg-bg fixed inset-0 z-50 overflow-auto p-4",
       )}
     >
-      {/* Breadcrumbs + actions (spec 12.1/C10) */}
+      {/* Breadcrumbs (spec 12.1/C10) */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <BackButton href="/admin/content" label="Контент" className="w-auto" />
         <Crumb>{courseTitle}</Crumb>
@@ -322,47 +353,99 @@ export function LessonEditor({
             design prescribes — only the element changes, so the screen has an
             h1 instead of a section h2 being its largest heading. */}
         <h1 className="text-text-1 max-w-[220px] truncate text-[13px] font-medium">{meta.title}</h1>
-        <span className="text-text-3 ml-auto text-[12px] tabular-nums" aria-live="polite">
-          {saveLabel} · {readingMinutes} мин · {wordCount} сл.
+      </div>
+
+      {/* Панель действий (заход B.2, блок 3.1). Жалоба ментора: «непонятно, как
+          опубликовать». Раньше всё стояло одной строкой с крошками, «Опубликовать»
+          было secondary, а самой заметной кнопкой — «Открыть как ученика», то
+          есть просмотр. Теперь: слева состояние урока словами (что видит ученик),
+          справа два главных действия — сохранить и опубликовать; просмотр,
+          копирование ссылки и полный экран ушли во второй план. */}
+      <div className="rounded-card border-border bg-surface-1 flex flex-wrap items-center gap-x-3 gap-y-2 border p-3">
+        <span
+          className={cn(
+            "rounded-pill inline-flex items-center gap-1.5 px-3 py-[5px] text-[13px] font-medium",
+            lesson.status === "published"
+              ? "bg-success/12 text-success"
+              : "bg-warning/12 text-warning",
+          )}
+        >
+          {lesson.status === "published" ? (
+            <Check size={14} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <EyeOff size={14} strokeWidth={1.75} aria-hidden="true" />
+          )}
+          {lesson.status === "published" ? "Опубликован" : "Черновик"}
         </span>
-        {lesson.status === "published" ? (
-          <Badge variant="success">опубликован</Badge>
-        ) : (
-          <Badge variant="warning">черновик</Badge>
-        )}
-        <Button variant="secondary" size="sm" loading={pending} onClick={togglePublish}>
-          {lesson.status === "published" ? "В черновик" : "Опубликовать"}
-        </Button>
+        <span className="text-text-3 text-[12px]">
+          {lesson.status === "published"
+            ? "Ученики видят этот урок"
+            : "Ученики его не видят — опубликуй, когда будет готов"}
+        </span>
+
+        <span className="ml-auto flex flex-wrap items-center gap-2">
+          <span className="text-text-3 text-[12px] tabular-nums" aria-live="polite">
+            {saveLabel}
+          </span>
+          {/* Автосейв остаётся, но кнопка нужна: без неё ментор не знает, что
+              урок вообще сохраняется, и ищет «Сохранить» глазами. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={saveState === "saving"}
+            disabled={saveState === "saved"}
+            onClick={() => void flushSave()}
+          >
+            <Save size={14} strokeWidth={1.75} aria-hidden="true" />
+            {saveState === "saved" ? "Сохранено" : "Сохранить"}
+          </Button>
+          <Button
+            variant={lesson.status === "published" ? "secondary" : "gradient"}
+            size="sm"
+            loading={pending}
+            onClick={togglePublish}
+          >
+            {lesson.status === "published" ? "Снять с публикации" : "Опубликовать"}
+          </Button>
+        </span>
+      </div>
+
+      {/* Второстепенное: просмотр, ссылка, полный экран. */}
+      <div className="text-text-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+        <span className="tabular-nums">
+          {readingMinutes} мин · {wordCount} сл.
+        </span>
         {/* DECISION: студенческая зона закрыта для mentor+, поэтому «Открыть как
             ученика» открывает полностраничный превью-рендер (тот же LessonRenderer). */}
-        <Button asChild variant="primary" size="sm">
-          <a href={`/content-preview/${lesson.id}`} target="_blank" rel="noreferrer">
-            <ExternalLink size={14} strokeWidth={1.75} aria-hidden="true" />
-            Открыть как ученика
-          </a>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={copyPreviewLink}
-          aria-label="Скопировать ссылку на превью"
-          title="Скопировать ссылку на превью"
+        <a
+          href={`/content-preview/${lesson.id}`}
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-text-1 ease-app inline-flex items-center gap-1.5 transition-colors duration-150"
         >
-          <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
+          <ExternalLink size={13} strokeWidth={1.75} aria-hidden="true" />
+          Открыть как ученика
+        </a>
+        <button
+          type="button"
+          onClick={copyPreviewLink}
+          className="hover:text-text-1 ease-app inline-flex items-center gap-1.5 transition-colors duration-150"
+        >
+          <Copy size={13} strokeWidth={1.75} aria-hidden="true" />
+          Скопировать ссылку
+        </button>
+        <button
+          type="button"
           onClick={() => setFullscreen((v) => !v)}
-          aria-label={fullscreen ? "Выйти из полноэкранного режима" : "Полноэкранный режим"}
-          title={fullscreen ? "Выйти (Esc)" : "Полноэкранный режим"}
+          className="hover:text-text-1 ease-app inline-flex items-center gap-1.5 transition-colors duration-150"
         >
           {fullscreen ? (
-            <Minimize2 size={14} strokeWidth={1.75} aria-hidden="true" />
+            <Minimize2 size={13} strokeWidth={1.75} aria-hidden="true" />
           ) : (
-            <Maximize2 size={14} strokeWidth={1.75} aria-hidden="true" />
+            <Maximize2 size={13} strokeWidth={1.75} aria-hidden="true" />
           )}
-        </Button>
+          {fullscreen ? "Выйти из полного экрана (Esc)" : "Полный экран"}
+        </button>
       </div>
 
       {/* Metadata — hidden in fullscreen to maximise the editing surface. */}
@@ -448,6 +531,11 @@ export function LessonEditor({
               «На выбор» сохраняет выбранный учеником путь; квиз и завершение остаются общими.
             </p>
           </div>
+          {/* Время урока (заход B.2, блок 3.2). Механизм переопределения уже был
+              (поля text/video/practice_minutes, коммит e2d7f7e) — не хватало
+              главного: ментор не видел, ЧТО показывается ученику сейчас и что
+              автооценку можно перебить. Автоматическое значение стоит подсказкой
+              прямо в поле; пустое поле = автооценка, заполненное = ручное. */}
           {DURATION_FIELDS.map(({ key, label, placeholder }) => (
             <div key={key} className="flex flex-col gap-1.5">
               <label htmlFor={`lesson-${key}`} className="text-text-2 text-[13px]">
@@ -465,10 +553,17 @@ export function LessonEditor({
                     [key]: event.target.value === "" ? "" : Number(event.target.value),
                   })
                 }
-                placeholder={placeholder}
+                placeholder={
+                  key === "textMinutes" ? `Автоматически: ${readingMinutes}` : placeholder
+                }
               />
             </div>
           ))}
+          <div className="text-text-3 text-[12px] md:col-span-2 lg:col-span-4">
+            Ученик увидит: <span className="text-text-2">{durationPreview}</span>. Пусто — время
+            текста считается автоматически по объёму ({readingMinutes} мин); впиши своё число, если
+            автооценка врёт.
+          </div>
           <div className="md:col-span-2 lg:col-span-4">
             <Button variant="secondary" size="sm" loading={pending} onClick={saveMeta}>
               Сохранить метаданные

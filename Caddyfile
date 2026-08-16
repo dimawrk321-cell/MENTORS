@@ -6,6 +6,35 @@
 {$SITE_ADDRESS} {
 	encode zstd gzip
 	reverse_proxy web:3000
+
+	# Access-log (заход B.2, хвост 4.2). Файл лежит на ИМЕНОВАННОМ ТОМЕ
+	# (caddy_logs), а не в слое контейнера: пересоздание контейнера при деплое
+	# не должно уносить историю запросов. Ротация — средствами самого Caddy,
+	# внешний logrotate не нужен.
+	#
+	# Приватность: логи локальные, наружу не уходят (принцип 0.7 «никакой
+	# телеметрии наружу»), срок жизни ограничен ротацией — 14 дней (336h).
+	# Заголовки Cookie и Authorization УДАЛЯЮТСЯ явным фильтром, а не «по
+	# умолчанию»: сессионный токен в логе — это лежащий на диске ключ от
+	# аккаунта (spec 11: в БД и логах только хеши). Set-Cookie в ответе — то же
+	# самое, поэтому режется вместе с ними.
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10MiB
+			roll_keep 5
+			roll_keep_for 336h
+		}
+		# json даёт всё требуемое: ts, request>method, request>uri, status,
+		# duration, size, request>remote_ip, request>headers>User-Agent.
+		format filter {
+			wrap json
+			fields {
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
 }
 
 # Transitional 301 from the previous sslip.io name during the IP migration

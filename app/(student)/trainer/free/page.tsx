@@ -23,7 +23,7 @@ export default async function FreeTrainingSetupPage() {
       <BackButton href="/trainer" label="Тренажёр" />
       <PageHeader
         title="Свободная тренировка"
-        subtitle="Прогон по выбранному набору — без порога и без расхода дневной очереди"
+        subtitle="Прогон по выбранному набору: без порога, без расхода дневной очереди. XP и серия за него не начисляются — день засчитывает основная очередь"
       />
       <FreeTrainingSetup sources={sources} />
     </div>

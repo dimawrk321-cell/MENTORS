@@ -7,7 +7,7 @@ import { getUserAchievements } from "@/lib/services/achievements";
 import { getNotificationMatrix } from "@/lib/services/notifications";
 import { getTelegramLinkStatus } from "@/lib/services/telegram/linking";
 import { getXpSummary } from "@/lib/services/xp";
-import { getLevelTitles } from "@/lib/services/settings";
+import { getLevelTitles, getXpMap } from "@/lib/services/settings";
 import { titleForLevel } from "@/lib/services/level-titles";
 import { logoutAction } from "@/lib/actions/auth";
 import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AchievementIcon } from "@/components/features/achievement-icon";
 import { LevelBadge } from "@/components/features/level-badge";
+import { XpExplainer } from "@/components/features/xp-explainer";
 import { ChangePasswordForm } from "./change-password-form";
 import { NameForm } from "./name-form";
 import { EmailVerifyForm } from "./email-verify-form";
@@ -32,14 +33,16 @@ export const metadata: Metadata = {
 // stages 2/5/9 per plan.
 export default async function ProfilePage() {
   const { user, session } = await requireStudentZone();
-  const [devices, achievements, notificationMatrix, xp, levelTitles, telegram] = await Promise.all([
-    prisma.device.findMany({ where: { userId: user.id }, orderBy: { lastSeenAt: "desc" } }),
-    getUserAchievements(prisma, user.id),
-    getNotificationMatrix(prisma, user.id),
-    getXpSummary(prisma, user.id),
-    getLevelTitles(prisma),
-    getTelegramLinkStatus(prisma, user.id),
-  ]);
+  const [devices, achievements, notificationMatrix, xp, levelTitles, telegram, xpMap] =
+    await Promise.all([
+      prisma.device.findMany({ where: { userId: user.id }, orderBy: { lastSeenAt: "desc" } }),
+      getUserAchievements(prisma, user.id),
+      getNotificationMatrix(prisma, user.id),
+      getXpSummary(prisma, user.id),
+      getLevelTitles(prisma),
+      getTelegramLinkStatus(prisma, user.id),
+      getXpMap(prisma),
+    ]);
   // D7 (spec 13.1): level + editable title in the profile header.
   const levelTitle = titleForLevel(xp.level.level, levelTitles);
 
@@ -106,6 +109,10 @@ export default async function ProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Заход B.2: справка «за что XP и что засчитывает день» — сюда ведёт
+          ссылка из блока дневной цели на дашборде. */}
+      <XpExplainer xpMap={xpMap} goal={user.dailyGoalXp} />
 
       <Card>
         <CardHeader>
