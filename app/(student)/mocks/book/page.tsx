@@ -19,17 +19,24 @@ import {
   type SlotDay,
 } from "@/lib/services/mock-queries";
 import {
-  BOOKING_RULES_LINE,
+  bookingRulesLine,
   CANCEL_FREE_HOURS,
   MOCK_TYPE_DESCRIPTION,
   MOCK_TYPE_LABEL,
+  STRIKE_LOCK_DAYS,
 } from "@/lib/constants";
+import {
+  getNumericSetting,
+  OPS_CANCEL_FREE_HOURS_KEY,
+  OPS_STRIKE_LOCK_DAYS_KEY,
+} from "@/lib/services/settings";
 import {
   formatDateRu,
   formatDateTimeRu,
   formatDayHeadingRu,
   formatTimeRu,
   localDateStr,
+  pluralRu,
 } from "@/lib/utils/dates";
 import { categoryColorVar, categoryTextColor } from "@/lib/utils/category-color";
 import { Card, CardContent } from "@/components/ui/card";
@@ -163,6 +170,14 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
   // Гейты: лок за страйки — общий; «одна активная бронь» — только для новой брони
   // (при переносе активная бронь и есть та, что переносим) (spec 7.8/13.4 block 3.2).
   const state = await getMocksPageData(prisma, user.id, now);
+  // Заход B.2 (правка владельца): окно бесплатной отмены и срок лока — из
+  // настроек платформы (`ops_cancel_free_hours` / `ops_strike_lock_days`), теми же
+  // геттерами, что применяют cancelBooking и computeBookingLock. Раньше страница
+  // называла 24 и 14 константами и врала бы сразу после правки настройки.
+  const [cancelFreeHours, lockDays] = await Promise.all([
+    getNumericSetting(prisma, OPS_CANCEL_FREE_HOURS_KEY, CANCEL_FREE_HOURS, { min: 0, max: 168 }),
+    getNumericSetting(prisma, OPS_STRIKE_LOCK_DAYS_KEY, STRIKE_LOCK_DAYS, { min: 1, max: 365 }),
+  ]);
 
   // Заход B.1, блок 3.2: бронь открывается после первого пройденного курса.
   // Не редирект и не пустая страница — объяснение с дорогой к нему. Гейт стоит
@@ -373,7 +388,7 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
       const oldStartsAt = rescheduleBooking!.slot.startsAt;
       const oldWhen = formatDateTimeRu(oldStartsAt, user.timezone);
       const newWhen = formatDateTimeRu(slot.startsAt, user.timezone);
-      const late = oldStartsAt.getTime() - now.getTime() < CANCEL_FREE_HOURS * HOUR_MS;
+      const late = oldStartsAt.getTime() - now.getTime() < cancelFreeHours * HOUR_MS;
       return (
         <div className="flex flex-col gap-5">
           <StepBack
@@ -409,7 +424,8 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
                 background: "color-mix(in srgb, var(--warning) 8%, transparent)",
               }}
             >
-              Перенос менее чем за 24 часа засчитает страйк.
+              Перенос менее чем за {cancelFreeHours}{" "}
+              {pluralRu(cancelFreeHours, "час", "часа", "часов")} засчитает страйк.
             </p>
           )}
           <div>
@@ -444,7 +460,7 @@ export default async function BookMockPage({ searchParams }: BookPageProps) {
             </div>
           </CardContent>
         </Card>
-        <p className="text-text-2 text-[13px]">{BOOKING_RULES_LINE}</p>
+        <p className="text-text-2 text-[13px]">{bookingRulesLine({ cancelFreeHours, lockDays })}</p>
         <div>
           <ConfirmBookButton slotId={slot.id} type={type} />
         </div>

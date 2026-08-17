@@ -7,6 +7,7 @@ import { requireStudentZone } from "@/lib/auth/guards";
 import { BackButton } from "@/components/ui/back-button";
 import { getBookingDetail } from "@/lib/services/mock-queries";
 import { getPublishedFeedback } from "@/lib/services/feedback";
+import { getNumericSetting, OPS_CANCEL_FREE_HOURS_KEY } from "@/lib/services/settings";
 import {
   BOOKING_STATUS_LABEL,
   CANCEL_FREE_HOURS,
@@ -67,7 +68,16 @@ export default async function BookingDetailPage({
   // «Предстоит» covers the mock while it is RUNNING too — the connect window
   // closes at endsAt, not at startsAt (audit 13.6).
   const isUpcoming = booking.status === "booked" && booking.endsAt > now;
-  const late = booking.startsAt.getTime() - now.getTime() < CANCEL_FREE_HOURS * HOUR_MS;
+  // Заход B.2: «поздняя ли отмена» решается по НАСТРОЙКЕ, а не по константе —
+  // иначе при изменённом окне диалог обещал бы бесплатную отмену, а сервер
+  // выписывал бы страйк.
+  const cancelFreeHours = await getNumericSetting(
+    prisma,
+    OPS_CANCEL_FREE_HOURS_KEY,
+    CANCEL_FREE_HOURS,
+    { min: 0, max: 168 },
+  );
+  const late = booking.startsAt.getTime() - now.getTime() < cancelFreeHours * HOUR_MS;
   const feedback =
     detail.feedbackStatus === "published"
       ? await getPublishedFeedback(prisma, { userId: user.id, bookingId })
@@ -104,6 +114,7 @@ export default async function BookingDetailPage({
           <CancelBookingControls
             bookingId={booking.id}
             late={late}
+            cancelFreeHours={cancelFreeHours}
             transferOpen={(await getMockBookingAccess(prisma, user.id)).open}
           />
         </section>

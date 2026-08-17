@@ -4,7 +4,12 @@ import { ArrowRight, BookOpen, Lock, Settings, Sparkles } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getMocksPageData } from "@/lib/services/mock-queries";
-import { MOCK_DURATION_MINUTES, MOCK_TYPE_DESCRIPTION, MOCK_TYPE_LABEL } from "@/lib/constants";
+import {
+  MOCK_DURATION_MINUTES,
+  MOCK_TYPE_DESCRIPTION,
+  MOCK_TYPE_LABEL,
+  STRIKE_WINDOW_DAYS,
+} from "@/lib/constants";
 import { formatDateRu, formatDateTimeRu, MINUTE_MS, pluralRu } from "@/lib/utils/dates";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -54,8 +59,8 @@ export default async function MocksPage() {
               <p className="text-text-2 mt-1 text-[13px]">
                 {data.lock.recentStrikes.length}{" "}
                 {pluralRu(data.lock.recentStrikes.length, "страйк", "страйка", "страйков")} за
-                последние 60 дней (поздние отмены или неявки). После этой даты бронирование снова
-                откроется.
+                последние {STRIKE_WINDOW_DAYS} дней (поздние отмены, поздние переносы или неявки).
+                После этой даты бронирование снова откроется.
               </p>
             </div>
           </CardContent>

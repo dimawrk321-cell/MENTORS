@@ -22,6 +22,7 @@ import {
 } from "@/lib/actions/mocks";
 import { useViewOnly, ViewOnlyNote, VIEW_ONLY_TITLE } from "@/components/features/view-only";
 import { MOCK_LOCKED_TITLE } from "@/lib/constants";
+import { pluralRu } from "@/lib/utils/dates";
 
 // Клиентские кнопки моков (spec 8.3): подтверждение брони, клейм предложения,
 // лист ожидания, отмена/перенос по правилам 24ч. Все идут через server actions.
@@ -133,8 +134,14 @@ export function JoinWaitlistButton({
 
 interface CancelControlsProps {
   bookingId: string;
-  /** До старта меньше 24 часов — отмена засчитает страйк (spec 7.8). */
+  /** До старта меньше окна бесплатной отмены — отмена засчитает страйк (spec 7.8). */
   late: boolean;
+  /**
+   * Окно бесплатной отмены в часах. Приходит из настроек платформы
+   * (`ops_cancel_free_hours`), а не из константы: и решение «поздняя ли отмена»,
+   * и текст диалога должны совпадать с тем, что применит сервер (заход B.2).
+   */
+  cancelFreeHours: number;
   /**
    * Заход B.1: перенос создаёт новую бронь, поэтому подчиняется правилу «после
    * первого курса». Отмена — нет: отнимать выход из уже занятого слота нельзя.
@@ -150,6 +157,7 @@ interface CancelControlsProps {
 export function CancelBookingControls({
   bookingId,
   late,
+  cancelFreeHours,
   transferOpen = true,
 }: CancelControlsProps) {
   const [open, setOpen] = useState(false);
@@ -212,7 +220,7 @@ export function CancelBookingControls({
             <DialogTitle>Отменить мок?</DialogTitle>
             <DialogDescription>
               {late
-                ? "До мока меньше 24 часов — отмена засчитает страйк."
+                ? `До мока меньше ${cancelFreeHours} ${pluralRu(cancelFreeHours, "часа", "часов", "часов")} — отмена засчитает страйк.`
                 : "Отмена бесплатна: слот освободится для других учеников."}
             </DialogDescription>
           </DialogHeader>

@@ -1,3 +1,5 @@
+import { pluralRu } from "@/lib/utils/dates";
+
 // Client-safe shared constants (no node imports — client components use these).
 
 // DECISION: «+1 месяц» / «+3 месяца» are 30/90 days — access_extensions.days is
@@ -169,9 +171,25 @@ export const STRIKE_LOCK_DAYS = 14;
 export const WAITLIST_TTL_DAYS = 14;
 export const OFFER_HOLD_HOURS = 2;
 
-/** Правила брони одной строкой (spec 7.8) — показывается на шаге подтверждения. */
-export const BOOKING_RULES_LINE =
-  "Отмена бесплатна за 24 часа. Поздняя отмена или неявка — страйк; два страйка — пауза брони 14 дней";
+/**
+ * Правила брони одной строкой (spec 7.8) — показывается на шаге подтверждения.
+ *
+ * Заход B.2 (правка владельца): строка была захардкожена («24 часа», «14 дней»),
+ * а оба эти правила РЕДАКТИРУЮТСЯ в `/admin/settings` (`ops_cancel_free_hours`,
+ * `ops_strike_lock_days`). Смена настройки меняла механику и оставляла обещание
+ * ученику прежним. Теперь числа приходят снаружи — из тех же `getNumericSetting`,
+ * что применяет `cancelBooking`/`computeBookingLock`.
+ *
+ * `STRIKE_THRESHOLD` (два страйка) и окно `STRIKE_WINDOW_DAYS` не настраиваются —
+ * они остаются код-константами и берутся отсюда же.
+ */
+export function bookingRulesLine(input: { cancelFreeHours: number; lockDays: number }): string {
+  return (
+    `Отмена бесплатна за ${input.cancelFreeHours} ${pluralRu(input.cancelFreeHours, "час", "часа", "часов")}. ` +
+    `Поздняя отмена, поздний перенос или неявка — страйк; ` +
+    `${STRIKE_THRESHOLD} страйка подряд — пауза брони на ${input.lockDays} ${pluralRu(input.lockDays, "день", "дня", "дней")}`
+  );
+}
 
 // Бронь мока открывается после первого пройденного курса (заход B.1, блок 3).
 // Тексты живут в константах, а не в сервисе: их показывают и клиентские
