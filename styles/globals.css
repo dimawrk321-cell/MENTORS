@@ -423,6 +423,82 @@
   }
 }
 
+/* --- Боковая панель ученика: рельс (заход B.3) ------------------------------
+
+   «Рельс» — узкая панель с иконками без подписей. Это НЕ новый режим: он уже
+   существовал на планшете 768–1023px (spec 13). Заход B.3 всего лишь дал ему
+   второй источник включения — выбор ученика, — поэтому состояние одно, а правил
+   два: медиазапрос планшета и атрибут `data-sidebar="collapsed"` на <html>.
+
+   Почему CSS, а не React-состояние: атрибут ставит синхронный инлайн-скрипт в
+   <body> (`app/layout.tsx`, тем же приёмом, что анти-FOUC темы по spec 5.1), то
+   есть ширина известна ДО первой отрисовки. React-состояние стартовало бы с
+   развёрнутой панели и схлопывало её после гидратации — ровно та вспышка,
+   которой быть не должно.
+
+   Правила вне слоёв намеренно — как у .guides-section-nav выше: так они
+   выигрывают у утилит Tailwind из слоя utilities, не полагаясь на порядок.
+
+   Ширину НЕ анимируем: `width` пересчитывает раскладку соседнего <main> каждый
+   кадр, а spec 5.4 разрешает анимировать только transform/opacity. Мгновенное
+   переключение не может дёрнуть контент — дёргать нечему. */
+.student-sidebar {
+  width: 15rem;
+  padding-inline: 0.75rem;
+}
+
+/* Развёрнутый вид — база. «Рельсовые» дубли (монограмма бренда, вторая иконка
+   кнопки) лежат в разметке всегда и прячутся здесь: иначе их пришлось бы
+   переключать React-состоянием, и они мигали бы после гидратации. Правило стоит
+   ПЕРЕД оверрайдами: у них та же специфичность, спор решает порядок. */
+.student-sidebar-rail-only {
+  display: none;
+}
+
+/* Планшет: рельс всегда, выбор ученика тут ни при чём (spec 13). */
+@media (max-width: 1023.98px) {
+  .student-sidebar {
+    width: 4rem;
+    padding-inline: 0.5rem;
+  }
+  .student-sidebar-label {
+    display: none;
+  }
+  .student-sidebar-rail-only {
+    display: block;
+  }
+  .student-sidebar-row {
+    justify-content: center;
+    padding-inline: 0;
+  }
+  .student-sidebar-head {
+    flex-direction: column;
+    gap: 0.25rem;
+    padding-inline: 0;
+  }
+}
+
+/* Тот же рельс по выбору ученика — на любой ширине, где панель вообще видна. */
+:root[data-sidebar="collapsed"] .student-sidebar {
+  width: 4rem;
+  padding-inline: 0.5rem;
+}
+:root[data-sidebar="collapsed"] .student-sidebar-label {
+  display: none;
+}
+:root[data-sidebar="collapsed"] .student-sidebar-rail-only {
+  display: block;
+}
+:root[data-sidebar="collapsed"] .student-sidebar-row {
+  justify-content: center;
+  padding-inline: 0;
+}
+:root[data-sidebar="collapsed"] .student-sidebar-head {
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-inline: 0;
+}
+
 .card-cat-hover {
   transition:
     transform 150ms var(--ease),

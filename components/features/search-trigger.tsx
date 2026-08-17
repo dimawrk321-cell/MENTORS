@@ -12,12 +12,32 @@ function openPalette(): void {
   window.dispatchEvent(new Event(OPEN_COMMAND_PALETTE_EVENT));
 }
 
-/** Desktop sidebar row: label + «⌘K» hint (spec 7.11 integration). */
-export function SearchTriggerBar({ className }: { className?: string }) {
+/**
+ * Desktop sidebar row: label + «⌘K» hint (spec 7.11 integration).
+ *
+ * `labelClassName` вешается на подпись и на подсказку клавиши — всё, что
+ * исчезает, когда строка схлопывается в иконку. Студенческий сайдбар передаёт
+ * сюда свой `student-sidebar-label`, и правило рельса (globals.css, заход B.3)
+ * гасит подпись поиска тем же селектором, что подписи пунктов навигации.
+ */
+export function SearchTriggerBar({
+  className,
+  labelClassName,
+  onClick,
+  ...rest
+}: React.ComponentProps<"button"> & { labelClassName?: string }) {
   return (
     <button
       type="button"
-      onClick={openPalette}
+      // Остальные props прокидываются, чтобы кнопку можно было отдать в
+      // `TooltipTrigger asChild` (рельс сайдбара, заход B.3): Radix передаёт
+      // сюда ref и свои указательные обработчики. Свой onClick составной, а не
+      // затирающий, — иначе один из двух перестал бы работать.
+      {...rest}
+      onClick={(e) => {
+        onClick?.(e);
+        if (!e.defaultPrevented) openPalette();
+      }}
       aria-label="Поиск"
       aria-keyshortcuts="Meta+K Control+K"
       className={cn(
@@ -26,9 +46,14 @@ export function SearchTriggerBar({ className }: { className?: string }) {
       )}
     >
       <Search size={16} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-      <span className="flex-1 text-left">Поиск</span>
+      <span className={cn("flex-1 text-left", labelClassName)}>Поиск</span>
       {/* Hint hidden on the narrow tablet rail (md), back on lg. */}
-      <kbd className="border-border text-text-3 hidden rounded border px-1 text-[11px] lg:inline">
+      <kbd
+        className={cn(
+          "border-border text-text-3 hidden rounded border px-1 text-[11px] lg:inline",
+          labelClassName,
+        )}
+      >
         ⌘K
       </kbd>
     </button>

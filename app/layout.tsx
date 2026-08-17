@@ -41,13 +41,21 @@ export const metadata: Metadata = {
 // localStorage "theme" holds "dark" | "light" | anything else = system preference.
 const themeInitScript = `(function(){try{var t=localStorage.getItem("theme");if(t!=="dark"&&t!=="light"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})();`;
 
+// Анти-вспышка боковой панели (заход B.3), тем же приёмом, что тема выше:
+// ширина рельса решается ДО первой отрисовки, потому что её держит CSS по
+// `data-sidebar` на <html>, а не React-состояние. Иначе панель успевала бы
+// нарисоваться развёрнутой и схлопнуться после гидратации.
+// Значение нормализуется как в `lib/sidebar-logic.ts`: всё, кроме "collapsed",
+// это "expanded" (дублируется дословно — инлайн-скрипт не может импортировать).
+const sidebarInitScript = `(function(){try{document.documentElement.dataset.sidebar=localStorage.getItem("sidebar")==="collapsed"?"collapsed":"expanded"}catch(e){document.documentElement.dataset.sidebar="expanded"}})();`;
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ru" suppressHydrationWarning>
       <body>
         {/* DECISION: App Router forbids a manual <head>; a synchronous script as the
             first element of <body> executes before first paint — equivalent effect. */}
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript + sidebarInitScript }} />
         {children}
         <Toaster />
       </body>
