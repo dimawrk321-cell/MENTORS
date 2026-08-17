@@ -87,6 +87,20 @@ echo
 echo "→ build web image"
 "${COMPOSE[@]}" build
 
+# ── Guard 5 (walk B.2): the tools profile was never rebuilt ──────────────────
+# `docker compose build` SILENTLY SKIPS services of inactive profiles, and the
+# one-off `seed` service sits behind `--profile tools`. Its image was therefore
+# frozen at the day the deploy contour was created (2026-07-15) while every
+# deploy printed «✓ deploy done»: /app/scripts held five files, and — worse —
+# /app/lib held month-old services. Any one-off script started through that
+# image would have run OLD business logic against the CURRENT database.
+# Same class of defect as the branch guard: the command succeeds and does not
+# do what everyone assumes. The tools profile is built HERE, on its own line —
+# `up -d` below deliberately stays without the profile so the seed container is
+# never started as part of a deploy.
+echo "→ build tools image (профиль tools: одноразовые скрипты и сид)"
+"${COMPOSE[@]}" --profile tools build seed
+
 echo "→ up -d (recreate changed services; web runs migrate deploy on start)"
 "${COMPOSE[@]}" up -d
 
