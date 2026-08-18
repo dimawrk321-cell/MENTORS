@@ -39,6 +39,8 @@ coverage
 
 # database dumps / backups — contain real user + content data, never commit
 /backups/
+# full deploy logs — deploy.sh tees every run into the clone on the server
+/deploy-logs/
 *.dump
 
 # design handoff — unzipped prototypes + assets (reference only, not app code)

@@ -8,8 +8,36 @@
 #
 # DEPLOY_CHECK_ONLY=1 runs the guards and the pull, prints the HEAD verdict and
 # exits BEFORE the build — the way to verify the guards without deploying.
+#
+# Every run tees its full output to deploy-logs/deploy-<ts>.log (20 kept); the
+# path is printed first. DEPLOY_LOG_DIR overrides the location.
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# ── Лог деплоя целиком (решение владельца, заход B.4) ────────────────────────
+# Вывод деплоя — единственное место, где живут вердикты гардов: ветка, HEAD до и
+# после pull, пересборка профиля tools, healthcheck, сверка миграций. Трижды
+# подряд ровно эти строки терялись, потому что читающий обрезал вывод хвостом.
+# Теперь весь вывод дублируется в файл независимо от того, кто и как запустил
+# скрипт, — читать хвостом можно, потерять нельзя.
+#
+# Потоки НЕ склеиваются: stderr остаётся stderr (die() пишет туда весь блок
+# отказа целиком, чтобы он читался одним куском), в файл попадают оба.
+# Оговорка: bash не ждёт завершения подстановок процессов, поэтому при разрыве
+# соединения последние строки могут не дойти до ТЕРМИНАЛА; в файл tee их
+# сбрасывает по EOF.
+DEPLOY_LOG_DIR="${DEPLOY_LOG_DIR:-$(pwd)/deploy-logs}"
+mkdir -p "$DEPLOY_LOG_DIR"
+DEPLOY_LOG="$DEPLOY_LOG_DIR/deploy-$(date +%Y%m%d-%H%M%S).log"
+exec > >(tee -a "$DEPLOY_LOG") 2> >(tee -a "$DEPLOY_LOG" >&2)
+echo "→ лог этого прогона: $DEPLOY_LOG"
+# Ротация как у бэкапов: держим 20 последних прогонов. `|| true` обязателен, и
+# не для красоты: `tee` из строки выше стартует асинхронно, и файл может ещё не
+# существовать, когда до сюда доходит `ls` — тогда под `set -euo pipefail` он
+# роняет ВЕСЬ деплой кодом 2, до единого гарда (поймано изолированным прогоном:
+# два запуска подряд, один упал, второй нет). Уборка не имеет права валить
+# хорошую выкатку — то же правило, что у `docker image prune` ниже.
+ls -1t "$DEPLOY_LOG_DIR"/deploy-*.log 2>/dev/null | tail -n +21 | xargs -r rm -f || true
 
 COMPOSE=(docker compose --env-file .env.prod -f docker-compose.prod.yml)
 # Deploys come off main only (handoff: «работа идёт в main напрямую, без веток»).

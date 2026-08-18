@@ -76,6 +76,14 @@ powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1   # git pull → bui
 Либо на сервере напрямую: `cd /opt/mentors && bash deploy.sh`. Compose всегда
 запускается с `--env-file .env.prod -f docker-compose.prod.yml`.
 
+Полный вывод каждого прогона скрипт дублирует в `/opt/mentors/deploy-logs/deploy-<дата-время>.log`
+(путь печатается первой строкой, хранятся 20 последних прогонов, каталог в `.gitignore`).
+Там лежат вердикты гардов — ветка клона, HEAD до и после `git pull`, пересборка профиля
+`tools`, ожидание healthy, сверка числа применённых миграций: читать вывод хвостом можно,
+терять его нельзя. `DEPLOY_CHECK_ONLY=1 bash deploy.sh` прогоняет гарды и `git pull` без
+сборки — учтите, что после него настоящий деплой честно скажет «HEAD НЕ ИЗМЕНИЛСЯ»,
+потому что pull уже случился.
+
 ### Логи и статус
 
 ```bash
