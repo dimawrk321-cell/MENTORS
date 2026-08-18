@@ -139,8 +139,10 @@ export interface CatalogGroup {
 
 /**
  * Grouped catalog (walk 13.5 block 1.1): all matching published questions grouped
- * under their ROOT category, in category `order`. Optional pagination limits the
- * mounted rows; collapsed sections keep each page navigable.
+ * under their ROOT category, in category `order`. The student catalog requests
+ * the complete matching set so every available root category is visible at once;
+ * the client mounts questions in small chunks inside an opened category.
+ * Optional offset/limit remain available for non-catalog callers and focused tests.
  * A subcategory's questions fold into its parent (root) section.
  *
  * The эталон (answer_md) is NOT loaded here — only a cheap teaser per row. The full
