@@ -6,3 +6,6 @@ MENTORS_TZ.md
 pgsql
 content-source
 PRIME-handoff-for-codex.md
+# standalone-бандлы прототипов: внутри JSON одной строкой, переносы ломают номера строк
+PRIME - *.html
+
