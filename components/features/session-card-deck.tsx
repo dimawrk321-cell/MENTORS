@@ -234,15 +234,35 @@ export function SessionCardDeck({
     >
       {/* Шапка сессии липнет к верху: на низком вьюпорте (альбомная ориентация)
           страница всё-таки скроллится, и счётчик с выходом уезжали бы за экран —
-          при липкой панели оценок внизу это оставляло карточку без обоих краёв. */}
-      <div className="bg-bg sticky top-0 z-10 flex flex-col gap-4 pb-1">
-        <div className="flex items-center justify-between">
-          <p className="text-text-2 text-[13px]" aria-live="polite">
-            {index + 1} / {total}
-            {note && <span className="text-text-3 ml-2 text-[12px]">{note}</span>}
-          </p>
-          {/* Hierarchical exit with confirm (spec 12.1/C7). */}
-          <BackButton href={exitHref} label={exitLabel} confirmMessage={exitConfirm} />
+          при липкой панели оценок внизу это оставляло карточку без обоих краёв.
+
+          Заход B.4: шапка собрана в один блок — счётчик, пояснение режима и
+          выход в строке, полоса прогресса прижата к нижнему краю той же строки.
+          Раньше между ними стоял gap-4, и полоса читалась отдельной волосяной
+          линией, ни к чему не относящейся. */}
+      <div className="bg-bg sticky top-0 z-10 flex flex-col gap-2 pt-1 pb-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {/* Иерархия (B.4/2.4): счётчик — главное число экрана, пояснение
+                режима под ним и приглушённое. Раньше оба стояли в строку одним
+                весом, и «тренировка · без XP и серии» спорило со счётчиком. */}
+            <p
+              className="text-text-1 text-[16px] leading-tight font-semibold tabular-nums"
+              aria-live="polite"
+            >
+              {index + 1}
+              <span className="text-text-3 font-normal"> / {total}</span>
+            </p>
+            {note && <p className="text-text-3 mt-0.5 text-[12px]">{note}</p>}
+          </div>
+          {/* Выход из сессии (spec 12.1/C7): подтверждение остаётся, стрелка
+              снята — см. комментарий в BackButton. */}
+          <BackButton
+            href={exitHref}
+            label={exitLabel}
+            confirmMessage={exitConfirm}
+            arrow={false}
+          />
         </div>
 
         <div
@@ -263,8 +283,10 @@ export function SessionCardDeck({
         </div>
       </div>
 
-      <div>
-        <CategoryChip title={item.category.title} colorIndex={item.category.colorIndex} />
+      <div className="flex">
+        {/* wrap: имя категории показывается целиком (B.4/2.1) — строка её, делить
+            ширину не с кем. Самое длинное имя в банке — 48 символов. */}
+        <CategoryChip title={item.category.title} colorIndex={item.category.colorIndex} wrap />
       </div>
 
       {/* Флип-карточка: горизонтальные свайпы по открытому ответу = оценки

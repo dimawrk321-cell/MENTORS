@@ -8,12 +8,20 @@ import { cn } from "@/lib/utils/cn";
 // Hierarchical back button (spec 12.1/C7): navigates to the logical parent (a fixed
 // href), NOT history.back(). Optional confirm intercepts the click (trainer session).
 // Mobile touch target ≥44px (min-h-11); on desktop it collapses to the text height.
+//
+// `arrow={false}` (заход B.4) — для выхода, который не является подъёмом на
+// уровень вверх: «Закончить» в шапке сессии тренажёра стоит у правого края, а
+// стрелка влево обещает движение назад. Развернуть стрелку нельзя (вправо
+// читается как «дальше», а сессия не продолжается), поэтому у такого контрола
+// глифа нет вовсе — направление называет слово.
 
 interface BackButtonProps {
   href: string;
   label: string;
   /** When set, click asks for confirmation before navigating (spec 12.1/C7 trainer). */
   confirmMessage?: string;
+  /** Стрелка влево: подъём по иерархии — да, выход из сессии — нет. */
+  arrow?: boolean;
   /** Header rows pass a className without `w-fit`; standalone pages keep it. */
   className?: string;
 }
@@ -21,8 +29,15 @@ interface BackButtonProps {
 const BASE =
   "text-text-3 ease-app hover:text-text-1 flex w-fit min-h-11 items-center gap-1.5 text-[13px] transition-colors duration-150 md:min-h-0";
 
-export function BackButton({ href, label, confirmMessage, className }: BackButtonProps) {
+export function BackButton({
+  href,
+  label,
+  confirmMessage,
+  arrow = true,
+  className,
+}: BackButtonProps) {
   const router = useRouter();
+  const glyph = arrow ? <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" /> : null;
 
   if (confirmMessage) {
     return (
@@ -33,7 +48,7 @@ export function BackButton({ href, label, confirmMessage, className }: BackButto
         }}
         className={cn(BASE, className)}
       >
-        <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
+        {glyph}
         {label}
       </button>
     );
@@ -41,7 +56,7 @@ export function BackButton({ href, label, confirmMessage, className }: BackButto
 
   return (
     <Link href={href} className={cn(BASE, className)}>
-      <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
+      {glyph}
       {label}
     </Link>
   );

@@ -116,3 +116,78 @@ describe("вопрос при раскрытом ответе", () => {
     expect(html).toContain('aria-expanded="false"');
   });
 });
+
+// --- Шапка сессии (заход B.4) ------------------------------------------------
+// Те же оговорки: это контракт разметки, а не геометрия. Замеры 390×844 и
+// 1280×800 в обеих темах — в отчёте захода.
+
+function renderHeader(note?: string): string {
+  return renderToStaticMarkup(
+    <SessionCardDeck
+      item={{
+        ...item,
+        category: { title: "Вопросы о профессиональных интересах и ожиданиях", colorIndex: 3 },
+      }}
+      index={5}
+      total={15}
+      flipped={false}
+      pending={false}
+      active
+      exitHref="/trainer"
+      exitLabel="Закончить"
+      exitConfirm="Прервать?"
+      note={note}
+      onFlip={() => {}}
+      onGrade={() => {}}
+    />,
+  );
+}
+
+describe("шапка сессии", () => {
+  it("счётчик — главное число, пояснение режима приглушено и стоит отдельной строкой", () => {
+    const html = renderHeader("тренировка · без XP и серии");
+    // Счётчик: 16px/600 у text-1; знаменатель приглушён внутри той же строки.
+    expect(html).toContain(
+      'class="text-text-1 text-[16px] leading-tight font-semibold tabular-nums"',
+    );
+    expect(html).toContain('<span class="text-text-3 font-normal"> / 15</span>');
+    // Пояснение — 12px text-3, отдельным абзацем ПОСЛЕ счётчика.
+    expect(html).toContain('class="text-text-3 mt-0.5 text-[12px]">тренировка · без XP и серии');
+    expect(html.indexOf("tabular-nums")).toBeLessThan(html.indexOf("тренировка · без XP и серии"));
+  });
+
+  it("без пояснения режима (дневная очередь) второй строки нет", () => {
+    expect(renderHeader()).not.toContain("mt-0.5 text-[12px]");
+  });
+
+  it("полоса прогресса живёт в той же липкой шапке, что и счётчик", () => {
+    const html = renderHeader();
+    const header = html.slice(0, html.indexOf("session-deck") + 4000);
+    const barAt = header.indexOf('role="progressbar"');
+    const headerAt = header.indexOf("sticky top-0");
+    const chipAt = header.indexOf("rounded-pill border-border");
+    expect(headerAt).toBeGreaterThan(-1);
+    // Полоса — внутри шапки (после её открывающего тега и ДО метки категории),
+    // а не отдельной строкой под ней: gap-2 вместо прежнего gap-4.
+    expect(barAt).toBeGreaterThan(headerAt);
+    expect(barAt).toBeLessThan(chipAt);
+    expect(header).toContain("sticky top-0 z-10 flex flex-col gap-2");
+  });
+
+  it("«Закончить» без стрелки: направление называет слово, а не глиф", () => {
+    const html = renderHeader();
+    const at = html.indexOf("Закончить");
+    // Перед подписью выхода нет svg-стрелки (её рисует BackButton по умолчанию).
+    const before = html.slice(html.lastIndexOf("<button", at), at);
+    expect(before).not.toContain("<svg");
+  });
+
+  it("метка категории показывается целиком, без обрезки", () => {
+    const html = renderHeader();
+    const at = html.indexOf("Вопросы о профессиональных интересах и ожиданиях");
+    expect(at).toBeGreaterThan(-1);
+    const chip = html.slice(html.lastIndexOf("<span", html.lastIndexOf("<span", at) - 1), at);
+    expect(chip).not.toContain("truncate");
+    expect(chip).not.toContain("max-w-[13rem]");
+  });
+});
