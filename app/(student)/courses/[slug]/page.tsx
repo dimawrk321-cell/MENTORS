@@ -101,7 +101,12 @@ export default async function CoursePage({ params }: CoursePageProps) {
           <Badge>{GATING_LABEL[course.gating]}</Badge>
         </div>
         {course.description && (
-          <p className="text-text-2 mt-1.5 max-w-[64ch] text-[14px]">
+          /* Заход B.4: переносы строк описания видны ученику. Текст хранится в
+             courses.description как есть, а обычный <p> схлопывал переводы строк
+             в пробел — многострочное описание из студии читалось одним куском.
+             Карточка каталога остаётся без pre-line: там текст обрезан двумя
+             строками, и ранний перенос съел бы половину видимого. */
+          <p className="text-text-2 mt-1.5 max-w-[64ch] text-[14px] whitespace-pre-line">
             <Linkify text={course.description} />
           </p>
         )}
