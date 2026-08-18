@@ -43,3 +43,65 @@ export function lessonDurationLabel(input: LessonDurationInput): string {
 
   return practice ? `${learning} + ${practice}` : learning;
 }
+
+/**
+ * Числовая оценка урока в минутах — для сумм на странице курса («N мин всего»,
+ * «Осталось ~N мин»), заход B.5. Подпись строкой по-прежнему делает
+ * `lessonDurationLabel`: здесь нужна арифметика, там — честный текст.
+ *
+ * Правила совпадают с подписью, чтобы числа не спорили со строкой урока:
+ *  • `video_only` — видео, а если его длина неизвестна, берём текст;
+ *  • `text_only` — только текст;
+ *  • `choose_one` — БОЛЬШИЙ из двух путей: ученик выбирает один, и занизить
+ *    оценку хуже, чем завысить («осталось ~» не должно обманывать в меньшую);
+ *  • `combined` — видео + текст.
+ * Практика прибавляется всегда. Видео с неизвестной длительностью в сумму не
+ * попадает — поэтому число на экране идёт с «~», а не как точное время.
+ */
+export function lessonTotalMinutes(input: LessonDurationInput): number {
+  const text = input.textMinutes ?? Math.max(1, input.readingMinutes);
+  const video = input.hasVideo ? (input.videoMinutes ?? 0) : 0;
+  const practice = input.practiceMinutes ?? 0;
+
+  let learning: number;
+  switch (input.pathPolicy) {
+    case "video_only":
+      learning = video || text;
+      break;
+    case "text_only":
+      learning = text;
+      break;
+    case "choose_one":
+      learning = Math.max(text, video);
+      break;
+    case "combined":
+    default:
+      learning = text + video;
+      break;
+  }
+  return learning + practice;
+}
+
+/**
+ * Короткая метка типа урока для плашки программы (заход B.5, референс v2).
+ * Референс красит видео акцентом `--violet`, поэтому вызывающему нужен не
+ * только текст, но и признак «это видео».
+ */
+export function lessonKindLabel(input: Pick<LessonDurationInput, "pathPolicy" | "hasVideo">): {
+  label: string;
+  isVideo: boolean;
+} {
+  if (!input.hasVideo) return { label: "текст", isVideo: false };
+  switch (input.pathPolicy) {
+    case "video_only":
+      return { label: "видео", isVideo: true };
+    case "text_only":
+      // Видео есть, но путь урока — только текст: подпись не должна обещать видео.
+      return { label: "текст", isVideo: false };
+    case "choose_one":
+      return { label: "видео или текст", isVideo: true };
+    case "combined":
+    default:
+      return { label: "текст + видео", isVideo: true };
+  }
+}

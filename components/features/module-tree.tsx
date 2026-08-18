@@ -1,14 +1,22 @@
 import Link from "next/link";
 import type { LessonPathPolicy } from "@prisma/client";
-import { Check, Circle, ClipboardCheck, Lock } from "lucide-react";
+import { ArrowRight, Check, ClipboardCheck, Lock, Play, SquareCheckBig } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { pluralRu } from "@/lib/utils/dates";
 import { cn } from "@/lib/utils/cn";
-import { lessonDurationLabel } from "@/lib/utils/lesson-path";
+import { lessonKindLabel, lessonTotalMinutes } from "@/lib/utils/lesson-path";
 
-// ModuleTree (spec 5.3): галки завершённых, точка текущего, замки закрытых,
-// метки «необязательный» и «обновлён»; строка модульного теста
-// «сдан {score}% / доступен / закрыт» и «Сдать экстерном» (spec 8.3).
+// ModuleTree (spec 5.3, вид v2 — заход B.5 по референсу «PRIME - Курс»):
+// модуль — компактная строка (номер или галка, название, «N/M · K мин»,
+// мини-полоса прогресса), уроки — плашки-строки: отметка статуса, название,
+// метка типа · минуты · практика, действие справа и стрелка.
+//
+// Что осталось прежним и почему: интерфейсы `ModuleTreeModule/Lesson/Test` не
+// менялись — их собирает страница курса и повторно использует мобильный
+// аккордеон (`module-accordion.tsx`), у которого своя раскладка под 390px.
+// Строка модульного теста (сдан / доступен / закрыт / экстерн) в референсе не
+// нарисована, но это функциональность из 7.5 — она остаётся, оформленная той же
+// плашкой.
 
 export interface ModuleTreeLesson {
   id: string;
@@ -45,43 +53,103 @@ export interface ModuleTreeModule {
   test?: ModuleTreeTest;
 }
 
-function LessonIcon({ lesson }: { lesson: ModuleTreeLesson }) {
+/** Плашка строки программы — общая геометрия урока и модульного теста. */
+const PLATE =
+  "rounded-card border-border bg-surface-1 shadow-card ease-app flex min-h-[62px] items-center gap-3 border px-4 py-3 transition-colors duration-150";
+
+function LessonMark({ lesson }: { lesson: ModuleTreeLesson }) {
+  const base =
+    "flex size-[22px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold";
   if (lesson.completed) {
-    return <Check size={15} strokeWidth={2.25} className="text-success" aria-hidden="true" />;
+    return (
+      <span className={cn(base, "bg-success/15 text-success")} aria-hidden="true">
+        <Check size={13} strokeWidth={2.5} />
+      </span>
+    );
   }
   if (!lesson.unlocked) {
-    return <Lock size={14} strokeWidth={1.75} className="text-text-3" aria-hidden="true" />;
+    return (
+      <span className={cn(base, "border-border text-text-3 border")} aria-hidden="true">
+        <Lock size={11} strokeWidth={2} />
+      </span>
+    );
   }
-  return (
-    <Circle
-      size={9}
-      strokeWidth={2}
-      className={cn(lesson.current ? "fill-accent text-accent" : "text-border-strong")}
-      aria-hidden="true"
-    />
-  );
+  if (lesson.current) {
+    return (
+      <span
+        className={cn(base, "text-white")}
+        style={{ backgroundImage: "var(--gradient-accent)" }}
+        aria-hidden="true"
+      >
+        <Play size={10} strokeWidth={2} fill="currentColor" />
+      </span>
+    );
+  }
+  return <span className={cn(base, "border-border-strong border")} aria-hidden="true" />;
 }
 
 function LessonRow({ lesson }: { lesson: ModuleTreeLesson }) {
+  const kind = lessonKindLabel(lesson);
+  const minutes = lessonTotalMinutes(lesson);
+  const foot = lesson.completed
+    ? { label: "Пройден", className: "text-success" }
+    : lesson.current
+      ? { label: "Продолжить", className: "text-accent" }
+      : !lesson.unlocked
+        ? { label: "Откроется позже", className: "text-text-3" }
+        : { label: "Начать", className: "text-text-2" };
+
   const inner = (
     <>
-      <span className="flex w-5 shrink-0 items-center justify-center">
-        <LessonIcon lesson={lesson} />
+      <LessonMark lesson={lesson} />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              "text-[14.5px] leading-snug font-semibold tracking-[-0.01em]",
+              lesson.unlocked ? "text-text-1" : "text-text-3",
+            )}
+          >
+            {lesson.title}
+          </span>
+          {lesson.updatedSinceCompletion && <Badge variant="accent">обновлён</Badge>}
+          {lesson.isOptional && <Badge>необязательный</Badge>}
+        </span>
+        <span className="text-text-3 flex flex-wrap items-center gap-2 text-[12px]">
+          <span
+            className={cn(
+              "text-[11px] font-semibold tracking-[0.05em] uppercase",
+              kind.isVideo ? "text-violet" : "text-text-3",
+            )}
+          >
+            {kind.label}
+          </span>
+          <span aria-hidden="true" className="bg-text-3 size-[3px] rounded-full" />
+          <span className="tabular-nums">{minutes} мин</span>
+          {lesson.practiceMinutes ? (
+            <>
+              <span aria-hidden="true" className="bg-text-3 size-[3px] rounded-full" />
+              <span className="inline-flex items-center gap-1.5">
+                <SquareCheckBig size={12} strokeWidth={1.75} aria-hidden="true" />
+                практика
+              </span>
+            </>
+          ) : null}
+        </span>
       </span>
-      <span
+      <span className={cn("shrink-0 text-[12px] font-semibold max-sm:hidden", foot.className)}>
+        {foot.label}
+      </span>
+      <ArrowRight
+        size={15}
+        strokeWidth={1.75}
+        aria-hidden="true"
         className={cn(
-          "min-w-0 flex-1 truncate text-[14px]",
-          lesson.unlocked ? "text-text-1" : "text-text-3",
-          lesson.completed && "text-text-2",
+          "shrink-0",
+          lesson.current ? "text-accent" : "text-text-3",
+          lesson.unlocked ? "opacity-80" : "opacity-0",
         )}
-      >
-        {lesson.title}
-      </span>
-      {lesson.updatedSinceCompletion && <Badge variant="accent">обновлён</Badge>}
-      {lesson.isOptional && <Badge>необязательный</Badge>}
-      <span className="text-text-3 shrink-0 text-[12px] max-sm:hidden">
-        {lessonDurationLabel(lesson)}
-      </span>
+      />
     </>
   );
 
@@ -90,7 +158,7 @@ function LessonRow({ lesson }: { lesson: ModuleTreeLesson }) {
       <div
         aria-disabled="true"
         title="Урок откроется после завершения предыдущих"
-        className="rounded-control flex items-center gap-2.5 px-2.5 py-2 opacity-60"
+        className={cn(PLATE, "border-dashed opacity-60")}
       >
         {inner}
       </div>
@@ -101,7 +169,11 @@ function LessonRow({ lesson }: { lesson: ModuleTreeLesson }) {
     <Link
       href={`/lessons/${lesson.id}`}
       aria-current={lesson.current ? "step" : undefined}
-      className="rounded-control ease-app hover:bg-surface-2 flex items-center gap-2.5 px-2.5 py-2 transition-colors duration-150"
+      className={cn(
+        PLATE,
+        "hover:border-border-strong",
+        lesson.current && "border-accent/45 bg-accent/[0.06]",
+      )}
     >
       {inner}
     </Link>
@@ -110,77 +182,120 @@ function LessonRow({ lesson }: { lesson: ModuleTreeLesson }) {
 
 export function ModuleTree({ modules }: { modules: ModuleTreeModule[] }) {
   return (
-    <div className="flex flex-col gap-5">
-      {modules.map((module, index) => (
-        <section key={module.id}>
-          <header className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-2.5">
-            <h2 className="text-[16px] font-semibold">
-              <span className="text-text-3 mr-2">{index + 1}.</span>
-              {module.title}
-            </h2>
-            <span className="text-text-3 text-[12px]">
-              {module.completedRequired} из {module.totalRequired}{" "}
-              {pluralRu(module.totalRequired, "урока", "уроков", "уроков")}
-            </span>
-          </header>
-          <div className="flex flex-col">
-            {module.lessons.length === 0 && !module.test ? (
-              // Empty module (spec 5.5/12.1-A4): a published module with no lessons.
-              <p className="text-text-3 px-2.5 py-2 text-[13px]">В этом модуле пока нет уроков.</p>
-            ) : (
-              <>
-                {module.lessons.map((lesson) => (
-                  <LessonRow key={lesson.id} lesson={lesson} />
-                ))}
-                {module.test && <TestRow moduleId={module.id} test={module.test} />}
-              </>
-            )}
-          </div>
-        </section>
-      ))}
+    <div className="flex flex-col gap-[22px]">
+      {modules.map((module, index) => {
+        const done = module.completedRequired === module.totalRequired && module.totalRequired > 0;
+        const minutes = module.lessons.reduce((sum, lesson) => sum + lessonTotalMinutes(lesson), 0);
+        const pct =
+          module.totalRequired === 0
+            ? 0
+            : Math.round((module.completedRequired / module.totalRequired) * 100);
+        return (
+          <section key={module.id}>
+            <header className="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "inline-flex size-6 shrink-0 items-center justify-center rounded-[8px] text-[11.5px] font-bold",
+                  done ? "bg-success/15 text-success" : "text-white",
+                )}
+                style={done ? undefined : { backgroundImage: "var(--gradient-accent)" }}
+              >
+                {done ? <Check size={13} strokeWidth={2.5} /> : index + 1}
+              </span>
+              <h2 className="text-[13.5px] font-semibold tracking-[-0.01em]">{module.title}</h2>
+              <span className="text-text-3 text-[12px]">
+                {module.completedRequired}/{module.totalRequired}{" "}
+                {pluralRu(module.totalRequired, "урок", "урока", "уроков")} · {minutes} мин
+              </span>
+              <span
+                aria-hidden="true"
+                className="bg-surface-2 ml-auto h-1 w-[72px] shrink-0 overflow-hidden rounded-[2px]"
+              >
+                <span
+                  className="block h-full rounded-[2px]"
+                  style={{ width: `${pct}%`, backgroundImage: "var(--gradient-accent)" }}
+                />
+              </span>
+            </header>
+            <div className="flex flex-col gap-2">
+              {module.lessons.length === 0 && !module.test ? (
+                // Empty module (spec 5.5/12.1-A4): a published module with no lessons.
+                <p className="text-text-3 px-1 py-2 text-[13px]">В этом модуле пока нет уроков.</p>
+              ) : (
+                <>
+                  {module.lessons.map((lesson) => (
+                    <LessonRow key={lesson.id} lesson={lesson} />
+                  ))}
+                  {module.test && <TestRow moduleId={module.id} test={module.test} />}
+                </>
+              )}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
 
 function TestRow({ moduleId, test }: { moduleId: string; test: ModuleTreeTest }) {
+  const interactive = test.passed || test.available || test.testoutAvailable;
   const inner = (
     <>
-      <span className="flex w-5 shrink-0 items-center justify-center">
-        {test.passed ? (
-          <Check size={15} strokeWidth={2.25} className="text-success" aria-hidden="true" />
-        ) : test.available || test.testoutAvailable ? (
-          <ClipboardCheck size={15} strokeWidth={1.75} className="text-accent" aria-hidden="true" />
-        ) : (
-          <Lock size={14} strokeWidth={1.75} className="text-text-3" aria-hidden="true" />
-        )}
-      </span>
       <span
         className={cn(
-          "min-w-0 flex-1 truncate text-[14px]",
-          test.passed || test.available || test.testoutAvailable ? "text-text-1" : "text-text-3",
+          "flex size-[22px] shrink-0 items-center justify-center rounded-full",
+          test.passed ? "bg-success/15 text-success" : "border-border text-text-3 border",
         )}
+        aria-hidden="true"
       >
-        Модульный тест
+        {test.passed ? (
+          <Check size={13} strokeWidth={2.5} />
+        ) : interactive ? (
+          <ClipboardCheck size={12} strokeWidth={1.75} className="text-accent" />
+        ) : (
+          <Lock size={11} strokeWidth={2} />
+        )}
       </span>
-      {test.passed ? (
-        <Badge variant="success">сдан {test.bestScore}%</Badge>
-      ) : test.available ? (
-        <Badge variant="accent">доступен</Badge>
-      ) : (
-        <Badge>закрыт</Badge>
-      )}
-      {test.testoutAvailable && (
-        <span className="text-accent shrink-0 text-[12px]">Сдать экстерном</span>
-      )}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span
+          className={cn(
+            "text-[14.5px] leading-snug font-semibold tracking-[-0.01em]",
+            interactive ? "text-text-1" : "text-text-3",
+          )}
+        >
+          Модульный тест
+        </span>
+        <span className="text-text-3 flex flex-wrap items-center gap-2 text-[12px]">
+          {test.passed ? (
+            <Badge variant="success">сдан {test.bestScore}%</Badge>
+          ) : test.available ? (
+            <Badge variant="accent">доступен</Badge>
+          ) : (
+            <Badge>закрыт</Badge>
+          )}
+          {test.testoutAvailable && <span className="text-accent">можно сдать экстерном</span>}
+        </span>
+      </span>
+      <ArrowRight
+        size={15}
+        strokeWidth={1.75}
+        aria-hidden="true"
+        className={cn("text-text-3 shrink-0", interactive ? "opacity-80" : "opacity-0")}
+      />
     </>
   );
 
   // Кликабельно, когда есть что сдавать или смотреть (разбор после сдачи).
-  if (test.passed || test.available || test.testoutAvailable) {
+  if (interactive) {
     return (
       <Link
-        href={test.testoutAvailable ? `/tests/${moduleId}?kind=testout` : `/tests/${moduleId}`}
-        className="rounded-control ease-app hover:bg-surface-2 flex items-center gap-2.5 px-2.5 py-2 transition-colors duration-150"
+        href={
+          test.testoutAvailable && !test.available
+            ? `/tests/${moduleId}?kind=testout`
+            : `/tests/${moduleId}`
+        }
+        className={cn(PLATE, "hover:border-border-strong")}
       >
         {inner}
       </Link>
@@ -190,7 +305,7 @@ function TestRow({ moduleId, test }: { moduleId: string; test: ModuleTreeTest })
     <div
       aria-disabled="true"
       title="Откроется после завершения уроков модуля"
-      className="rounded-control flex items-center gap-2.5 px-2.5 py-2 opacity-60"
+      className={cn(PLATE, "border-dashed opacity-60")}
     >
       {inner}
     </div>

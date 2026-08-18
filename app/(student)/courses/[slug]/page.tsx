@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { FileText } from "lucide-react";
+import { Clock, FileText, ListOrdered } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getCourseView } from "@/lib/services/content";
 import { canOpenCourse } from "@/lib/services/course-access";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { ProgressBar } from "@/components/ui/progress-bar";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ModuleTree, type ModuleTreeModule } from "@/components/features/module-tree";
-import { ModuleAccordion, CourseStickyCta } from "@/components/features/module-accordion";
+import { type ModuleTreeModule } from "@/components/features/module-tree";
+import { CourseStickyCta } from "@/components/features/module-accordion";
+import { CourseProgram } from "@/components/features/course-program";
+import { CourseProgressCard } from "@/components/features/course-progress-card";
+import { CourseSideRail } from "@/components/features/course-side-rail";
+import { lessonTotalMinutes } from "@/lib/utils/lesson-path";
 import { Linkify } from "@/components/blocks/linkify";
 import { BackButton } from "@/components/ui/back-button";
 
@@ -89,37 +91,58 @@ export default async function CoursePage({ params }: CoursePageProps) {
   });
 
   // The mobile sticky CTA targets the current (next open, incomplete) lesson.
-  const currentLesson = treeModules.flatMap((m) => m.lessons).find((l) => l.current) ?? null;
+  const allLessons = treeModules.flatMap((m) => m.lessons);
+  const currentLesson = allLessons.find((l) => l.current) ?? null;
+
+  // Оценки времени (заход B.5). «Всего» — по всем урокам курса, «осталось» — по
+  // незавершённым ОБЯЗАТЕЛЬНЫМ: необязательный урок ничего не гейтит, и включать
+  // его в долг ученика нечестно. Видео с неизвестной длительностью в сумму не
+  // входит — поэтому на экране «~», а не точное число (lessonTotalMinutes).
+  const totalMinutes = allLessons.reduce((sum, lesson) => sum + lessonTotalMinutes(lesson), 0);
+  const remainingMinutes = allLessons
+    .filter((lesson) => !lesson.completed && !lesson.isOptional)
+    .reduce((sum, lesson) => sum + lessonTotalMinutes(lesson), 0);
+  const courseDone = state.totalRequired > 0 && state.completedRequired === state.totalRequired;
 
   return (
-    <div className="flex flex-col gap-6">
+    /* Ширину держит контейнер зоны (max-w-6xl, решение 13.1/B4) — второй потолок
+       из референса (1180px) здесь только спорил бы с ним.
+       `@container` объявлен ЗДЕСЬ, а не на строке с программой: элемент не может
+       спрашивать сам себя — контейнерный запрос действует только на потомков,
+       и `@min-[840px]:flex-row` на самом контейнере не сработал бы (проверено
+       замером: колонка оставалась под программой при контенте 961px). */
+    <div className="@container flex flex-col gap-6">
       <div>
-        {/* D4 (spec 13.1): hierarchical back, unified onto BackButton (44px touch target). */}
+        {/* D4 (spec 13.1): hierarchical back, unified onto BackButton (44px touch target).
+            В референсе это «хлебные крошки» той же роли — кнопка возврата в «Обучение». */}
         <BackButton href="/courses" label="Обучение" className="mb-3" />
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">{course.title}</h1>
-          <Badge>{GATING_LABEL[course.gating]}</Badge>
+        {/* Чипы курса: порядок прохождения и оценка объёма. «Вводный курс» из
+            референса не рисуем — такого признака в модели нет (см. отчёт B.5). */}
+        <div className="mb-3 flex flex-wrap items-center gap-2.5">
+          <span className="rounded-pill border-border text-text-3 inline-flex items-center gap-1.5 border px-2.5 py-[3px] text-[11px]">
+            <ListOrdered size={12} strokeWidth={1.75} aria-hidden="true" />
+            {GATING_LABEL[course.gating]}
+          </span>
+          {totalMinutes > 0 && (
+            <span className="rounded-pill border-border text-text-3 inline-flex items-center gap-1.5 border px-2.5 py-[3px] text-[11px]">
+              <Clock size={12} strokeWidth={1.75} aria-hidden="true" />
+              {totalMinutes} мин всего
+            </span>
+          )}
         </div>
+        <h1 className="text-[clamp(1.75rem,6.5vw,2.5rem)] leading-[1.12] font-bold tracking-[-0.025em] text-balance">
+          {course.title}
+        </h1>
         {course.description && (
           /* Заход B.4: переносы строк описания видны ученику. Текст хранится в
              courses.description как есть, а обычный <p> схлопывал переводы строк
              в пробел — многострочное описание из студии читалось одним куском.
              Карточка каталога остаётся без pre-line: там текст обрезан двумя
              строками, и ранний перенос съел бы половину видимого. */
-          <p className="text-text-2 mt-1.5 max-w-[64ch] text-[14px] whitespace-pre-line">
+          <p className="text-text-2 mt-3 max-w-[62ch] text-[17px] leading-relaxed whitespace-pre-line">
             <Linkify text={course.description} />
           </p>
         )}
-        <div className="mt-4 flex max-w-sm items-center gap-3">
-          <ProgressBar
-            value={progressPct}
-            gradient
-            aria-label={`Прогресс курса: ${progressPct}%`}
-          />
-          <span className="text-text-3 shrink-0 text-[12px] tabular-nums">
-            {progressPct}% · {state.completedRequired} из {state.totalRequired}
-          </span>
-        </div>
       </div>
 
       {treeModules.length === 0 ? (
@@ -132,17 +155,43 @@ export default async function CoursePage({ params }: CoursePageProps) {
         </Card>
       ) : (
         <>
-          {/* Desktop: unchanged ModuleTree. Mobile (<768px): accordion + sticky CTA. */}
-          <Card className="hidden md:block">
-            <CardContent className="p-5">
-              <ModuleTree modules={treeModules} />
-            </CardContent>
-          </Card>
-          <div className="md:hidden">
-            <ModuleAccordion modules={treeModules} />
-            {/* Clearance so the last row is not hidden behind the fixed CTA + nav. */}
-            {currentLesson && <div aria-hidden="true" className="h-16" />}
+          <CourseProgressCard
+            percent={progressPct}
+            completed={state.completedRequired}
+            total={state.totalRequired}
+            remainingMinutes={courseDone ? null : remainingMinutes}
+            cta={
+              currentLesson
+                ? {
+                    href: `/lessons/${currentLesson.id}`,
+                    label: `Продолжить: ${currentLesson.title}`,
+                  }
+                : null
+            }
+          />
+
+          {/* Программа и правая колонка.
+              Порог — КОНТЕЙНЕРНЫЙ, а не по вьюпорту: референс прячет колонку
+              ниже 1060px, но он рисован без боковой панели, а у нас на тех же
+              1060px контенту достаётся 741px — колонка всё равно не встала бы
+              рядом. Плюс ширина контента зависит от состояния панели (240px,
+              рельс 64px или свёрнута выбором ученика, заход B.3), то есть одна
+              и та же ширина окна даёт разное место. Считаем по факту: 520
+              (программа) + 32 (зазор) + 280 (колонка) = 832, отсюда 840. */}
+          <div className="flex flex-col gap-[clamp(1.25rem,3vw,2rem)] @min-[840px]:flex-row @min-[840px]:items-start">
+            <div className="min-w-0 flex-1">
+              <CourseProgram modules={treeModules} />
+              {/* Clearance so the last row is not hidden behind the fixed CTA + nav. */}
+              {currentLesson && <div aria-hidden="true" className="h-16 md:hidden" />}
+            </div>
+            <aside
+              aria-label="О курсе"
+              className="flex min-w-0 flex-col gap-3 @min-[840px]:sticky @min-[840px]:top-16 @min-[840px]:w-[280px] @min-[840px]:flex-none"
+            >
+              <CourseSideRail />
+            </aside>
           </div>
+
           {currentLesson && (
             <CourseStickyCta lessonId={currentLesson.id} lessonTitle={currentLesson.title} />
           )}
