@@ -41,6 +41,9 @@ coverage
 /backups/
 # full deploy logs — deploy.sh tees every run into the clone on the server
 /deploy-logs/
+# Отметка фактически выкаченного коммита (гард 6 в deploy.sh) — состояние
+# конкретной машины, не репозитория.
+/.deployed-head
 *.dump
 
 # design handoff — unzipped prototypes + assets (reference only, not app code)

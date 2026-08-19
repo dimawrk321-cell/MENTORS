@@ -11,6 +11,9 @@
 #
 # Every run tees its full output to deploy-logs/deploy-<ts>.log (20 kept); the
 # path is printed first. DEPLOY_LOG_DIR overrides the location.
+#
+# The build runs in its OWN session (setsid): a dropped ssh client must not kill
+# a rollout halfway. DEPLOY_DETACH=0 keeps the old inline behaviour.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -20,17 +23,55 @@ cd "$(dirname "$0")"
 # подряд ровно эти строки терялись, потому что читающий обрезал вывод хвостом.
 # Теперь весь вывод дублируется в файл независимо от того, кто и как запустил
 # скрипт, — читать хвостом можно, потерять нельзя.
-#
-# Потоки НЕ склеиваются: stderr остаётся stderr (die() пишет туда весь блок
-# отказа целиком, чтобы он читался одним куском), в файл попадают оба.
-# Оговорка: bash не ждёт завершения подстановок процессов, поэтому при разрыве
-# соединения последние строки могут не дойти до ТЕРМИНАЛА; в файл tee их
-# сбрасывает по EOF.
 DEPLOY_LOG_DIR="${DEPLOY_LOG_DIR:-$(pwd)/deploy-logs}"
 mkdir -p "$DEPLOY_LOG_DIR"
-DEPLOY_LOG="$DEPLOY_LOG_DIR/deploy-$(date +%Y%m%d-%H%M%S).log"
-exec > >(tee -a "$DEPLOY_LOG") 2> >(tee -a "$DEPLOY_LOG" >&2)
-echo "→ лог этого прогона: $DEPLOY_LOG"
+
+# ── Выкатка живёт в своей сессии (заход B.6) ─────────────────────────────────
+# Прецедент: 18.08 ssh-клиент упёрся в таймаут на середине сборки, tailscaled
+# снёс удалённую команду, и выкатка умерла между `git pull` и подъёмом
+# контейнеров — pull прошёл, образ остался прежним. То есть обрыв СЕТИ оставлял
+# стенд в рассогласованном состоянии, и внешне это выглядело как «деплой не
+# доехал», хотя половина работы была сделана.
+#
+# Поэтому сначала отделяемся: `setsid` уводит настоящий прогон в новую сессию
+# (её не касается ни SIGHUP от закрытого канала, ни снос группы процессов ssh),
+# а эта половина остаётся клиенту вместо стрима — `tail -f --pid` показывает
+# ровно то, что пишется в лог, и умирает вместе с ребёнком. Клиент может уйти в
+# любой момент: выкатка договорит сама с собой и допишет лог до вердикта.
+#
+# Плата, названная прямо: у отделённого прогона stdout и stderr смотрят в ОДИН
+# файл, поэтому клиент видит один слитый поток. Внутри прогона потоки остаются
+# разными дескрипторами (die() по-прежнему пишет блок отказа в fd 2 целиком и
+# одним куском), а порядок строк в файле сохраняется — оба открыты в O_APPEND.
+if [ "${DEPLOY_DETACH:-1}" != "0" ] && [ "${DEPLOY_DETACHED:-0}" != "1" ] &&
+  command -v setsid >/dev/null 2>&1; then
+  DEPLOY_LOG="${DEPLOY_LOG:-$DEPLOY_LOG_DIR/deploy-$(date +%Y%m%d-%H%M%S).log}"
+  : >>"$DEPLOY_LOG"
+  echo "→ лог этого прогона: $DEPLOY_LOG"
+  echo "→ выкатка идёт в отдельной сессии: обрыв ssh её не прервёт"
+  DEPLOY_DETACHED=1 DEPLOY_LOG="$DEPLOY_LOG" setsid bash "$0" "$@" \
+    >>"$DEPLOY_LOG" 2>>"$DEPLOY_LOG" &
+  deploy_pid=$!
+  # Стрим клиенту. `--pid` завершает tail вместе с прогоном; файл остаётся
+  # источником правды, если этот tail оборвётся вместе с клиентом.
+  tail -n +1 -f --pid="$deploy_pid" "$DEPLOY_LOG" 2>/dev/null &
+  tail_pid=$!
+  set +e
+  wait "$deploy_pid"
+  deploy_code=$?
+  set -e
+  wait "$tail_pid" 2>/dev/null || true
+  exit "$deploy_code"
+fi
+
+# Отделённый прогон уже пишет оба потока в файл — второй раз дублировать
+# нечего. Инлайновый (DEPLOY_DETACH=0 или система без setsid) держит прежнюю
+# схему: два tee в один файл, stderr остаётся stderr для вызывающего.
+if [ "${DEPLOY_DETACHED:-0}" != "1" ]; then
+  DEPLOY_LOG="${DEPLOY_LOG:-$DEPLOY_LOG_DIR/deploy-$(date +%Y%m%d-%H%M%S).log}"
+  exec > >(tee -a "$DEPLOY_LOG") 2> >(tee -a "$DEPLOY_LOG" >&2)
+  echo "→ лог этого прогона: $DEPLOY_LOG"
+fi
 # Ротация как у бэкапов: держим 20 последних прогонов. `|| true` обязателен, и
 # не для красоты: `tee` из строки выше стартует асинхронно, и файл может ещё не
 # существовать, когда до сюда доходит `ls` — тогда под `set -euo pipefail` он
@@ -93,17 +134,51 @@ echo "→ git pull --ff-only (ветка $current_branch)"
 git pull --ff-only
 head_after="$(git rev-parse HEAD)"
 
-if [ "$head_before" = "$head_after" ]; then
-  banner "⚠  HEAD НЕ ИЗМЕНИЛСЯ — НОВОГО КОДА НЕТ"
-  echo "  HEAD:  $(git log --oneline -1 "$head_after")"
-  echo
-  echo "  Сборка пойдёт из того же кода, что уже работает на стенде."
-  echo "  Если вы ждали новый код — проверьте, что коммит запушен в"
-  echo "  origin/$DEPLOY_BRANCH: git log --oneline origin/$DEPLOY_BRANCH -3"
-else
+# ── Guard 6 (заход B.6): что РЕАЛЬНО выкачено, а не только что лежит в git ───
+# Гард 2 сравнивает HEAD до и после pull — этого мало. 18.08 прогон оборвался
+# после pull и до сборки; следующий честно сказал «HEAD НЕ ИЗМЕНИЛСЯ» и тут же
+# добавил «сборка пойдёт из того же кода, что уже работает на стенде» — а
+# работал образ суточной давности. У «нового кода нет» два разных смысла, и
+# скрипт их не различал.
+#
+# Отметка `.deployed-head` пишется в самом конце — после healthcheck и сверки
+# миграций, — поэтому означает не «образ собран из этого коммита», а «этот
+# коммит доказанно живёт на стенде». Label образа так сказать не может: образ
+# существует и когда его ни разу не поднимали, и когда контейнер поднят из
+# другого. Файл в каталоге клона, вне git (.gitignore).
+DEPLOYED_HEAD_FILE="$(pwd)/.deployed-head"
+deployed_head=""
+[ -f "$DEPLOYED_HEAD_FILE" ] && deployed_head="$(tr -d '[:space:]' <"$DEPLOYED_HEAD_FILE")"
+
+if [ "$head_before" != "$head_after" ]; then
   banner "✓ HEAD ОБНОВЛЁН: $(git rev-list --count "$head_before..$head_after") коммит(ов)"
   echo "  было:  $(git log --oneline -1 "$head_before")"
   echo "  стало: $(git log --oneline -1 "$head_after")"
+elif [ "$deployed_head" = "$head_after" ]; then
+  banner "⚠  НОВОГО КОДА НЕТ — СТЕНД УЖЕ НА ЭТОМ КОММИТЕ"
+  echo "  HEAD:  $(git log --oneline -1 "$head_after")"
+  echo "  Отметка выкатки совпадает с HEAD, то есть этот код уже работает."
+  echo
+  echo "  Пересборка допустима (например, поменялся .env.prod), но кода не"
+  echo "  прибавится. Если вы ждали новый код — проверьте, что коммит запушен:"
+  echo "  git log --oneline origin/$DEPLOY_BRANCH -3"
+else
+  banner "⚠  НОВОГО КОДА НЕТ, НО СТЕНД СОБРАН ИЗ ДРУГОГО КОММИТА"
+  echo "  HEAD:      $(git log --oneline -1 "$head_after")"
+  if [ -z "$deployed_head" ]; then
+    echo "  Отметка:   нет файла .deployed-head"
+    echo
+    echo "  Отметку пишет только новый деплой, поэтому на первом прогоне после"
+    echo "  обновления скрипта это ожидаемо. Дальше отсутствие отметки означает"
+    echo "  ровно одно: чем поднят стенд — неизвестно."
+  else
+    echo "  Отметка:   $(git log --oneline -1 "$deployed_head" 2>/dev/null || echo "$deployed_head (коммита нет в клоне)")"
+    echo
+    echo "  Значит, предыдущая выкатка не дошла до конца (обрыв, падение) либо"
+    echo "  контейнеры поднимали руками. Живой стенд НЕ равен HEAD."
+  fi
+  echo
+  echo "  Сборка нужна: она и приведёт стенд к HEAD."
 fi
 
 if [ "$CHECK_ONLY" = "1" ]; then
@@ -189,6 +264,14 @@ fi
 # it: --max-used-space keeps the newest entries, so the pnpm store and the
 # node_modules layer survive and the next build stays incremental.
 # Both prunes are best-effort — housekeeping must never fail a good deploy.
+# ── Guard 6, вторая половина: отметка ставится только доказанной выкаткой ────
+# Сюда доходят лишь прогоны, у которых web и worker стали healthy и миграции
+# сошлись: любой отказ выше — die() или `set -e`. Поэтому отметка означает
+# «этот коммит работает», а не «этот коммит собран». Пишется ДО уборки: prune
+# косметика, и его неудача не должна отменять факт выкатки.
+printf '%s\n' "$head_after" >"$DEPLOYED_HEAD_FILE"
+echo "  отметка выкатки: $(git log --oneline -1 "$head_after")"
+
 BUILD_CACHE_CAP="${DEPLOY_BUILD_CACHE_CAP:-8GB}"
 echo "→ уборка: висячие образы + build cache до $BUILD_CACHE_CAP"
 docker image prune -f || true
