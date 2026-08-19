@@ -337,7 +337,12 @@ export function LessonEditor({
     saveState === "saved" ? "Сохранено" : saveState === "saving" ? "Сохранение…" : "Изменено…";
 
   return (
+    // `data-admin-wide` (заход B.6): двухпанельный редактор просит у админ-шелла
+    // широкий контейнер — иначе на 1600px он держал 1024 из доступных 1296, и
+    // предпросмотру не хватало на читальную колонку 680px. Потолок — в
+    // app/(admin)/admin/layout.tsx, ниже 1024px он не участвует.
     <div
+      data-admin-wide
       className={cn(
         "flex flex-col gap-4",
         fullscreen && "bg-bg fixed inset-0 z-50 overflow-auto p-4",

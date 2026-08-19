@@ -93,7 +93,12 @@ export function CategoryMultiSelect({
         />
       </div>
 
-      <div className="rounded-control border-border flex max-h-64 flex-col overflow-y-auto border p-1">
+      {/* Заход B.6: потолок был `max-h-64` (256px) — из 58 категорий помещалось
+          ~9 строк, и владелец листал список щелью на каждой простановке связи
+          курс↔категория. `min(26rem, 45dvh)`: на десктопе ~416px (~14 строк), на
+          невысоком вьюпорте список сжимается сам, чтобы диалог не стал простынёй
+          (у DialogContent свой `max-h-[calc(100dvh-2rem)]`). */}
+      <div className="rounded-control border-border flex max-h-[min(26rem,45dvh)] flex-col overflow-y-auto border p-1">
         {visible.length === 0 ? (
           <p className="text-text-3 p-2 text-[12px]">Ничего не нашлось.</p>
         ) : (

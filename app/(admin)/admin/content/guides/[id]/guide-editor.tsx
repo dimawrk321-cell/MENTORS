@@ -217,7 +217,10 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
     saveState === "saved" ? "Сохранено" : saveState === "saving" ? "Сохранение…" : "Изменено…";
 
   return (
+    // `data-admin-wide` — тот же широкий контейнер, что у редактора урока
+    // (заход B.6): редактор гайда двухпанельный по той же схеме.
     <div
+      data-admin-wide
       className={cn(
         "flex flex-col gap-4",
         fullscreen && "bg-bg fixed inset-0 z-50 overflow-auto p-4",

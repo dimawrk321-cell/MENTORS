@@ -532,7 +532,11 @@ function CourseCard({ course, categories }: { course: TreeCourse; categories: Ca
 
       {/* Edit course dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        {/* Заход B.6: диалог курса раздвинут 512 → 672px с 640px вьюпорта —
+            в нём живут описание до 1000 символов и список из 58 категорий, и
+            на `max-w-lg` оба читались щелью. На мобильном ширина прежняя
+            (`calc(100vw-2rem)` из DialogContent). */}
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Курс</DialogTitle>
           </DialogHeader>
@@ -573,16 +577,35 @@ function CourseCard({ course, categories }: { course: TreeCourse; categories: Ca
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label htmlFor={`course-desc-${course.id}`} className="text-text-2 text-[13px]">
-                Описание
-              </label>
+              <div className="flex items-baseline justify-between gap-2">
+                <label htmlFor={`course-desc-${course.id}`} className="text-text-2 text-[13px]">
+                  Описание
+                </label>
+                {/* Предел 1000 символов держит zod в updateCourse — без счётчика
+                    он срабатывал молча, уже после «Сохранить». */}
+                <span
+                  className={cn(
+                    "text-[12px] tabular-nums",
+                    form.description.length > 1000 ? "text-danger" : "text-text-3",
+                  )}
+                >
+                  {form.description.length} / 1000
+                </span>
+              </div>
+              {/* Заход B.6: поле тянется по содержимому (6–16 строк) вместо
+                  фиксированных трёх — абзацы описания должны быть видны при
+                  редактировании, а не проматываться по три строки. */}
               <textarea
                 id={`course-desc-${course.id}`}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                rows={3}
-                className="rounded-control border-border text-text-1 ease-app placeholder:text-text-3 hover:border-border-strong w-full resize-y border bg-transparent px-3 py-2 text-[14px] transition-colors duration-150"
+                rows={Math.min(16, Math.max(6, form.description.split("\n").length))}
+                className="rounded-control border-border text-text-1 ease-app placeholder:text-text-3 hover:border-border-strong w-full resize-y border bg-transparent px-3 py-2 text-[14px] leading-relaxed transition-colors duration-150"
               />
+              <p className="text-text-3 text-[12px]">
+                Переносы строк ученик видит на странице курса; в карточке каталога описание обрезано
+                двумя строками. Разметка не поддерживается — ссылки становятся кликабельными сами.
+              </p>
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="text-text-2 text-[13px]">Гейтинг</span>

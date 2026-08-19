@@ -32,7 +32,17 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           admin table (desktop, md+ flex row) bursts the page instead of
           scrolling inside its own container (spec 13). */}
       <main className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">{children}</div>
+        {/* Заход B.6: потолок ширины поднимает САМА страница, а не список
+            маршрутов в шелле — редакторы урока и гайда помечают свой корень
+            `data-admin-wide`, и только для них контейнер уходит с 64rem на
+            110rem. Двухпанельный редактор на 1600px иначе держал 1024 из
+            доступных 1296, и предпросмотр не мог показать читальную колонку
+            680px, то есть врал о боевом виде. Ниже 1024px потолок не участвует
+            вовсе — контейнер там и так у́же вьюпорта, мобильная вёрстка не
+            затронута. */}
+        <div className="mx-auto w-full max-w-5xl px-4 py-6 has-[[data-admin-wide]]:max-w-[110rem] md:px-8 md:py-10">
+          {children}
+        </div>
       </main>
       {/* Palette opens in the admin zone too, searching the same four types (spec 7.11). */}
       <CommandPalette zone="admin" />
