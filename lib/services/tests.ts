@@ -11,15 +11,35 @@ import { writeAudit } from "@/lib/services/audit";
 // combines both — this keeps tests.ts free of a content.ts import cycle
 // (content.ts consumes getModuleTestStates below for its gating hook).
 
+/**
+ * Порог экстерна по умолчанию (spec 7.3). С захода C.1 это ЗНАЧЕНИЕ ПО
+ * УМОЛЧАНИЮ, а не правило: живой порог лежит в `module_tests.testout_threshold`
+ * и правится в диалоге теста. Константа остаётся дефолтом новой строки и
+ * фоллбэком там, где строки теста нет.
+ */
 export const TESTOUT_THRESHOLD = 90;
 
+/** Порог попытки: экстерн — свой порог теста, обычный тест — общий (spec 7.5). */
+function thresholdFor(kind: TestKind, test: ModuleTest | null): number {
+  if (kind === "testout") return test?.testoutThreshold ?? TESTOUT_THRESHOLD;
+  return test?.threshold ?? 80;
+}
+
 export {
+  getModulePoolCounts,
   getModuleTestStates,
   makeModuleTestHook,
   type ModuleTestState,
 } from "@/lib/services/module-test-state";
 
-/** Пул теста: закрытые published-вопросы published-уроков модуля (spec 7.5). */
+/**
+ * Пул теста: закрытые published-вопросы published-уроков модуля (spec 7.5).
+ *
+ * Роль связи (`is_key`/`in_quiz`) здесь НЕ участвует — закрытый опубликованный
+ * вопрос идёт в тест и с ролью «просто привязан». То же правило на TypeScript —
+ * `poolEligible` в lib/utils/answers.ts (им редактор урока показывает ментору
+ * последствие привязки); эквивалентность двух записей закреплена тестом.
+ */
 export async function getModuleQuestionPool(db: Db, moduleId: string): Promise<Question[]> {
   const links = await db.questionLesson.findMany({
     where: {
@@ -104,7 +124,16 @@ export async function getTestOverview(
 
 export type StartTestResult =
   | { ok: true; attemptId: string; resumed: boolean }
-  | { ok: false; code: "no_test" | "disabled" | "no_questions" | "cooldown" | "already_passed" };
+  | {
+      ok: false;
+      code:
+        | "no_test"
+        | "disabled"
+        | "testout_disabled"
+        | "no_questions"
+        | "cooldown"
+        | "already_passed";
+    };
 
 /**
  * Starts (or resumes) an attempt: the random selection of min(pool_size, pool)
@@ -124,6 +153,13 @@ export async function startTestAttempt(
   });
   if (!overview) return { ok: false, code: "no_test" };
   if (!overview.test.enabled) return { ok: false, code: "disabled" };
+  // Заход C.1: тумблер экстерна — гейт В ДЕЙСТВИИ, а не только на странице
+  // (правило захода 13.6/блок 5). Проверка стоит ДО возобновления активной
+  // попытки: попытка, начатая до выключения тумблера, не должна доживать до
+  // зачёта — тот же класс, что `answerTestAction` в аудите цепи курсов.
+  if (input.kind === "testout" && !overview.test.testoutEnabled) {
+    return { ok: false, code: "testout_disabled" };
+  }
   if (overview.passedAttemptId) return { ok: false, code: "already_passed" };
 
   if (overview.activeAttempt) {
@@ -238,7 +274,7 @@ export async function finishTestAttempt(
   if (attempt.finishedAt !== null) return { ok: false, code: "finished" };
 
   const test = await db.moduleTest.findUnique({ where: { moduleId: attempt.moduleId } });
-  const threshold = attempt.kind === "testout" ? TESTOUT_THRESHOLD : (test?.threshold ?? 80);
+  const threshold = thresholdFor(attempt.kind, test);
   const total = parseQuestionIds(attempt.questionIds).length;
   const correct = attempt.answers.filter((answer) => answer.correct).length;
   const score = total === 0 ? 0 : Math.round((correct / total) * 100);
@@ -358,7 +394,7 @@ export async function getAttemptReview(
   if (!attempt || attempt.userId !== input.userId || attempt.finishedAt === null) return null;
 
   const test = await db.moduleTest.findUnique({ where: { moduleId: attempt.moduleId } });
-  const threshold = attempt.kind === "testout" ? TESTOUT_THRESHOLD : (test?.threshold ?? 80);
+  const threshold = thresholdFor(attempt.kind, test);
   const questionIds = parseQuestionIds(attempt.questionIds);
   const questions = await db.question.findMany({
     where: { id: { in: questionIds } },
@@ -423,6 +459,8 @@ export async function upsertModuleTestConfig(
     threshold: number;
     cooldownMinutes: number;
     enabled: boolean;
+    testoutEnabled: boolean;
+    testoutThreshold: number;
   },
 ): Promise<{ ok: true } | { ok: false; code: "not_found" }> {
   const mod = await db.module.findUnique({ where: { id: input.moduleId } });
@@ -434,6 +472,8 @@ export async function upsertModuleTestConfig(
     threshold: input.threshold,
     cooldownMinutes: input.cooldownMinutes,
     enabled: input.enabled,
+    testoutEnabled: input.testoutEnabled,
+    testoutThreshold: input.testoutThreshold,
   };
   await db.moduleTest.upsert({
     where: { moduleId: mod.id },
@@ -451,6 +491,8 @@ export async function upsertModuleTestConfig(
           threshold: existing.threshold,
           cooldownMinutes: existing.cooldownMinutes,
           enabled: existing.enabled,
+          testoutEnabled: existing.testoutEnabled,
+          testoutThreshold: existing.testoutThreshold,
         }
       : undefined,
     after: { ...data },

@@ -93,12 +93,21 @@ export interface TreeModuleTest {
   threshold: number;
   cooldownMinutes: number;
   enabled: boolean;
+  /** Экстерн разрешён (заход C.1). */
+  testoutEnabled: boolean;
+  /** Порог экстерна, % (заход C.1). */
+  testoutThreshold: number;
 }
 
 export interface TreeModule {
   id: string;
   title: string;
   status: "draft" | "published";
+  /**
+   * Сколько закрытых опубликованных вопросов реально доступно тесту (заход
+   * C.1). Это НЕ `pool_size`: тот говорит, сколько взять, а это — сколько есть.
+   */
+  poolCount: number;
   test: TreeModuleTest | null;
   lessons: TreeLesson[];
 }
@@ -706,6 +715,10 @@ function ModuleBlock({ module }: { module: TreeModule }) {
     threshold: module.test?.threshold ?? 80,
     cooldownMinutes: module.test?.cooldownMinutes ?? 45,
     enabled: module.test?.enabled ?? true,
+    // Дефолты новой строки повторяют прежнее поведение: экстерн был доступен
+    // всегда (решал только гейтинг курса), порог был код-константой 90.
+    testoutEnabled: module.test?.testoutEnabled ?? true,
+    testoutThreshold: module.test?.testoutThreshold ?? 90,
   });
   const published = module.status === "published";
 
@@ -892,8 +905,8 @@ function ModuleBlock({ module }: { module: TreeModule }) {
           <DialogHeader>
             <DialogTitle>Тест модуля «{module.title}»</DialogTitle>
             <DialogDescription>
-              Пул — закрытые опубликованные вопросы уроков модуля; выборка случайная, экстерн — с
-              порогом 90%.
+              Пул — закрытые опубликованные вопросы опубликованных уроков модуля, при любой роли
+              привязки. Выборка случайная и новая на каждую попытку.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
@@ -904,6 +917,66 @@ function ModuleBlock({ module }: { module: TreeModule }) {
                 onCheckedChange={(enabled) => setTestForm({ ...testForm, enabled })}
               />
             </label>
+
+            {/* Заход C.1, блок 1. «Вопросов» ниже — это pool_size, то есть
+                СКОЛЬКО ВЗЯТЬ. Сколько есть, не показывалось нигде в админке, и
+                пустой тест выглядел настроенным. */}
+            <div className="rounded-control border-border bg-surface-1 border px-3 py-2.5">
+              <p className="flex items-baseline justify-between gap-3 text-[13px]">
+                <span className="text-text-2">Доступно вопросов в модуле</span>
+                <span
+                  className={cn(
+                    "text-[15px] font-semibold tabular-nums",
+                    module.poolCount === 0 ? "text-danger" : "text-text-1",
+                  )}
+                >
+                  {module.poolCount}
+                </span>
+              </p>
+              {module.poolCount > 0 && (
+                <p className="text-text-3 mt-1 text-[12px]">
+                  В попытку пойдёт{" "}
+                  <span className="tabular-nums">
+                    {Math.min(testForm.poolSize, module.poolCount)}
+                  </span>{" "}
+                  — минимум из «Вопросов» и доступного.
+                </p>
+              )}
+            </div>
+
+            {module.poolCount === 0 ? (
+              <p className="rounded-control border-danger/35 bg-danger/6 text-text-2 flex items-start gap-2 border px-3 py-2 text-[13px]">
+                <AlertTriangle
+                  size={15}
+                  strokeWidth={1.75}
+                  className="text-danger mt-0.5 shrink-0"
+                  aria-hidden="true"
+                />
+                <span>
+                  Пул пуст — <b className="text-text-1">тест ничего не проверяет</b>. Начать попытку
+                  нельзя, и в закрытии модуля такой тест не участвует: модуль считается сданным.
+                  Чтобы тест заработал, привяжи к опубликованным урокам модуля закрытые
+                  опубликованные вопросы — это делается в редакторе урока, секция «Вопросы урока».
+                </span>
+              </p>
+            ) : (
+              testForm.poolSize > module.poolCount && (
+                <p className="rounded-control border-warning/35 bg-warning/6 text-text-2 flex items-start gap-2 border px-3 py-2 text-[13px]">
+                  <AlertTriangle
+                    size={15}
+                    strokeWidth={1.75}
+                    className="text-warning mt-0.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    Вопросов меньше, чем просит настройка (
+                    <span className="tabular-nums">{module.poolCount}</span> против{" "}
+                    <span className="tabular-nums">{testForm.poolSize}</span>): в попытку пойдут все
+                    доступные, и у всех учеников выборка будет одинаковой.
+                  </span>
+                </p>
+              )
+            )}
             <div className="grid grid-cols-3 gap-3">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor={`test-pool-${module.id}`} className="text-text-2 text-[13px]">
@@ -950,6 +1023,47 @@ function ModuleBlock({ module }: { module: TreeModule }) {
                   }
                 />
               </div>
+            </div>
+
+            {/* Заход C.1, блок 3: экстерн был двойной неявностью — порог жил
+                код-константой, а включался косвенно, через гейтинг курса. */}
+            <div className="border-border flex flex-col gap-3 border-t pt-4">
+              <label className="flex items-center justify-between gap-3 text-[14px]">
+                Экстерн разрешён («Сдать модуль экстерном»)
+                <Switch
+                  checked={testForm.testoutEnabled}
+                  onCheckedChange={(testoutEnabled) => setTestForm({ ...testForm, testoutEnabled })}
+                />
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label
+                    htmlFor={`test-testout-threshold-${module.id}`}
+                    className="text-text-2 text-[13px]"
+                  >
+                    Порог экстерна, %
+                  </label>
+                  <Input
+                    id={`test-testout-threshold-${module.id}`}
+                    type="number"
+                    min={1}
+                    max={100}
+                    disabled={!testForm.testoutEnabled}
+                    value={testForm.testoutThreshold}
+                    onChange={(event) =>
+                      setTestForm({
+                        ...testForm,
+                        testoutThreshold: Number(event.target.value) || 90,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <p className="text-text-3 text-[12px]">
+                Тумблер только запрещает: включённый не делает экстерн доступным сам по себе — его
+                по-прежнему предлагает правило гейтинга (курс со строгим порядком, уроки модуля не
+                завершены). Выключенный убирает экстерн и там.
+              </p>
             </div>
           </div>
           <DialogFooter>

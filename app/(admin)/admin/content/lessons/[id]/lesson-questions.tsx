@@ -20,6 +20,7 @@ import {
   roleFromFlags,
   type QuestionLinkRole,
 } from "@/components/features/question-role-select";
+import { poolEligible } from "@/lib/utils/answers";
 import type { ActionResult } from "@/lib/auth/action-helpers";
 import {
   bulkQuestionLinkRoleAction,
@@ -33,6 +34,8 @@ export interface LessonQuestionLinkRow {
   teaser: string;
   category: string;
   status: "draft" | "published";
+  /** Тип вопроса — решает, попадёт ли привязка в модульный тест (заход C.1). */
+  type: "open" | "single" | "multi" | "tf" | "short_text";
   /** Есть ли обратная сторона: эталон открытого либо варианты закрытого. */
   hasAnswer: boolean;
   isKey: boolean;
@@ -51,11 +54,17 @@ export function LessonQuestions({
   lessonId,
   links,
   categories,
+  lessonStatus,
+  moduleTestEnabled,
 }: {
   lessonId: string;
   links: LessonQuestionLinkRow[];
   /** Корневые категории для фильтра в панели добавления (changelog 13.6). */
   categories: Array<{ id: string; label: string }>;
+  /** Черновой урок в пул модульного теста не отдаёт ничего (заход C.1). */
+  lessonStatus: "draft" | "published";
+  /** У модуля есть включённый тест (заход C.1). */
+  moduleTestEnabled: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -152,6 +161,18 @@ export function LessonQuestions({
   const draftLinks = links.length - published.length;
   const answerlessLinks = published.filter((link) => !link.hasAnswer).length;
 
+  // Заход C.1: третье последствие привязки, о котором секция молчала. В пул
+  // модульного теста вопрос идёт ПРИ ЛЮБОЙ РОЛИ — правило считает `poolEligible`
+  // (то же, что SQL-условие пула), поэтому «в тесте» здесь и пул на ученической
+  // стороне не могут разойтись.
+  const inTest = (link: LessonQuestionLinkRow) =>
+    poolEligible({
+      questionType: link.type,
+      questionStatus: link.status,
+      lessonStatus,
+    });
+  const testLinks = links.filter(inTest).length;
+
   const allSelected = links.length > 0 && selected.size === links.length;
   const toggleAll = () =>
     setSelected(allSelected ? new Set() : new Set(links.map((link) => link.questionId)));
@@ -192,9 +213,14 @@ export function LessonQuestions({
           {adding ? "Закрыть" : "Добавить вопрос"}
         </Button>
       </div>
+      {/* Заход C.1, блок 2: подпись рассказывала только про роли и молчала о
+          модульном тесте — а пул теста роль не смотрит вовсе. */}
       <p className="text-text-3 mb-2 text-[13px]">
         Роль одна: «ключевой» попадает в блок «Ключевые вопросы» (и в SRS с этапа 4), «в квизе» — в
-        квиз урока.
+        квиз урока. <span className="text-text-2">Отдельно от роли:</span> закрытый опубликованный
+        вопрос (варианты, верно/неверно, короткий ответ) на опубликованном уроке идёт ещё и в{" "}
+        <span className="text-text-2">модульный тест</span> — при любой роли, включая «просто
+        привязан». Открытые вопросы в тест не идут.
       </p>
 
       {/* Находка владельца: счётчик привязок показывал 2, а блока «Ключевые
@@ -204,7 +230,14 @@ export function LessonQuestions({
       {links.length > 0 && (
         <p className="text-text-2 mb-3 text-[13px]">
           Ученик увидит: <span className="text-text-1 tabular-nums">{visibleKey}</span> ключевых ·{" "}
-          <span className="text-text-1 tabular-nums">{visibleQuiz}</span> в квизе
+          <span className="text-text-1 tabular-nums">{visibleQuiz}</span> в квизе ·{" "}
+          <span className="text-text-1 tabular-nums">{testLinks}</span> в модульном тесте
+          {lessonStatus === "draft" && (
+            <span className="text-text-3"> (урок в черновике — в тест пока не идёт ничего)</span>
+          )}
+          {lessonStatus === "published" && testLinks > 0 && !moduleTestEnabled && (
+            <span className="text-text-3"> (тест модуля выключен — попытку начать нельзя)</span>
+          )}
         </p>
       )}
       {draftLinks > 0 && (
@@ -318,6 +351,17 @@ export function LessonQuestions({
                     title="У открытого вопроса пустой эталон — ученику он не показывается и в повторения не заводится"
                   >
                     нет эталона
+                  </Badge>
+                )}
+                {/* Заход C.1: последствие привязки, которое ментор до сих пор
+                    не видел, — вопрос идёт в модульный тест, и роль на это не
+                    влияет. */}
+                {inTest(link) && (
+                  <Badge
+                    variant="success"
+                    title="Закрытый опубликованный вопрос на опубликованном уроке — попадает в пул модульного теста при любой роли"
+                  >
+                    в тесте
                   </Badge>
                 )}
                 {/* Changelog этапа 3: роль одна — ключевой ИЛИ в квизе. */}

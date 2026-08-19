@@ -423,6 +423,10 @@ const moduleTestSchema = z.object({
     .min(0)
     .max(24 * 60),
   enabled: z.boolean(),
+  // Заход C.1: экстерн стал явной настройкой. Границы те же, что у обычного
+  // порога, — 90 по 7.3 остаётся дефолтом строки, а не потолком.
+  testoutEnabled: z.boolean(),
+  testoutThreshold: z.number().int().min(1).max(100),
 });
 
 export async function upsertModuleTestAction(input: unknown): Promise<ActionResult<undefined>> {

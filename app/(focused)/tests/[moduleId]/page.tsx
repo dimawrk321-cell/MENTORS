@@ -243,12 +243,19 @@ export default async function TestPage({ params, searchParams }: TestPageProps) 
 
   // Какой вид сдачи актуален сейчас (spec 7.3): уроки пройдены → обычный тест;
   // strict-модуль с непройденными уроками → экстерн.
-  const activeKind: "module" | "testout" = lessonsDone
-    ? "module"
-    : mod.course.gating === "strict"
-      ? "testout"
-      : "module";
-  const threshold = activeKind === "testout" ? TESTOUT_THRESHOLD : overview.test.threshold;
+  //
+  // Заход C.1: тумблер `testout_enabled` только ЗАПРЕЩАЕТ — он снимает экстерн
+  // там, где правило 7.3 его предлагало, но сам ничего не открывает. При
+  // выключенном тумблере ветка сваливается в «module», и ниже показывается
+  // обычное «Тест пока закрыт — сначала заверши уроки модуля».
+  const activeKind: "module" | "testout" =
+    lessonsDone || mod.course.gating !== "strict" || !overview.test.testoutEnabled
+      ? "module"
+      : "testout";
+  const threshold =
+    activeKind === "testout"
+      ? (overview.test.testoutThreshold ?? TESTOUT_THRESHOLD)
+      : overview.test.threshold;
   const cooldownUntil = overview.cooldownUntil[activeKind]?.toISOString() ?? null;
 
   // --- 3) Последняя попытка провалена: счёт, темы, кулдаун-кнопка ---

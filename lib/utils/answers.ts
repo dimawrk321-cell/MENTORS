@@ -85,3 +85,28 @@ export function correctAnswerText(question: CheckableQuestion): string | null {
 
 /** Закрытые (автопроверяемые) типы — пул квизов и тестов (spec 7.4). */
 export const CLOSED_QUESTION_TYPES = ["single", "multi", "tf", "short_text"] as const;
+
+/**
+ * Попадает ли привязанный вопрос в пул модульного теста (spec 7.5).
+ *
+ * Единственное место, где правило отбора записано на TypeScript: им пользуется
+ * редактор урока, чтобы показать ментору последствие привязки. SQL-условие
+ * `getModuleQuestionPool` — то же самое правило, выраженное where-клаузой (её
+ * нельзя собрать из этой функции), поэтому их эквивалентность закреплена тестом
+ * `tests/module-tests.test.ts` → «predicate == SQL».
+ *
+ * РОЛЬ СВЯЗИ НЕ УЧАСТВУЕТ: `is_key` и `in_quiz` пул не смотрит вовсе — закрытый
+ * опубликованный вопрос на опубликованном уроке идёт в тест и с ролью «просто
+ * привязан». Это ровно то, что заход C.1 проговаривает ментору вслух.
+ */
+export function poolEligible(input: {
+  questionType: CheckableQuestion["type"];
+  questionStatus: "draft" | "published";
+  lessonStatus: "draft" | "published";
+}): boolean {
+  return (
+    input.lessonStatus === "published" &&
+    input.questionStatus === "published" &&
+    (CLOSED_QUESTION_TYPES as readonly string[]).includes(input.questionType)
+  );
+}

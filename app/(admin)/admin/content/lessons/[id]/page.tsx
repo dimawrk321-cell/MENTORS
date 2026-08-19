@@ -23,9 +23,16 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
   const { id } = await params;
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();
-  const [questionLinks, categoryTree] = await Promise.all([
+  const [questionLinks, categoryTree, moduleTest] = await Promise.all([
     listLessonQuestionLinks(prisma, lesson.id),
     listCategoriesTree(prisma),
+    // Заход C.1: секция «Вопросы урока» показывает, какие привязки идут в
+    // модульный тест, — а это имеет смысл только когда тест у модуля есть и
+    // включён.
+    prisma.moduleTest.findUnique({
+      where: { moduleId: lesson.moduleId },
+      select: { enabled: true },
+    }),
   ]);
   // Root categories + children for the «+ Добавить вопрос» filter (13.6);
   // the service expands a root to its family, so either level works.
@@ -58,11 +65,16 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
       <LessonQuestions
         lessonId={lesson.id}
         categories={categories}
+        lessonStatus={lesson.status}
+        moduleTestEnabled={moduleTest?.enabled ?? false}
         links={questionLinks.map((link) => ({
           questionId: link.questionId,
           teaser: stripMarkdown(link.question.textMd, 120) || "— без текста —",
           category: link.question.category.title,
           status: link.question.status,
+          // Заход C.1: тип нужен, чтобы показать последствие привязки — в
+          // модульный тест идут только закрытые типы, зато при любой роли.
+          type: link.question.type,
           // Заход «Доступ к вопросам», блок 3: у ученика вопрос без эталона не
           // появится так же молча, как черновик, — редактор обязан назвать обе
           // причины по строкам, а не общим счётчиком.

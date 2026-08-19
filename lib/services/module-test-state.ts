@@ -18,6 +18,38 @@ export interface ModuleTestState {
   poolCount: number;
 }
 
+/**
+ * Размер фактического пула по модулям — то же условие, что у
+ * `getModuleQuestionPool`, но пачкой (заход C.1).
+ *
+ * Вынесено, потому что счётчик понадобился третьему потребителю: гейтингу
+ * (здесь), ученической странице теста и — с захода C.1 — диалогу теста в
+ * контент-студии, где ментор впервые видит, сколько вопросов у теста РЕАЛЬНО
+ * есть против `pool_size`, то есть сколько он просит взять. Третья копия
+ * where-клаузы была бы третьим местом, где правило может разъехаться.
+ */
+export async function getModulePoolCounts(
+  db: Db,
+  moduleIds: string[],
+): Promise<Map<string, number>> {
+  if (moduleIds.length === 0) return new Map();
+  const poolLinks = await db.questionLesson.findMany({
+    where: {
+      lesson: { moduleId: { in: moduleIds }, status: "published" },
+      question: { status: "published", type: { in: [...CLOSED_QUESTION_TYPES] } },
+    },
+    select: { questionId: true, lesson: { select: { moduleId: true } } },
+  });
+  const byModule = new Map<string, Set<string>>();
+  for (const link of poolLinks) {
+    const moduleId = link.lesson.moduleId;
+    const set = byModule.get(moduleId) ?? new Set<string>();
+    set.add(link.questionId);
+    byModule.set(moduleId, set);
+  }
+  return new Map([...byModule].map(([moduleId, set]) => [moduleId, set.size]));
+}
+
 /** Batch state for gating and the ModuleTree test rows. */
 export async function getModuleTestStates(
   db: Db,
@@ -28,21 +60,15 @@ export async function getModuleTestStates(
   const tests = await db.moduleTest.findMany({ where: { moduleId: { in: moduleIds } } });
   if (tests.length === 0) return new Map();
 
-  const [passedAttempts, poolLinks] = await Promise.all([
+  const [passedAttempts, poolByModule] = await Promise.all([
     db.testAttempt.findMany({
       where: { userId, moduleId: { in: moduleIds }, passed: true },
       select: { moduleId: true, score: true },
     }),
-    // Same filter as getModuleQuestionPool — an enabled test with an empty pool
-    // cannot be started (startTestAttempt returns `no_questions`), so it must
-    // not be allowed to gate anything (see makeModuleTestHook below).
-    db.questionLesson.findMany({
-      where: {
-        lesson: { moduleId: { in: moduleIds }, status: "published" },
-        question: { status: "published", type: { in: [...CLOSED_QUESTION_TYPES] } },
-      },
-      select: { questionId: true, lesson: { select: { moduleId: true } } },
-    }),
+    // An enabled test with an EMPTY pool cannot be started (startTestAttempt
+    // returns `no_questions`), so it must not be allowed to gate anything —
+    // see makeModuleTestHook below.
+    getModulePoolCounts(db, moduleIds),
   ]);
   const bestByModule = new Map<string, number>();
   for (const attempt of passedAttempts) {
@@ -50,13 +76,6 @@ export async function getModuleTestStates(
     if (best === undefined || attempt.score > best) {
       bestByModule.set(attempt.moduleId, attempt.score);
     }
-  }
-  const poolByModule = new Map<string, Set<string>>();
-  for (const link of poolLinks) {
-    const moduleId = link.lesson.moduleId;
-    const set = poolByModule.get(moduleId) ?? new Set<string>();
-    set.add(link.questionId);
-    poolByModule.set(moduleId, set);
   }
 
   return new Map(
@@ -66,7 +85,7 @@ export async function getModuleTestStates(
         test,
         passed: bestByModule.has(test.moduleId),
         bestPassedScore: bestByModule.get(test.moduleId) ?? null,
-        poolCount: poolByModule.get(test.moduleId)?.size ?? 0,
+        poolCount: poolByModule.get(test.moduleId) ?? 0,
       },
     ]),
   );

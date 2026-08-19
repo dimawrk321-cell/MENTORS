@@ -722,6 +722,18 @@ model ModuleTest {
   threshold       Int      @default(80)
   cooldownMinutes Int      @default(45) @map("cooldown_minutes")
   enabled         Boolean  @default(true)
+  /**
+   * Экстерн разрешён (заход C.1). Тумблер только ЗАПРЕЩАЕТ: включённый не
+   * делает экстерн доступным помимо правила 7.3 (strict-курс + незавершённые
+   * уроки) — иначе он стал бы вторым источником правды о том, когда экстерн
+   * уместен. Default true = прежнее поведение для существующих строк.
+   */
+  testoutEnabled  Boolean  @default(true) @map("testout_enabled")
+  /**
+   * Порог экстерна, % (заход C.1). Был код-константой TESTOUT_THRESHOLD = 90;
+   * она осталась значением по умолчанию и фоллбэком там, где строки теста нет.
+   */
+  testoutThreshold Int     @default(90) @map("testout_threshold")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

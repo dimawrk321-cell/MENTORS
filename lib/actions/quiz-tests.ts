@@ -141,6 +141,7 @@ export async function startTestAction(
       const messages: Record<typeof result.code, string> = {
         no_test: "У модуля нет теста",
         disabled: "Тест модуля выключен",
+        testout_disabled: "Экстерн по этому модулю выключен",
         no_questions: "В модуле пока нет вопросов для теста",
         cooldown: "Пересдача ещё на кулдауне — попробуй позже",
         already_passed: "Тест уже сдан",
