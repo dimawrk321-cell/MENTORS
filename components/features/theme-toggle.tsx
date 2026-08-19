@@ -11,6 +11,8 @@ import { updateThemeAction } from "@/lib/actions/profile";
 // + localStorage change apply instantly (mirroring the anti-FOUC script in
 // app/layout.tsx); the DB write is best-effort (ignored on failure, e.g. while
 // impersonating — the local change still gives the viewer their preferred theme).
+// While «Системная» is selected the hook also FOLLOWS the OS at runtime — see the
+// prefers-color-scheme subscription in useThemeToggle.
 
 type ThemeChoice = "system" | "dark" | "light";
 
@@ -58,6 +60,43 @@ function useThemeToggle(initial: ThemeChoice) {
     window.addEventListener(THEME_EVENT, onChange);
     return () => window.removeEventListener(THEME_EVENT, onChange);
   }, []);
+
+  // «Системная» следит за ОС в реальном времени (находка захода B.6).
+  // `prefers-color-scheme` читался ровно в двух точках: анти-FOUC-скрипт
+  // (app/layout.tsx) — один раз до первой отрисовки, и `resolve()` — в момент
+  // клика по переключателю. Между ними смена темы в ОС (в том числе по
+  // расписанию «вечером тёмная») страницу не трогала, и вкладка жила в старой
+  // теме до перезагрузки.
+  //
+  // Подписка живёт ТОЛЬКО пока выбрана «Системная»: зависимость от `choice`
+  // перезапускает эффект на «тёмную»/«светлую», снимает слушателя и выходит —
+  // явный выбор человека система перебивать не должна. Размонтирование снимает
+  // слушателя тем же cleanup.
+  //
+  // `localStorage` здесь НЕ трогаем: там лежит «system», и записать туда
+  // разрешённое «dark»/«light» значило бы молча вывести человека из системного
+  // режима — следующий анти-FOUC прочитал бы уже фиксированную тему.
+  // `THEME_EVENT` тоже не шлём: `choice` не менялся, подпись «Системная» у всех
+  // смонтированных переключателей та же.
+  useEffect(() => {
+    if (choice !== "system") return;
+    // MediaQueryList.addEventListener — Safari 14+; проект и так требует новее
+    // (color-mix, container queries, :has), legacy-ветка addListener не нужна.
+    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mq) return;
+    // Через resolve(), а не через mq.matches: правило разрешения темы должно
+    // остаться одно на файл, иначе оно разъедется с `apply()`.
+    const sync = () => {
+      document.documentElement.dataset.theme = resolve("system");
+    };
+    // Сверка сразу при подписке, а не только по событию: `choice` приезжает из
+    // localStorage уже ПОСЛЕ гидрации, и к этому моменту атрибут мог быть
+    // проставлен анти-FOUC-скриптом от другого сохранённого значения. Запись
+    // тем же значением — холостая, поэтому хуже не делает.
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [choice]);
 
   const cycle = () => {
     const next = CHOICES[(CHOICES.indexOf(choice) + 1) % CHOICES.length]!;
