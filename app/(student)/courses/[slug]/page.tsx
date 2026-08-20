@@ -13,6 +13,7 @@ import { CourseProgram } from "@/components/features/course-program";
 import { CourseProgressCard } from "@/components/features/course-progress-card";
 import { CourseSideRail } from "@/components/features/course-side-rail";
 import { lessonTotalMinutes } from "@/lib/utils/lesson-path";
+import { isPlayableVideoUrl } from "@/lib/utils/youtube";
 import { Linkify } from "@/components/blocks/linkify";
 import { BackButton } from "@/components/ui/back-button";
 
@@ -80,6 +81,9 @@ export default async function CoursePage({ params }: CoursePageProps) {
           videoMinutes: lesson.videoMinutes,
           practiceMinutes: lesson.practiceMinutes,
           hasVideo: Boolean(lesson.videoUrl),
+          // Заход C.4: метка «видео или текст» и минуты считаются по факту —
+          // невстраиваемая ссылка не заменяет текст, урок идёт как «текст + видео».
+          videoPlayable: isPlayableVideoUrl(lesson.videoUrl),
           isOptional: lesson.isOptional,
           unlocked: lessonState.unlocked,
           completed: lessonState.completed,

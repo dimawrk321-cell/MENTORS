@@ -7,6 +7,38 @@ export interface LessonDurationInput {
   practiceMinutes: number | null;
   pathPolicy: LessonPathPolicy;
   hasVideo: boolean;
+  /**
+   * Заход C.4: `false`, когда видео у урока ЕСТЬ, но плеера не будет — ссылка не
+   * с YouTube рисуется карточкой «Открыть видео». Не задано — считаем, что плеер
+   * будет (прежнее поведение вызывающих, которые про это ещё не знают).
+   */
+  videoPlayable?: boolean;
+}
+
+/**
+ * Путь урока считается по ФАКТУ, а не по настройке (заход C.4).
+ *
+ * «Только видео» и «видео или текст» имеют смысл, пока видео способно ЗАМЕНИТЬ
+ * текст, то есть пока на странице появляется плеер. Если видео — ссылка на чужой
+ * домен (её нельзя встроить) или его нет вовсе, замены не происходит: ученик
+ * оставался с пустым экраном, а в `choose_one` ещё и с записанным в БД выбором
+ * «видео». Такой урок ведёт себя как «видео и текст подряд» — ссылка сверху,
+ * текст под ней.
+ *
+ * Одна функция на всё: её читают и страница урока (что показывать), и подписи
+ * длительности с меткой типа (что обещать) — иначе экран и подпись разошлись бы.
+ */
+export function effectivePathPolicy(
+  pathPolicy: LessonPathPolicy,
+  hasPlayer: boolean,
+): LessonPathPolicy {
+  if (hasPlayer) return pathPolicy;
+  return pathPolicy === "video_only" || pathPolicy === "choose_one" ? "combined" : pathPolicy;
+}
+
+/** Появится ли на странице плеер: видео есть И оно встраиваемое. */
+function hasPlayer(input: Pick<LessonDurationInput, "hasVideo" | "videoPlayable">): boolean {
+  return input.hasVideo && input.videoPlayable !== false;
 }
 
 /**
@@ -25,7 +57,7 @@ export function lessonDurationLabel(input: LessonDurationInput): string {
   const practice = input.practiceMinutes ? `практика · ${input.practiceMinutes} мин` : null;
 
   let learning: string;
-  switch (input.pathPolicy) {
+  switch (effectivePathPolicy(input.pathPolicy, hasPlayer(input))) {
     case "video_only":
       learning = video ?? text;
       break;
@@ -64,7 +96,7 @@ export function lessonTotalMinutes(input: LessonDurationInput): number {
   const practice = input.practiceMinutes ?? 0;
 
   let learning: number;
-  switch (input.pathPolicy) {
+  switch (effectivePathPolicy(input.pathPolicy, hasPlayer(input))) {
     case "video_only":
       learning = video || text;
       break;
@@ -87,12 +119,14 @@ export function lessonTotalMinutes(input: LessonDurationInput): number {
  * Референс красит видео акцентом `--violet`, поэтому вызывающему нужен не
  * только текст, но и признак «это видео».
  */
-export function lessonKindLabel(input: Pick<LessonDurationInput, "pathPolicy" | "hasVideo">): {
+export function lessonKindLabel(
+  input: Pick<LessonDurationInput, "pathPolicy" | "hasVideo" | "videoPlayable">,
+): {
   label: string;
   isVideo: boolean;
 } {
   if (!input.hasVideo) return { label: "текст", isVideo: false };
-  switch (input.pathPolicy) {
+  switch (effectivePathPolicy(input.pathPolicy, hasPlayer(input))) {
     case "video_only":
       return { label: "видео", isVideo: true };
     case "text_only":

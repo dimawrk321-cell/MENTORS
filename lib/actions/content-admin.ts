@@ -254,7 +254,7 @@ export async function createLessonAction(
 export async function saveLessonContentAction(
   lessonId: string,
   contentMd: string,
-): Promise<ActionResult<{ readingMinutes: number }>> {
+): Promise<ActionResult<{ readingMinutes: number; recordingNotice: boolean }>> {
   return runAction(async () => {
     await requireActionPermission("content.manage");
     const res = await saveLessonContent(prisma, {
@@ -262,7 +262,12 @@ export async function saveLessonContentAction(
       contentMd: parseInput(z.string().max(300_000, "Слишком большой документ"), contentMd),
     });
     if (!res.ok) failWith(res);
-    return { readingMinutes: res.readingMinutes ?? 1 };
+    // `recordingNotice` — не ошибка, а последствие: сохранено, но ученик увидит
+    // врезку про Библиотеку вместо ссылки (заход C.4).
+    return {
+      readingMinutes: res.readingMinutes ?? 1,
+      recordingNotice: res.recordingNotice ?? false,
+    };
   });
 }
 

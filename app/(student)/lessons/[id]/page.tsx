@@ -32,6 +32,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { ProgressSegment } from "@/components/ui/progress-bar";
 import { lessonDurationLabel } from "@/lib/utils/lesson-path";
+import { isPlayableVideoUrl } from "@/lib/utils/youtube";
 
 const DIFFICULTY_LABEL = { intro: "интро", base: "база", advanced: "продвинутый" } as const;
 
@@ -123,6 +124,9 @@ export default async function LessonPage({ params }: LessonPageProps) {
     practiceMinutes: view.lesson.practiceMinutes,
     pathPolicy: view.lesson.pathPolicy,
     hasVideo: Boolean(view.lesson.videoUrl),
+    // Заход C.4: ссылка, которую плеер не встраивает, не даёт пути «вместо
+    // текста» — подпись обещает ровно то, что ученик увидит на странице.
+    videoPlayable: isPlayableVideoUrl(view.lesson.videoUrl),
   });
   const [keyQuestions, quizQuestions] = await Promise.all([
     getKeyQuestionsForLesson(prisma, view.lesson.id),

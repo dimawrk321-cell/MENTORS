@@ -10,6 +10,8 @@ import {
 } from "@/lib/actions/content";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
+import { effectivePathPolicy } from "@/lib/utils/lesson-path";
+import { isPlayableVideoUrl } from "@/lib/utils/youtube";
 
 interface LessonReaderProps {
   lessonId: string;
@@ -51,6 +53,29 @@ export function LessonReader({
   const [selectedPath, setSelectedPath] = useState<LessonPathSelection | null>(initialSelectedPath);
   const [selecting, setSelecting] = useState(false);
 
+  // Заход C.4: путь урока считается по факту — заменить текст может только
+  // настоящий плеер. Ссылка на не-YouTube (её нельзя встроить), временно
+  // недоступное видео и пустой `video_url` роняют «только видео» и «на выбор» в
+  // «видео и текст подряд». Раньше в этих случаях `video_only` давал пустую
+  // страницу, а `choose_one` — пустой экран уже ПОСЛЕ записи выбора в БД.
+  //
+  // DECISION: `unavailable` попадает сюда же, но ТОЛЬКО здесь. Заглушка обещает
+  // «текст урока полный», и не показать текст под этим обещанием — прямая ложь.
+  // В подписи длительности и метке урока этот случай НЕ учитывается:
+  // недоступность временная (её снимает ночная джоба youtubeCheck), и метка в
+  // дереве курса не должна прыгать от суточного сбоя — в отличие от ссылки,
+  // которая не встроится никогда.
+  const hasPlayer =
+    video !== null && isPlayableVideoUrl(video.url) && video.status !== "unavailable";
+  const policy = effectivePathPolicy(pathPolicy, hasPlayer);
+
+  const showChoice = policy === "choose_one";
+  const showVideo =
+    Boolean(video) &&
+    (policy === "combined" || policy === "video_only" || (showChoice && selectedPath === "video"));
+  const showText =
+    policy === "combined" || policy === "text_only" || (showChoice && selectedPath === "text");
+
   const flush = useCallback(() => {
     timer.current = null;
     const payload = dirty.current;
@@ -72,12 +97,15 @@ export function LessonReader({
   // Restore the reading position («Продолжить» ведёт на точное место).
   // DECISION: completed lessons reopen from the top — resume only mid-progress.
   useEffect(() => {
-    if (completed || selectedPath === "video" || !initialScrollPos || initialScrollPos <= 0) return;
+    // Восстанавливать позицию есть смысл только там, где показан текст (заход
+    // C.4: раньше условие смотрело на выбранный путь, а текст теперь виден и при
+    // выбранном «видео», если видео оказалось ссылкой).
+    if (completed || !showText || !initialScrollPos || initialScrollPos <= 0) return;
     requestAnimationFrame(() => {
       const max = document.documentElement.scrollHeight - window.innerHeight;
       if (max > 0) window.scrollTo({ top: initialScrollPos * max });
     });
-  }, [completed, initialScrollPos, selectedPath]);
+  }, [completed, initialScrollPos, showText]);
 
   // Scroll fraction tracking (throttled by the debounce window).
   useEffect(() => {
@@ -125,18 +153,6 @@ export function LessonReader({
       });
     }
   }
-
-  const showChoice = pathPolicy === "choose_one";
-  const showVideo =
-    Boolean(video) &&
-    (pathPolicy === "combined" ||
-      pathPolicy === "video_only" ||
-      (showChoice && selectedPath === "video"));
-  const showText =
-    pathPolicy === "combined" ||
-    pathPolicy === "text_only" ||
-    (pathPolicy === "video_only" && !video) ||
-    (showChoice && selectedPath === "text");
 
   return (
     <>

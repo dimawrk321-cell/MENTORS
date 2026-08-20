@@ -36,3 +36,22 @@ export function youTubeEmbedUrl(
 export function youTubePosterUrl(id: string): string {
   return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
 }
+
+/** Появится ли на странице настоящий плеер, а не карточка со ссылкой (заход C.4). */
+export function isPlayableVideoUrl(url: string | null | undefined): boolean {
+  return Boolean(url && parseYouTubeId(url));
+}
+
+/**
+ * Домен ссылки для подписи «откроется на …». Показывать ученику источник обязан
+ * тот же экран, что даёт ссылку: непонятно, куда ведёт кнопка, — непонятно, можно
+ * ли по ней ходить. Ссылка без разбираемого хоста отдаёт пустую строку, и подпись
+ * тогда просто не рисуется.
+ */
+export function videoLinkHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}

@@ -11,6 +11,7 @@ import {
   Maximize2,
   Minimize2,
   Save,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,9 @@ import {
 import { toast } from "@/components/ui/toast";
 import { BackButton } from "@/components/ui/back-button";
 import { cn } from "@/lib/utils/cn";
+import { RECORDING_NOTICE_TEXT, RECORDING_NOTICE_TITLE } from "@/lib/constants";
 import { lessonDurationLabel } from "@/lib/utils/lesson-path";
+import { isPlayableVideoUrl, videoLinkHost } from "@/lib/utils/youtube";
 import { applySnippet } from "@/lib/utils/editor-insert";
 import { snippetsFor, type SnippetDef } from "@/lib/content/editor-snippets";
 import { BlockEditor } from "@/components/features/block-editor";
@@ -128,6 +131,11 @@ export function LessonEditor({
     practiceMinutes: lesson.practiceMinutes ?? "",
   });
   const [pending, startTransition] = useTransition();
+  // Заход C.4: последствие санитайзера записей (ссылка на Я.Диск рядом с паролем
+  // или контекстом «запись собеседования») — сохранено, но ученик увидит врезку
+  // про Библиотеку вместо ссылки.
+  const [recordingNotice, setRecordingNotice] = useState(false);
+  const noticeShown = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestContent = useRef(content);
@@ -148,6 +156,7 @@ export function LessonEditor({
         practiceMinutes: meta.practiceMinutes === "" ? null : Number(meta.practiceMinutes),
         pathPolicy: meta.pathPolicy as EditorLesson["pathPolicy"],
         hasVideo: meta.videoUrl.trim().length > 0,
+        videoPlayable: isPlayableVideoUrl(meta.videoUrl.trim()),
       }),
     [
       readingMinutes,
@@ -167,6 +176,19 @@ export function LessonEditor({
         setReadingMinutes(result.data.readingMinutes);
         setSaveState("saved");
         setPreviewVersion((version) => version + 1);
+        // Заход C.4: тост — один раз на переходе «не было → появилось», а не на
+        // каждом автосейве (он идёт каждые несколько секунд и встал бы стеной
+        // поверх редактора). Признак живёт в рефе, а не в апдейтере состояния:
+        // апдейтер React вправе вызвать дважды, и тост бы задвоился.
+        if (result.data.recordingNotice && !noticeShown.current) {
+          toast({
+            title: RECORDING_NOTICE_TITLE,
+            description: RECORDING_NOTICE_TEXT,
+            variant: "warning",
+          });
+        }
+        noticeShown.current = result.data.recordingNotice;
+        setRecordingNotice(result.data.recordingNotice);
         return true;
       }
       setSaveState("dirty");
@@ -415,6 +437,23 @@ export function LessonEditor({
         </span>
       </div>
 
+      {/* Заход C.4: последствие санитайзера записей висит на экране, пока текст
+          не поправлен, — тост уходит через несколько секунд, а факт остаётся. */}
+      {recordingNotice ? (
+        <div className="rounded-card border-warning/40 bg-warning/8 text-warning flex items-start gap-2 border px-3 py-2.5 text-[13px]">
+          <ShieldAlert
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            className="mt-0.5 shrink-0"
+          />
+          <span>
+            <strong className="font-medium">{RECORDING_NOTICE_TITLE}.</strong>{" "}
+            {RECORDING_NOTICE_TEXT}
+          </span>
+        </div>
+      ) : null}
+
       {/* Второстепенное: просмотр, ссылка, полный экран. */}
       <div className="text-text-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
         <span className="tabular-nums">
@@ -487,6 +526,19 @@ export function LessonEditor({
               onChange={(e) => setMeta({ ...meta, videoUrl: e.target.value })}
               placeholder="https://youtu.be/…"
             />
+            {/* Заход C.4: ссылку не блокируем — предупреждаем. Ментор вправе
+                положить видео, которое лежит не на YouTube; он не вправе узнать
+                об этом от ученика. */}
+            {meta.videoUrl.trim() && !isPlayableVideoUrl(meta.videoUrl.trim()) ? (
+              <p className="text-warning text-[12px]">
+                Плеер поддерживает только YouTube. Эта ссылка откроется у ученика кнопкой «Открыть
+                видео» в новой вкладке
+                {videoLinkHost(meta.videoUrl.trim())
+                  ? ` (${videoLinkHost(meta.videoUrl.trim())})`
+                  : ""}
+                , а текст урока будет показан рядом.
+              </p>
+            ) : null}
           </div>
           <div className="flex items-end gap-3">
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">

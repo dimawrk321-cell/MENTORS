@@ -103,13 +103,16 @@ export async function createGuideAction(input: unknown): Promise<ActionResult<{ 
 export async function saveGuideContentAction(
   guideId: string,
   contentMd: string,
-): Promise<ActionResult<{ readingMinutes: number }>> {
+): Promise<ActionResult<{ readingMinutes: number; recordingNotice: boolean }>> {
   return runAction(async () => {
     await requireActionPermission("content.manage");
     const parsed = parseInput(saveGuideContentSchema, { guideId, contentMd });
     const res = await saveGuideContent(prisma, parsed);
     if (!res.ok) failGuide(res.code);
-    return { readingMinutes: res.readingMinutes ?? 1 };
+    return {
+      readingMinutes: res.readingMinutes ?? 1,
+      recordingNotice: res.recordingNotice ?? false,
+    };
   });
 }
 

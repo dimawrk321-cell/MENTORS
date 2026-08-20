@@ -327,7 +327,7 @@ export type GuideMutationResult =
 export async function saveGuideContent(
   db: Db,
   input: { guideId: string; contentMd: string },
-): Promise<GuideMutationResult & { readingMinutes?: number }> {
+): Promise<GuideMutationResult & { readingMinutes?: number; recordingNotice?: boolean }> {
   const guide = await db.guide.findUnique({
     where: { id: input.guideId },
     select: { id: true, status: true },
@@ -340,7 +340,14 @@ export async function saveGuideContent(
     where: { id: input.guideId },
     data: { contentMd: input.contentMd },
   });
-  return { ok: true, readingMinutes: computeReadingMinutes(input.contentMd) };
+  // Заход C.4: у черновика сохранение проходит, но рендер вырежет ссылку на
+  // запись и подставит врезку про Библиотеку — ментор узнаёт об этом здесь, а не
+  // от пропажи в готовом гайде. Правило санитайзера не ослаблено.
+  return {
+    ok: true,
+    readingMinutes: computeReadingMinutes(input.contentMd),
+    recordingNotice: hasUnsafeRecordingReference(input.contentMd),
+  };
 }
 
 export async function updateGuideMeta(

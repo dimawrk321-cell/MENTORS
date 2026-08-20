@@ -27,6 +27,8 @@ export interface ModuleTreeLesson {
   videoMinutes: number | null;
   practiceMinutes: number | null;
   hasVideo: boolean;
+  /** Заход C.4: false — видео есть, но это ссылка, а не встраиваемый плеер. */
+  videoPlayable: boolean;
   isOptional: boolean;
   unlocked: boolean;
   completed: boolean;

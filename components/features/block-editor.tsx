@@ -45,6 +45,7 @@ import {
   type BlockKind,
 } from "@/lib/content/markdown-blocks";
 import { cn } from "@/lib/utils/cn";
+import { parseYouTubeId, videoLinkHost } from "@/lib/utils/youtube";
 
 // Visual block editor (walk 13.6 block 1). The mentor never sees `:::`, `$$` or
 // triple backticks: recognised blocks render as titled cards with real fields,
@@ -85,10 +86,11 @@ const KIND_META: Record<BlockKind, { label: string; icon: LucideIcon }> = {
   question: { label: "Вопрос из банка", icon: ListChecks },
 };
 
-function youtubeId(url: string): string | null {
-  const m = /(?:youtu\.be\/|v=|embed\/)([\w-]{11})/.exec(url);
-  return m ? m[1]! : null;
-}
+// Заход C.4: превью блока «Видео» разбирает ссылку тем же `parseYouTubeId`, что и
+// сам плеер. Прежняя локальная регулярка была ЧУТЬ другой (без `/shorts/` и
+// `/live/`), то есть редактор мог обещать превью там, где плеер бы его не дал —
+// и наоборот. Второго определения «это YouTube» на платформе больше нет.
+const youtubeId = parseYouTubeId;
 
 /** Renders a formula with the same KaTeX package the server uses. */
 function Katex({ tex }: { tex: string }) {
@@ -448,6 +450,14 @@ function BlockCard({
                   unoptimized
                   className="h-full w-full object-cover"
                 />
+              ) : block.url.trim() ? (
+                // Ссылка есть, но плеер её не встроит — говорим об этом ментору
+                // здесь, а не оставляем ученику пустое место (заход C.4).
+                <span className="text-warning px-3 text-center text-[12px]">
+                  Плеер поддерживает только YouTube. Эта ссылка откроется у ученика кнопкой «Открыть
+                  видео» в новой вкладке
+                  {videoLinkHost(block.url.trim()) ? ` (${videoLinkHost(block.url.trim())})` : ""}
+                </span>
               ) : (
                 <span className="text-text-3 px-3 text-center text-[12px]">
                   Вставь ссылку YouTube — покажу превью

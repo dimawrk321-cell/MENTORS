@@ -89,6 +89,7 @@ function lesson(id: string, over: Partial<ModuleTreeModule["lessons"][number]> =
     videoMinutes: null,
     practiceMinutes: null,
     hasVideo: false,
+    videoPlayable: true,
     isOptional: false,
     unlocked: true,
     completed: false,

@@ -487,13 +487,20 @@ export async function getLessonForEditor(db: Db, lessonId: string) {
 export async function saveLessonContent(
   db: PrismaClient,
   input: { lessonId: string; contentMd: string; now?: Date },
-): Promise<AdminContentResult & { readingMinutes?: number }> {
+): Promise<AdminContentResult & { readingMinutes?: number; recordingNotice?: boolean }> {
   const now = input.now ?? new Date();
   const lesson = await db.lesson.findUnique({ where: { id: input.lessonId } });
   if (!lesson) return { ok: false, code: "not_found" };
   if (lesson.status === "published" && hasUnsafeRecordingReference(input.contentMd)) {
     return { ok: false, code: "unsafe_recording_reference" };
   }
+  // Заход C.4: у черновика сохранение НЕ отбивается — правило «записи только
+  // через Библиотеку» держит рендер: `sanitizeProtectedRecordingMarkdown` вырежет
+  // строку со ссылкой и подставит врезку про Библиотеку. Молчать об этом нельзя:
+  // ментор сохранил текст, ошибки не увидел, а на публикации получил бы отказ
+  // (или, у уже опубликованного урока, пропажу без объяснений). Флаг едет
+  // наверх, в редактор.
+  const recordingNotice = hasUnsafeRecordingReference(input.contentMd);
 
   const changed = lesson.contentMd !== input.contentMd;
   const readingMinutes = computeReadingMinutes(input.contentMd);
@@ -506,7 +513,7 @@ export async function saveLessonContent(
     // No-op for drafts (the common editing case) via the published guard inside.
     await notifyLessonUpdated(db, lesson.id, now);
   }
-  return { ok: true, readingMinutes };
+  return { ok: true, readingMinutes, recordingNotice };
 }
 
 export async function updateLessonMeta(

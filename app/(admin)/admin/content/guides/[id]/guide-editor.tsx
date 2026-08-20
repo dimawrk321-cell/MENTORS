@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Copy, ExternalLink, Maximize2, Minimize2, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Maximize2, Minimize2, ShieldAlert, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,12 @@ import {
   setGuideStatusAction,
   updateGuideMetaAction,
 } from "@/lib/actions/guides";
-import { GUIDE_SECTIONS, GUIDE_SECTION_LABEL } from "@/lib/constants";
+import {
+  GUIDE_SECTIONS,
+  GUIDE_SECTION_LABEL,
+  RECORDING_NOTICE_TEXT,
+  RECORDING_NOTICE_TITLE,
+} from "@/lib/constants";
 
 interface EditorGuide {
   id: string;
@@ -68,6 +73,10 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
     order: String(guide.order),
   });
   const [pending, startTransition] = useTransition();
+  // Заход C.4: санитайзер записей сработал на этом тексте — сохранено, но ссылку
+  // ученик не увидит (см. RECORDING_NOTICE_TEXT).
+  const [recordingNotice, setRecordingNotice] = useState(false);
+  const noticeShown = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestContent = useRef(content);
@@ -84,6 +93,17 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
       if (result?.ok) {
         setSaveState("saved");
         setPreviewVersion((version) => version + 1);
+        // Заход C.4: см. редактор урока — тост один раз на переходе, признак в
+        // рефе (апдейтер состояния React вправе вызвать дважды).
+        if (result.data.recordingNotice && !noticeShown.current) {
+          toast({
+            title: RECORDING_NOTICE_TITLE,
+            description: RECORDING_NOTICE_TEXT,
+            variant: "warning",
+          });
+        }
+        noticeShown.current = result.data.recordingNotice;
+        setRecordingNotice(result.data.recordingNotice);
         return true;
       }
       setSaveState("dirty");
@@ -290,6 +310,22 @@ export function GuideEditor({ guide }: { guide: EditorGuide }) {
           </ActionButton>
         )}
       </div>
+
+      {/* Заход C.4: последствие санитайзера записей — на экране, пока не поправлено. */}
+      {recordingNotice ? (
+        <div className="rounded-card border-warning/40 bg-warning/8 text-warning flex items-start gap-2 border px-3 py-2.5 text-[13px]">
+          <ShieldAlert
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            className="mt-0.5 shrink-0"
+          />
+          <span>
+            <strong className="font-medium">{RECORDING_NOTICE_TITLE}.</strong>{" "}
+            {RECORDING_NOTICE_TEXT}
+          </span>
+        </div>
+      ) : null}
 
       {/* Metadata — hidden in fullscreen. */}
       {!fullscreen && (
