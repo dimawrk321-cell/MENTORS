@@ -166,10 +166,16 @@ export async function deleteQuestionAction(questionId: string): Promise<ActionRe
       questionId: parseInput(idSchema, questionId),
     });
     if (!result.ok) {
-      const messages: Record<typeof result.code, string> = {
+      // Заход C.2: отказ называет, ЧТО именно нашлось, — «есть история» не
+      // отличало живую историю обучения от одной строки экзаменационного ответа.
+      if (result.code === "has_student_data") {
+        throw new ActionError(
+          result.code,
+          `Нельзя удалить: у вопроса есть история учеников (${result.details}). Данные сохранены — сними с публикации, если он больше не нужен.`,
+        );
+      }
+      const messages: Record<"not_draft" | "not_found", string> = {
         not_draft: "Удалять можно только черновики — сначала сними с публикации",
-        has_student_data:
-          "Нельзя удалить: у вопроса есть история учеников (карточки повторений, ответы). Данные сохранены.",
         not_found: "Вопрос не найден",
       };
       throw new ActionError(result.code, messages[result.code]);
@@ -326,7 +332,11 @@ export async function removeQuestionLinkAction(input: unknown): Promise<ActionRe
 export async function searchQuestionsAction(
   q: string,
   categoryId?: string,
-): Promise<ActionResult<Array<{ id: string; textMd: string; category: string; status: string }>>> {
+): Promise<
+  ActionResult<
+    Array<{ id: string; textMd: string; category: string; status: string; type: string }>
+  >
+> {
   return runAction(async () => {
     await requireActionPermission("content.manage");
     const query = parseInput(z.string().max(200), q);
@@ -337,6 +347,9 @@ export async function searchQuestionsAction(
       textMd: item.textMd,
       category: item.category.title,
       status: item.status,
+      // Заход C.2: тип нужен уже в панели добавления — по нему решается,
+      // предупреждать ли, что привязка уводит вопрос в боевые попытки.
+      type: item.type,
     }));
   });
 }

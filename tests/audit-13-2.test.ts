@@ -189,10 +189,149 @@ describe("draft deletion guarded by dependent student data (13.2 audit #6)", () 
       data: { userId: student.id, questionId: question.id, nextReviewAt: NOW, addedFrom: "manual" },
     });
 
-    expect(await deleteQuestion(testDb, { actorId: actor.id, questionId: question.id })).toEqual({
+    // Заход C.2: отказ теперь несёт перечень найденного.
+    expect(
+      await deleteQuestion(testDb, { actorId: actor.id, questionId: question.id }),
+    ).toMatchObject({
       ok: false,
       code: "has_student_data",
+      details: "карточек повторений: 1",
     });
     expect(await testDb.question.count({ where: { id: question.id } })).toBe(1);
+  });
+
+  // --- Заход C.2: слепые зоны гварда ---
+
+  it("refuses deleteQuestion when only a TEST answer exists (верный ответ карточки не заводит)", async () => {
+    const actor = await createTestUser({ email: "owner2@test.local", role: "owner" });
+    const student = await createStudent("s2@test.local");
+    const category = await testDb.questionCategory.create({
+      data: { title: "C2", slug: "c2", colorIndex: 0, order: 0 },
+    });
+    const course = await testDb.course.create({
+      data: {
+        slug: "c2-course",
+        title: "К",
+        status: "published",
+        modules: { create: [{ title: "М", order: 0, status: "published" }] },
+      },
+      include: { modules: true },
+    });
+    const question = await testDb.question.create({
+      data: {
+        type: "single",
+        categoryId: category.id,
+        textMd: "Q",
+        options: [{ id: "a", text: "A", correct: true }],
+        status: "draft",
+        difficulty: 1,
+      },
+    });
+    const attempt = await testDb.testAttempt.create({
+      data: {
+        userId: student.id,
+        moduleId: course.modules[0]!.id,
+        kind: "module",
+        questionIds: [question.id],
+      },
+    });
+    // Верный ответ: карточки SRS нет — раньше гвард такой вопрос пропускал.
+    await testDb.testAttemptAnswer.create({
+      data: { attemptId: attempt.id, questionId: question.id, answer: "a", correct: true },
+    });
+    expect(await testDb.srsCard.count({ where: { questionId: question.id } })).toBe(0);
+
+    expect(
+      await deleteQuestion(testDb, { actorId: actor.id, questionId: question.id }),
+    ).toMatchObject({
+      ok: false,
+      code: "has_student_data",
+      details: "ответов в тестах: 1",
+    });
+    expect(await testDb.question.count({ where: { id: question.id } })).toBe(1);
+    // И зафиксированная выборка попытки цела — висячего id не появилось.
+    expect(await testDb.testAttemptAnswer.count({ where: { questionId: question.id } })).toBe(1);
+  });
+
+  it("refuses deleteQuestion when only a MOCK mark exists", async () => {
+    const actor = await createTestUser({ email: "owner3@test.local", role: "owner" });
+    const student = await createStudent("s3@test.local");
+    const interviewer = await createTestUser({
+      email: "int3@test.local",
+      role: "mentor",
+      isInterviewer: true,
+    });
+    const category = await testDb.questionCategory.create({
+      data: { title: "C3", slug: "c3", colorIndex: 0, order: 0 },
+    });
+    const question = await testDb.question.create({
+      data: {
+        type: "open",
+        categoryId: category.id,
+        textMd: "Q",
+        answerMd: "A",
+        status: "draft",
+        difficulty: 1,
+      },
+    });
+    const slot = await testDb.slot.create({
+      data: {
+        interviewerId: interviewer.id,
+        startsAt: NOW,
+        endsAt: new Date(NOW.getTime() + 3_600_000),
+        status: "booked",
+      },
+    });
+    const booking = await testDb.booking.create({
+      data: { slotId: slot.id, userId: student.id, type: "theory", roomUrl: "https://room" },
+    });
+    await testDb.mockQuestionMark.create({
+      data: { bookingId: booking.id, questionId: question.id, mark: "answered" },
+    });
+
+    expect(
+      await deleteQuestion(testDb, { actorId: actor.id, questionId: question.id }),
+    ).toMatchObject({
+      ok: false,
+      code: "has_student_data",
+      details: "отметок на моках: 1",
+    });
+    expect(await testDb.question.count({ where: { id: question.id } })).toBe(1);
+  });
+
+  it("allows deleteQuestion for a clean draft (правило «только черновики» не тронуто)", async () => {
+    const actor = await createTestUser({ email: "owner4@test.local", role: "owner" });
+    const category = await testDb.questionCategory.create({
+      data: { title: "C4", slug: "c4", colorIndex: 0, order: 0 },
+    });
+    const clean = await testDb.question.create({
+      data: {
+        type: "open",
+        categoryId: category.id,
+        textMd: "Q",
+        answerMd: "A",
+        status: "draft",
+        difficulty: 1,
+      },
+    });
+    expect(await deleteQuestion(testDb, { actorId: actor.id, questionId: clean.id })).toEqual({
+      ok: true,
+    });
+    expect(await testDb.question.count({ where: { id: clean.id } })).toBe(0);
+
+    const published = await testDb.question.create({
+      data: {
+        type: "open",
+        categoryId: category.id,
+        textMd: "Q2",
+        answerMd: "A",
+        status: "published",
+        difficulty: 1,
+      },
+    });
+    expect(await deleteQuestion(testDb, { actorId: actor.id, questionId: published.id })).toEqual({
+      ok: false,
+      code: "not_draft",
+    });
   });
 });

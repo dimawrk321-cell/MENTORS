@@ -3,7 +3,7 @@
 import { BackButton } from "@/components/ui/back-button";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -69,11 +69,22 @@ interface QuestionEditorProps {
   categories: Array<{ id: string; label: string }>;
   lessons: Array<{ id: string; label: string }>;
   links: QuestionLinkRow[];
+  /**
+   * Модули с включённым тестом, куда этот закрытый вопрос уже уходит или уйдёт
+   * при публикации (заход C.2). Пустой массив — предупреждать не о чем.
+   */
+  liveTestModules: string[];
 }
 
 let optionCounter = 0;
 
-export function QuestionEditor({ question, categories, lessons, links }: QuestionEditorProps) {
+export function QuestionEditor({
+  question,
+  categories,
+  lessons,
+  links,
+  liveTestModules,
+}: QuestionEditorProps) {
   const router = useRouter();
   const [form, setForm] = useState({
     categoryId: question.categoryId,
@@ -250,6 +261,35 @@ export function QuestionEditor({ question, categories, lessons, links }: Questio
           )}
         </div>
       </div>
+
+      {/* Заход C.2: публикация закрытого вопроса — действие с немедленным
+          эффектом для учеников. Инцидент 19.08: между привязкой и ответом
+          живого ученика прошло 42 секунды. Ничего не блокируем — говорим. */}
+      {liveTestModules.length > 0 && (
+        <p className="rounded-control border-warning/35 bg-warning/6 text-text-2 flex items-start gap-2 border px-3 py-2 text-[13px]">
+          <AlertTriangle
+            size={15}
+            strokeWidth={1.75}
+            className="text-warning mt-0.5 shrink-0"
+            aria-hidden="true"
+          />
+          <span>
+            {question.status === "published" ? (
+              <>
+                Вопрос <b className="text-text-1">уже участвует</b> в боевых попытках
+              </>
+            ) : (
+              <>
+                Публикация <b className="text-text-1">сразу отправит</b> вопрос в боевые попытки
+              </>
+            )}{" "}
+            модульного теста — включая <b className="text-text-1">экстерн</b>, который сдают, не
+            проходя уроков. Роль привязки на это не влияет. Модулей:{" "}
+            <span className="tabular-nums">{liveTestModules.length}</span> —{" "}
+            {liveTestModules.join("; ")}.
+          </span>
+        </p>
+      )}
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {/* Левая колонка — поля */}

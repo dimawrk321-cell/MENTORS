@@ -765,19 +765,66 @@ export async function setQuestionStatus(
   return { ok: true };
 }
 
+/**
+ * Что считается историей ученика у вопроса (заход C.2).
+ *
+ * Все четыре таблицы висят на `onDelete: Cascade`, то есть удаление вопроса
+ * сносит их молча. Две из них гвард раньше не смотрел, и это была не теория:
+ * ВЕРНЫЙ ответ на экзамене карточку не заводит (`addSrsCardForFailure` зовётся
+ * только на неверном), поэтому безупречно отвеченный вопрос удалялся вместе со
+ * строкой ответа. Отдельно от каскада: `test_attempts.question_ids` — JSON-массив
+ * без ссылочной целостности, так что удалённый id остаётся в зафиксированной
+ * выборке попытки навсегда.
+ */
+export interface QuestionStudentData {
+  srsCards: number;
+  quizAnswers: number;
+  testAnswers: number;
+  mockMarks: number;
+}
+
+export async function countQuestionStudentData(
+  db: Db,
+  questionId: string,
+): Promise<QuestionStudentData> {
+  const where = { questionId };
+  const [srsCards, quizAnswers, testAnswers, mockMarks] = await Promise.all([
+    db.srsCard.count({ where }),
+    db.quizAnswer.count({ where }),
+    db.testAttemptAnswer.count({ where }),
+    db.mockQuestionMark.count({ where }),
+  ]);
+  return { srsCards, quizAnswers, testAnswers, mockMarks };
+}
+
+/** Человеческий перечень найденного — чтобы отказ называл причину, а не «есть история». */
+export function describeStudentData(data: QuestionStudentData): string {
+  const parts = [
+    data.srsCards > 0 ? `карточек повторений: ${data.srsCards}` : null,
+    data.quizAnswers > 0 ? `ответов в квизе: ${data.quizAnswers}` : null,
+    data.testAnswers > 0 ? `ответов в тестах: ${data.testAnswers}` : null,
+    data.mockMarks > 0 ? `отметок на моках: ${data.mockMarks}` : null,
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+
 /** DECISION: draft-only deletion, consistent with the content studio. */
 export async function deleteQuestion(
   db: PrismaClient,
   input: { actorId: string; questionId: string },
-): Promise<{ ok: true } | { ok: false; code: "not_found" | "not_draft" | "has_student_data" }> {
+): Promise<
+  | { ok: true }
+  | { ok: false; code: "not_found" | "not_draft" }
+  | { ok: false; code: "has_student_data"; details: string }
+> {
   const question = await db.question.findUnique({ where: { id: input.questionId } });
   if (!question) return { ok: false, code: "not_found" };
   if (question.status !== "draft") return { ok: false, code: "not_draft" };
-  // 13.2 audit: refuse if the question carries student history (SRS cards or quiz
-  // answers) — the Cascade FKs would otherwise wipe it via unpublish→delete.
-  const where = { questionId: question.id };
-  if ((await db.srsCard.count({ where })) > 0 || (await db.quizAnswer.count({ where })) > 0) {
-    return { ok: false, code: "has_student_data" };
+  // 13.2 audit + заход C.2: отказ, если у вопроса есть история ученика. Считаются
+  // ВСЕ четыре каскадные таблицы — см. countQuestionStudentData.
+  const data = await countQuestionStudentData(db, question.id);
+  if (data.srsCards + data.quizAnswers + data.testAnswers + data.mockMarks > 0) {
+    return { ok: false, code: "has_student_data", details: describeStudentData(data) };
   }
   await db.question.delete({ where: { id: question.id } });
   await writeAudit(db, {

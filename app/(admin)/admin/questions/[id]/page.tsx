@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
 import { listCategoriesTree, listLessonsForLinking } from "@/lib/services/questions";
-import { parseAcceptedAnswers, parseOptions } from "@/lib/utils/answers";
+import { CLOSED_QUESTION_TYPES, parseAcceptedAnswers, parseOptions } from "@/lib/utils/answers";
 import { QuestionEditor } from "./question-editor";
 
 export const metadata: Metadata = {
@@ -27,7 +27,16 @@ export default async function QuestionEditorPage({ params }: QuestionEditorPageP
             select: {
               id: true,
               title: true,
-              module: { select: { title: true, course: { select: { title: true } } } },
+              // Заход C.2: чтобы сказать ментору, уводит ли публикация вопрос в
+              // боевые попытки, нужны статус урока и включённость теста модуля.
+              status: true,
+              module: {
+                select: {
+                  title: true,
+                  test: { select: { enabled: true } },
+                  course: { select: { title: true } },
+                },
+              },
             },
           },
         },
@@ -64,6 +73,24 @@ export default async function QuestionEditorPage({ params }: QuestionEditorPageP
       }}
       categories={categoryOptions}
       lessons={lessons}
+      // Заход C.2: модули, чей включённый тест уже забирает (или заберёт при
+      // публикации) этот вопрос. Условие — то же `poolEligible`, но статус
+      // вопроса намеренно НЕ проверяется: для черновика ответ нужен ДО клика
+      // «Опубликовать», иначе предупреждение опаздывает на действие.
+      liveTestModules={[
+        ...new Set(
+          question.lessonLinks
+            .filter(
+              (link) =>
+                CLOSED_QUESTION_TYPES.includes(
+                  question.type as (typeof CLOSED_QUESTION_TYPES)[number],
+                ) &&
+                link.lesson.status === "published" &&
+                link.lesson.module.test?.enabled === true,
+            )
+            .map((link) => `${link.lesson.module.course.title} · ${link.lesson.module.title}`),
+        ),
+      ]}
       links={question.lessonLinks.map((link) => ({
         lessonId: link.lessonId,
         label: `${link.lesson.module.course.title} · ${link.lesson.module.title} · ${link.lesson.title}`,

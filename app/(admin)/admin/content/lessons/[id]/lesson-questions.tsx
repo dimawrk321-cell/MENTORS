@@ -47,6 +47,8 @@ interface SearchRow {
   textMd: string;
   category: string;
   status: string;
+  /** Заход C.2: по типу решается, уводит ли привязка вопрос в боевые попытки. */
+  type: string;
 }
 
 /** Привязка вопросов из редактора урока (spec 8.5): поиск по банку + флаги. */
@@ -172,6 +174,38 @@ export function LessonQuestions({
       lessonStatus,
     });
   const testLinks = links.filter(inTest).length;
+
+  /**
+   * Заход C.2: привязка закрытого вопроса к опубликованному уроку модуля с
+   * включённым тестом — действие с НЕМЕДЛЕННЫМ эффектом: вопрос попадает в
+   * боевые попытки, включая экстерн, который сдают, не проходя уроков. Инцидент
+   * 19.08: между привязкой и ответом живого ученика прошло 42 секунды.
+   * Предупреждение выдаётся в момент действия — как предупреждение о ключевом
+   * черновике; ничего не блокируется.
+   */
+  function warnGoesLive(
+    questionType: string,
+    questionStatus: string,
+    moment: "attach" | "role",
+  ): void {
+    if (!moduleTestEnabled) return;
+    if (
+      !poolEligible({
+        questionType: questionType as LessonQuestionLinkRow["type"],
+        questionStatus: questionStatus as "draft" | "published",
+        lessonStatus,
+      })
+    ) {
+      return;
+    }
+    toast({
+      title:
+        moment === "attach"
+          ? "Вопрос сразу ушёл в модульный тест этого модуля — он попадёт в боевые попытки учеников, включая экстерн."
+          : "Роль на участие в модульном тесте не влияет — этот вопрос уже в боевых попытках модуля, включая экстерн.",
+      variant: "warning",
+    });
+  }
 
   const allSelected = links.length > 0 && selected.size === links.length;
   const toggleAll = () =>
@@ -369,6 +403,10 @@ export function LessonQuestions({
                   value={roleFromFlags(link.isKey, link.inQuiz)}
                   onChange={(role) => {
                     if (role === "key") warnUnreachableKey([link]);
+                    // Заход C.2: самое частое заблуждение — что роль решает
+                    // участие в тесте. Не решает; говорим об этом там, где
+                    // ментор как раз меняет роль.
+                    warnGoesLive(link.type, link.status, "role");
                     run(() =>
                       upsertQuestionLinkAction({
                         questionId: link.questionId,
@@ -461,7 +499,8 @@ export function LessonQuestions({
                     variant="secondary"
                     size="sm"
                     loading={pending}
-                    onClick={() =>
+                    onClick={() => {
+                      warnGoesLive(row.type, row.status, "attach");
                       run(
                         () =>
                           upsertQuestionLinkAction({
@@ -470,8 +509,8 @@ export function LessonQuestions({
                             ...flagsFromRole(attachRole),
                           }),
                         "Привязано",
-                      )
-                    }
+                      );
+                    }}
                   >
                     Привязать
                   </Button>

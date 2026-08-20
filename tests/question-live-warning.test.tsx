@@ -1,0 +1,140 @@
+import { describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { QuestionEditor } from "@/app/(admin)/admin/questions/[id]/question-editor";
+import { LessonQuestions } from "@/app/(admin)/admin/content/lessons/[id]/lesson-questions";
+
+// Заход C.2, блок 2. Проверяется ТЕКСТ предупреждения — то, на что смотрит
+// ментор перед публикацией и привязкой. jsdom в проекте нет: рендер
+// статический, поэтому здесь нет ни кликов, ни тостов (тост проверяется в
+// браузере), только присутствие и формулировка строки.
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: () => {}, back: () => {}, refresh: () => {} }),
+}));
+vi.mock("@/lib/actions/questions-admin", () => ({
+  deleteQuestionAction: async () => ({ ok: true }),
+  removeQuestionLinkAction: async () => ({ ok: true }),
+  renderQuestionPreviewAction: async () => ({ ok: true, data: { html: "" } }),
+  setQuestionStatusAction: async () => ({ ok: true }),
+  updateQuestionAction: async () => ({ ok: true }),
+  upsertQuestionLinkAction: async () => ({ ok: true }),
+  bulkQuestionLinkRoleAction: async () => ({ ok: true }),
+  searchQuestionsAction: async () => ({ ok: true, data: [] }),
+}));
+
+const QUESTION = {
+  id: "q1",
+  type: "single" as const,
+  status: "draft" as const,
+  categoryId: "c1",
+  textMd: "пывапып",
+  answerMd: "",
+  explanationMd: "",
+  options: [{ id: "a", text: "Да", correct: true }],
+  acceptedAnswers: [] as string[],
+  difficulty: 2 as const,
+  needsLatex: false,
+  source: "manual" as const,
+};
+
+function editor(overrides: { status?: "draft" | "published"; liveTestModules?: string[] }): string {
+  return renderToStaticMarkup(
+    <QuestionEditor
+      question={{ ...QUESTION, status: overrides.status ?? "draft" }}
+      categories={[{ id: "c1", label: "Classic ML" }]}
+      lessons={[{ id: "l1", label: "Деревья решениий" }]}
+      links={[]}
+      liveTestModules={overrides.liveTestModules ?? []}
+    />,
+  );
+}
+
+describe("предупреждение о боевом пуле в редакторе вопроса (заход C.2)", () => {
+  it("черновик: говорит, что публикация ОТПРАВИТ вопрос в боевые попытки, включая экстерн", () => {
+    const html = editor({ status: "draft", liveTestModules: ["Classic ML · Основной"] });
+    expect(html).toContain("сразу отправит");
+    expect(html).toContain("боевые попытки");
+    expect(html).toContain("экстерн");
+    expect(html).toContain("Classic ML · Основной");
+    // Роль не решает — это главное заблуждение, ради него строка и написана.
+    expect(html).toContain("Роль привязки на это не влияет");
+  });
+
+  it("опубликованный: говорит, что вопрос УЖЕ участвует, и перечисляет модули", () => {
+    const html = editor({
+      status: "published",
+      liveTestModules: ["Classic ML · Основной", "Python + PyTorch · Основной"],
+    });
+    expect(html).toContain("уже участвует");
+    expect(html).not.toContain("сразу отправит");
+    expect(html).toContain("Python + PyTorch · Основной");
+  });
+
+  it("боевых модулей нет — строки нет вовсе", () => {
+    const html = editor({ liveTestModules: [] });
+    expect(html).not.toContain("боевые попытки");
+    expect(html).not.toContain("уже участвует");
+  });
+});
+
+describe("секция «Вопросы урока» — счётчик теста не поехал (регресс C.1)", () => {
+  it("считает только закрытые опубликованные на опубликованном уроке", () => {
+    const html = renderToStaticMarkup(
+      <LessonQuestions
+        lessonId="l1"
+        categories={[{ id: "c1", label: "Classic ML" }]}
+        lessonStatus="published"
+        moduleTestEnabled
+        links={[
+          {
+            questionId: "q1",
+            teaser: "Закрытый",
+            category: "Classic ML",
+            status: "published",
+            type: "single",
+            hasAnswer: true,
+            isKey: false,
+            inQuiz: true,
+          },
+          {
+            questionId: "q2",
+            teaser: "Открытый",
+            category: "Classic ML",
+            status: "published",
+            type: "open",
+            hasAnswer: true,
+            isKey: true,
+            inQuiz: false,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("в модульном тесте");
+    expect(html).toContain("в тесте");
+    expect(html).toContain("Отдельно от роли");
+  });
+
+  it("черновой урок: в тест не идёт ничего, и это сказано", () => {
+    const html = renderToStaticMarkup(
+      <LessonQuestions
+        lessonId="l1"
+        categories={[{ id: "c1", label: "Classic ML" }]}
+        lessonStatus="draft"
+        moduleTestEnabled
+        links={[
+          {
+            questionId: "q1",
+            teaser: "Закрытый",
+            category: "Classic ML",
+            status: "published",
+            type: "single",
+            hasAnswer: true,
+            isKey: false,
+            inQuiz: true,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("урок в черновике");
+  });
+});
