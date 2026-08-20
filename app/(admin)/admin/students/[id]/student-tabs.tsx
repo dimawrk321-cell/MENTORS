@@ -1,6 +1,20 @@
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
+import { deleteTestAttemptAction } from "@/lib/actions/students";
 import { HBarRow } from "@/components/features/analytics-charts";
 import { Badge } from "@/components/ui/badge";
 import { categoryColorVar } from "@/lib/utils/category-color";
@@ -43,6 +57,8 @@ export function StudentTabs({
   events,
   timezone,
   defaultTab,
+  studentId,
+  canDeleteAttempts,
 }: {
   progress: CourseProgress[];
   testAttempts: TestAttemptRow[];
@@ -52,6 +68,10 @@ export function StudentTabs({
   events: StudentEventRow[];
   timezone: string;
   defaultTab: string;
+  /** Кому принадлежат попытки — нужен для ревалидации карточки (заход C.3). */
+  studentId: string;
+  /** Владелец: снятие попытки теста (заход C.3). */
+  canDeleteAttempts: boolean;
 }) {
   const initial = TAB_VALUES.includes(defaultTab) ? defaultTab : "progress";
 
@@ -124,6 +144,9 @@ export function StudentTabs({
                 <span className="text-text-3 text-[12px]">
                   {formatDateTimeRu(a.finishedAt ?? a.startedAt, timezone)}
                 </span>
+                {canDeleteAttempts && (
+                  <DeleteAttemptButton studentId={studentId} attempt={a} timezone={timezone} />
+                )}
               </li>
             ))}
           </ul>
@@ -291,5 +314,108 @@ function Stat({ label, value }: { label: string; value: string }) {
       <span className="text-text-3 text-[12px]">{label}</span>
       <span className="text-[18px] font-semibold">{value}</span>
     </div>
+  );
+}
+
+/**
+ * Снятие попытки теста (заход C.3) — owner-only.
+ *
+ * Текст подтверждения намеренно перечисляет и то, что НЕ снимается: владелец
+ * должен принимать решение, зная, что день серии, аналитика и карточки
+ * повторений останутся. Кнопка — самый слабый из трёх рубежей права; настоящие
+ * стоят в действии (`requireActionOwner`) и в сервисе (`deleteTestAttempt`).
+ */
+function DeleteAttemptButton({
+  studentId,
+  attempt,
+  timezone,
+}: {
+  studentId: string;
+  attempt: TestAttemptRow;
+  timezone: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const when = formatDateTimeRu(attempt.finishedAt ?? attempt.startedAt, timezone);
+  const outcome = attempt.finished
+    ? `${attempt.score}% · ${attempt.passed ? "сдан" : "провал"}`
+    : "не завершена";
+
+  function confirm(): void {
+    startTransition(async () => {
+      const result = await deleteTestAttemptAction({ studentId, attemptId: attempt.id });
+      if (!result) return;
+      if (result.ok) {
+        setOpen(false);
+        toast({ title: "Попытка снята", variant: "success" });
+        router.refresh();
+      } else {
+        toast({ title: result.error.message, variant: "danger" });
+      }
+    });
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`Снять попытку: ${attempt.moduleTitle}, ${when}`}
+        title="Снять попытку"
+        onClick={() => setOpen(true)}
+        className="rounded-control text-text-3 hover:text-danger ease-app flex size-7 shrink-0 items-center justify-center transition-colors duration-150"
+      >
+        <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Снять попытку теста?</DialogTitle>
+            <DialogDescription>
+              {attempt.courseTitle} · {attempt.moduleTitle} ·{" "}
+              {TEST_KIND_LABEL[attempt.kind] ?? attempt.kind} · {outcome} · {when}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 text-[13px]">
+            <div>
+              <p className="text-text-2 mb-1">Будет удалено:</p>
+              <ul className="text-text-2 list-disc pl-5">
+                <li>сама попытка — она исчезнет из истории ученика;</li>
+                <li>ответы этой попытки;</li>
+                <li>
+                  кулдаун пересдачи отпустится — он считается от последней провальной попытки.
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-text-2 mb-1">Останется как есть:</p>
+              <ul className="text-text-2 list-disc pl-5">
+                <li>
+                  <b className="text-text-1">день серии</b> — он мог быть заработан и другой
+                  активностью;
+                </li>
+                <li>
+                  <b className="text-text-1">события аналитики</b> — это исторические факты;
+                </li>
+                <li>
+                  <b className="text-text-1">карточки повторений</b> — у карточки нет ссылки на
+                  попытку, снять её можно было бы только наугад.
+                </li>
+              </ul>
+            </div>
+            <p className="text-text-3">Действие необратимо и записывается в аудит.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setOpen(false)}>
+              Отмена
+            </Button>
+            <Button loading={pending} onClick={confirm}>
+              Снять попытку
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

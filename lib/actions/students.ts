@@ -25,6 +25,7 @@ import {
   validateSessionToken,
 } from "@/lib/services/sessions";
 import { setSectionAccess } from "@/lib/services/library";
+import { deleteTestAttempt } from "@/lib/services/tests";
 import { adminSetCourseAccess, type CourseAccessState } from "@/lib/services/course-access";
 import { isApiRateLimited } from "@/lib/utils/rate-limit";
 import {
@@ -253,6 +254,35 @@ export async function changeStudentEmailAction(
     }
     revalidateStudent(parsed.userId);
     return { email: res.email };
+  });
+}
+
+/**
+ * Снятие попытки теста (заход C.3) — owner-only.
+ *
+ * Право проверяется дважды осознанно: `requireActionOwner()` здесь и роль
+ * актора внутри `deleteTestAttempt`. Гвард в сервисе — главный: он стоит в том
+ * слое, который выполняет запись, и переживёт любого будущего вызывающего.
+ */
+export async function deleteTestAttemptAction(input: unknown): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionOwner();
+    const parsed = parseInput(
+      z.object({ studentId: z.string().min(1), attemptId: z.string().min(1) }),
+      input,
+    );
+    const res = await deleteTestAttempt(prisma, {
+      actor: { id: auth.user.id, role: auth.user.role },
+      attemptId: parsed.attemptId,
+    });
+    if (!res.ok) {
+      throw new ActionError(
+        res.code,
+        res.code === "forbidden" ? "Снимать попытки может только владелец" : "Попытка не найдена",
+      );
+    }
+    revalidateStudent(parsed.studentId);
+    return undefined;
   });
 }
 

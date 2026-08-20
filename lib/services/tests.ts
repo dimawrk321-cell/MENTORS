@@ -499,3 +499,67 @@ export async function upsertModuleTestConfig(
   });
   return { ok: true };
 }
+
+/**
+ * Снятие попытки теста владельцем (заход C.3).
+ *
+ * Появилось по итогам инцидента 19.08: черновой вопрос попал в экстерн живого
+ * ученика, и снять провальную попытку было нечем — `test_attempt` жил только в
+ * ученическом флоу.
+ *
+ * ЧТО СНИМАЕТСЯ: строка `test_attempts`; её ответы (`test_attempt_answers`)
+ * уходят каскадом по FK.
+ *
+ * ЧТО НЕ ТРОГАЕТСЯ И ПОЧЕМУ — то же самое сказано ментору в тексте
+ * подтверждения, чтобы решение принималось со знанием последствий:
+ *   • день серии остаётся ученику: `test.failed` входит в
+ *     STREAK_QUALIFYING_EVENTS, но день мог быть заработан и другой
+ *     активностью, а пересчёт серии из событий — отдельная машина со своими
+ *     гонками;
+ *   • `analytics_events` остаются: `test.started`/`test.failed` — исторические
+ *     факты, удалять их значит врать отчётам;
+ *   • карточки SRS остаются: у карточки нет ссылки на попытку (только
+ *     `added_from='test_fail'`), и снять её можно было бы лишь эвристикой по
+ *     времени и списку вопросов.
+ *
+ * DECISION: право проверяется ЗДЕСЬ, по роли актора, а не только
+ * `requireActionOwner()` в действии и не только скрытой кнопкой — гвард обязан
+ * жить в том слое, который выполняет запись.
+ */
+export async function deleteTestAttempt(
+  db: PrismaClient,
+  input: { actor: { id: string; role: string }; attemptId: string },
+): Promise<{ ok: true } | { ok: false; code: "not_found" | "forbidden" }> {
+  if (input.actor.role !== "owner") return { ok: false, code: "forbidden" };
+
+  const attempt = await db.testAttempt.findUnique({
+    where: { id: input.attemptId },
+    include: {
+      module: { select: { title: true, course: { select: { title: true } } } },
+      _count: { select: { answers: true } },
+    },
+  });
+  if (!attempt) return { ok: false, code: "not_found" };
+
+  await db.testAttempt.delete({ where: { id: attempt.id } });
+  // Снимок в аудит: без него снятие попытки само стало бы бесследным.
+  await writeAudit(db, {
+    actorId: input.actor.id,
+    action: "test_attempt.deleted",
+    entityType: "test_attempt",
+    entityId: attempt.id,
+    before: {
+      userId: attempt.userId,
+      moduleId: attempt.moduleId,
+      course: attempt.module.course.title,
+      module: attempt.module.title,
+      kind: attempt.kind,
+      score: attempt.score,
+      passed: attempt.passed,
+      startedAt: attempt.startedAt.toISOString(),
+      finishedAt: attempt.finishedAt?.toISOString() ?? null,
+      answers: attempt._count.answers,
+    },
+  });
+  return { ok: true };
+}

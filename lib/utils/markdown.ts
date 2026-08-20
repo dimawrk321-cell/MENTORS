@@ -11,6 +11,7 @@ import { visit } from "unist-util-visit";
 import type { Root as MdastRoot } from "mdast";
 import type { Element, Root as HastRoot } from "hast";
 import { sanitizeProtectedRecordingMarkdown } from "@/lib/utils/content-safety";
+import { sanitizeUrl } from "@/lib/utils/safe-url";
 
 // Lesson/guide markdown pipeline (spec 7.3): GFM tables, KaTeX ($...$ / $$...$$),
 // Shiki code highlighting (SSR, dual theme), and the custom directives
@@ -90,25 +91,10 @@ function parseMetaString(meta: string): Record<string, unknown> {
   return /\bnumbers\b/.test(meta) ? { "data-line-numbers": "" } : {};
 }
 
-/**
- * URL-scheme allowlist (13.2 audit). Markdown link syntax `[t](javascript:…)`
- * compiles to `<a href="javascript:…">`; the JSX render path is covered by
- * React 19's built-in sanitizeURL, but renderMarkdownHtml → dangerouslySetInnerHTML
- * (question-editor preview) is NOT — a mentor-authored javascript: link would land
- * live in an owner's DOM. This normalizes href/src to safe schemes in BOTH
- * pipelines (defense-in-depth). Control chars/whitespace that obfuscate a scheme
- * are stripped before the test; an unsafe URL becomes "#".
- */
-export function sanitizeUrl(value: unknown, kind: "href" | "src"): string {
-  if (typeof value !== "string") return "";
-  const probe = value.replace(/[\u0000-\u0020\u007F-\u009F]/g, "").toLowerCase();
-  // Relative, anchor, protocol-relative-safe, or an explicit safe scheme.
-  if (/^(https?:|mailto:|tel:|\/|#|\.|\?)/.test(probe)) return value;
-  // Inline data images are the only data: allowed, and only for src (KaTeX etc.).
-  if (kind === "src" && /^data:image\//.test(probe)) return value;
-  if (!/^[a-z][a-z0-9+.-]*:/.test(probe)) return value; // scheme-less → treat as relative
-  return kind === "href" ? "#" : "";
-}
+// Аллоулист схем URL (аудит 13.2) переехал в `lib/utils/safe-url.ts` — модуль без
+// зависимостей, который может импортировать и клиентский компонент (заход C.4).
+// Здесь он ре-экспортируется, чтобы прежние импорты из `markdown.ts` не менялись.
+export { sanitizeUrl };
 
 const rehypeSafeUrls: Plugin<[], HastRoot> = () => (tree) => {
   visit(tree, "element", (node: Element) => {

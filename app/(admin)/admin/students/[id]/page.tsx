@@ -325,6 +325,11 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
           events={events}
           timezone={viewer.timezone}
           defaultTab={tab ?? "progress"}
+          studentId={user.id}
+          // Заход C.3: снятие попытки — owner-only. Скрытая кнопка здесь самый
+          // слабый из трёх рубежей; настоящие — `requireActionOwner()` в
+          // действии и проверка роли актора внутри `deleteTestAttempt`.
+          canDeleteAttempts={isOwner(viewer)}
         />
       </Card>
     </div>
