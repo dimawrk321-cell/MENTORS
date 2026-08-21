@@ -20,6 +20,7 @@ const INCOMPLETE = { faces: true, voice: true, names: false, consent: true };
 function recordingData(overrides: Partial<RecordingData> = {}): RecordingData {
   return {
     title: "Внутреннее название",
+    publicTitle: null,
     stage: "livecoding",
     direction: "nlp",
     grade: "middle",

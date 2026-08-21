@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { Play } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { COMPANY_TYPE_LABEL, RECORDING_OUTCOME_LABEL, recordingCardTitle } from "@/lib/constants";
+import {
+  COMPANY_TYPE_LABEL,
+  RECORDING_OUTCOME_LABEL,
+  recordingCardTitle,
+  recordingStudentTitle,
+} from "@/lib/constants";
 
 // RecordingCard (spec 5.3 / 7.9): anonymized label «{Этап} · {Направление} ·
 // {грейд}» under a 16:9 thumbnail placeholder (records carry no poster — the
@@ -10,6 +15,8 @@ import { COMPANY_TYPE_LABEL, RECORDING_OUTCOME_LABEL, recordingCardTitle } from 
 
 export interface RecordingCardData {
   id: string;
+  /** Название для ученика (заход C.6); пусто → анонимный ярлык из enum'ов. */
+  publicTitle?: string | null;
   stage: string;
   direction: string;
   grade: string;
@@ -49,8 +56,16 @@ export function RecordingCard({ recording }: { recording: RecordingCardData }) {
       </div>
       <div>
         <div className="group-hover:text-accent text-[14px] leading-snug font-semibold">
-          {recordingCardTitle(recording)}
+          {recordingStudentTitle(recording)}
         </div>
+        {/* Заход C.6: когда у записи есть своё название, ярлык «{Этап} ·
+            {Направление} · {грейд}» уходит строкой ниже — по нему ученик
+            ориентируется в каталоге, и терять его нельзя. */}
+        {recording.publicTitle?.trim() && (
+          <div className="text-text-3 mt-1 text-[12px] first-letter:uppercase">
+            {recordingCardTitle(recording)}
+          </div>
+        )}
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <Badge variant={OUTCOME_VARIANT[recording.outcome] ?? "warning"}>
             {RECORDING_OUTCOME_LABEL[recording.outcome] ?? recording.outcome}

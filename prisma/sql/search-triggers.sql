@@ -54,15 +54,20 @@ CREATE TRIGGER guides_search_vector_trg
   BEFORE INSERT OR UPDATE OF title, content_md ON guides
   FOR EACH ROW EXECUTE FUNCTION guides_search_vector_update();
 
--- recordings: title 'A' (title-only per spec 6)
+-- recordings: public_title 'A' (заход C.6).
+-- Вектор строится по УЧЕНИЧЕСКОМУ названию, а не по внутреннему `title`:
+-- ученику в выдаче поиска показывается ts_headline по этой колонке, и поле,
+-- подписанное «ученику не показывается», не должно попадать к ученику ни
+-- текстом сниппета, ни совпадением. Запись без public_title текстовым поиском
+-- не находится — цена решения названа в миграции recording_public_title.
 CREATE OR REPLACE FUNCTION recordings_search_vector_update() RETURNS trigger AS $$
 BEGIN
-  NEW.search_vector := setweight(to_tsvector('russian', coalesce(NEW.title, '')), 'A');
+  NEW.search_vector := setweight(to_tsvector('russian', coalesce(NEW.public_title, '')), 'A');
   RETURN NEW;
 END
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS recordings_search_vector_trg ON recordings;
 CREATE TRIGGER recordings_search_vector_trg
-  BEFORE INSERT OR UPDATE OF title ON recordings
+  BEFORE INSERT OR UPDATE OF public_title ON recordings
   FOR EACH ROW EXECUTE FUNCTION recordings_search_vector_update();

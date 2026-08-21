@@ -67,7 +67,12 @@ async function makeGuide(title: string, content: string, status: ContentStatus =
 async function makeRecording(title: string, status: ContentStatus = "published") {
   return testDb.recording.create({
     data: {
+      // Заход C.6: ученический поиск идёт по public_title (внутренний title
+      // ученику не показывается вовсе), поэтому фикстура заполняет оба — здесь
+      // проверяется группа выдачи, а не то, из какой колонки она собрана.
+      // Разведение двух колонок закреплено в tests/recording-public-title.
       title,
+      publicTitle: title,
       stage: "theory",
       direction: "nlp",
       grade: "middle",

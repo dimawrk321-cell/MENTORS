@@ -74,6 +74,10 @@ export async function upsertRecordingAction(input: unknown): Promise<ActionResul
     const parsed = parseInput(recordingUpsertSchema, input);
     const data: RecordingData = {
       title: parsed.title,
+      // Заход C.6: пустое поле — это «показывать анонимный ярлык», поэтому
+      // пустая строка нормализуется в null: два способа записать одно и то же
+      // состояние развели бы фолбэк на две ветки.
+      publicTitle: parsed.publicTitle?.trim() ? parsed.publicTitle.trim() : null,
       stage: parsed.stage,
       direction: parsed.direction,
       grade: parsed.grade,

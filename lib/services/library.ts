@@ -25,7 +25,10 @@ export interface RecordingChecklist {
 }
 
 export interface RecordingData {
+  /** Внутреннее название — команда, админ-таблица, аудит; ученику не видно. */
   title: string;
+  /** Название для ученика (заход C.6). Пусто → анонимный ярлык из enum'ов. */
+  publicTitle: string | null;
   stage: RecordingStage;
   direction: RecordingDirection;
   grade: RecordingGrade;
@@ -64,6 +67,9 @@ export async function listRecordingsCatalog(db: Db, filters: RecordingFilters) {
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
+      // Заход C.6: ученическое название. Внутренний title в ученические
+      // выборки не попадает вовсе — так его нельзя показать по недосмотру.
+      publicTitle: true,
       stage: true,
       direction: true,
       grade: true,
@@ -79,6 +85,7 @@ export async function getRecordingForView(db: Db, id: string) {
     where: { id, status: "published" },
     select: {
       id: true,
+      publicTitle: true,
       stage: true,
       direction: true,
       grade: true,
@@ -176,6 +183,7 @@ export async function upsertRecording(
         where: { id: input.id! },
         data: {
           title: data.title,
+          publicTitle: data.publicTitle,
           stage: data.stage,
           direction: data.direction,
           grade: data.grade,
@@ -195,11 +203,18 @@ export async function upsertRecording(
         entityId: updated.id,
         before: {
           title: before.title,
+          publicTitle: before.publicTitle,
           status: before.status,
           url: before.url,
           checklist: before.checklist as Prisma.InputJsonValue,
         },
-        after: { title: data.title, status: data.status, url: data.url, checklist },
+        after: {
+          title: data.title,
+          publicTitle: data.publicTitle,
+          status: data.status,
+          url: data.url,
+          checklist,
+        },
       });
     });
     return { ok: true, id: input.id };
@@ -209,6 +224,7 @@ export async function upsertRecording(
     const row = await tx.recording.create({
       data: {
         title: data.title,
+        publicTitle: data.publicTitle,
         stage: data.stage,
         direction: data.direction,
         grade: data.grade,
@@ -226,7 +242,7 @@ export async function upsertRecording(
       action: "recording.created",
       entityType: "recording",
       entityId: row.id,
-      after: { title: data.title, status: data.status },
+      after: { title: data.title, publicTitle: data.publicTitle, status: data.status },
     });
     return row;
   });

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import {
   BULK_MAX,
   bulkLinkToLesson,
+  createQuestionForLesson,
   bulkPublish,
   bulkSetCategory,
   bulkSetQuestionLinkRole,
@@ -69,6 +70,34 @@ const questionDataSchema = z.object({
   needsLatex: z.boolean(),
 });
 
+/**
+ * Быстрое создание из редактора урока (заход C.6): те же поля, что у полного
+ * редактора, плюс урок и роль привязки. Текст обязателен даже у черновика —
+ * вопрос без текста нельзя ни узнать в списке, ни опубликовать.
+ */
+const newLessonQuestionSchema = z.object({
+  lessonId: idSchema,
+  type: questionTypeSchema,
+  categoryId: idSchema,
+  textMd: z.string("Напиши текст вопроса").trim().min(1, "Напиши текст вопроса").max(50_000),
+  answerMd: z.string().max(100_000).nullable(),
+  explanationMd: z.string().max(50_000).nullable(),
+  options: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(50),
+        text: z.string().max(1000),
+        correct: z.boolean(),
+      }),
+    )
+    .max(12)
+    .nullable(),
+  acceptedAnswers: z.array(z.string().max(500)).max(50).nullable(),
+  difficulty: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  // Роль одна (changelog этапа 3): ключевой / в квизе / просто привязан.
+  role: z.enum(["key", "quiz", "plain"]),
+});
+
 function revalidateBank(): void {
   revalidatePath("/admin/questions");
   revalidatePath("/questions");
@@ -103,6 +132,49 @@ export async function createQuestionAction(input: unknown): Promise<ActionResult
     });
     if (!result.ok) throw new ActionError(result.code, "Категория не найдена");
     revalidateBank();
+    return { id: result.id };
+  });
+}
+
+/**
+ * Быстрое создание вопроса прямо из редактора урока (заход C.6, блок 1).
+ *
+ * Отличие от `createQuestionAction` (полный редактор): вопрос заводится сразу с
+ * содержимым и привязкой к уроку, поэтому ментор не уходит со страницы. Статус —
+ * черновик, публикация остаётся отдельным действием (`setQuestionStatusAction`),
+ * которое валидирует вопрос и предупреждает о боевых попытках.
+ */
+export async function createLessonQuestionAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(newLessonQuestionSchema, input);
+    const result = await createQuestionForLesson(prisma, {
+      actorId: auth.user.id,
+      lessonId: parsed.lessonId,
+      data: {
+        type: parsed.type,
+        categoryId: parsed.categoryId,
+        textMd: parsed.textMd,
+        answerMd: parsed.answerMd,
+        explanationMd: parsed.explanationMd,
+        options: parsed.options,
+        acceptedAnswers: parsed.acceptedAnswers,
+        difficulty: parsed.difficulty,
+        isKey: parsed.role === "key",
+        inQuiz: parsed.role === "quiz",
+      },
+    });
+    if (!result.ok) {
+      throw new ActionError(
+        result.code,
+        result.code === "category_not_found" ? "Категория не найдена" : "Урок не найден",
+      );
+    }
+    revalidateBank();
+    revalidatePath(`/admin/content/lessons/${parsed.lessonId}`);
+    revalidatePath(`/lessons/${parsed.lessonId}`);
     return { id: result.id };
   });
 }

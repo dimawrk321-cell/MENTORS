@@ -305,6 +305,10 @@ export const recordingUpsertSchema = z
       .trim()
       .min(1, "Укажи название")
       .max(200, "Слишком длинное название"),
+    // Заход C.6: название для ученика. Необязательное — пустое означает
+    // «показывать анонимный ярлык», это штатное состояние, а не недозаполнение
+    // (см. recordingStudentTitle). Пустая строка нормализуется в null сервисом.
+    publicTitle: z.string().trim().max(200, "Слишком длинное название").nullable().optional(),
     stage: z.enum(["screening", "theory", "livecoding", "soft", "final"], "Выбери этап"),
     direction: z.enum(["ds", "nlp", "ai", "classic_ml"], "Выбери направление"),
     grade: z.enum(["junior", "middle", "senior"], "Выбери грейд"),

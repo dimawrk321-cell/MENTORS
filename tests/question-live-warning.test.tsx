@@ -20,6 +20,7 @@ vi.mock("@/lib/actions/questions-admin", () => ({
   upsertQuestionLinkAction: async () => ({ ok: true }),
   bulkQuestionLinkRoleAction: async () => ({ ok: true }),
   searchQuestionsAction: async () => ({ ok: true, data: [] }),
+  createLessonQuestionAction: async () => ({ ok: true, data: { id: "new" } }),
 }));
 
 const QUESTION = {
@@ -83,6 +84,8 @@ describe("секция «Вопросы урока» — счётчик тест
       <LessonQuestions
         lessonId="l1"
         categories={[{ id: "c1", label: "Classic ML" }]}
+        defaultCategoryId="c1"
+        defaultCategoryScope="lesson"
         lessonStatus="published"
         moduleTestEnabled
         links={[
@@ -119,6 +122,8 @@ describe("секция «Вопросы урока» — счётчик тест
       <LessonQuestions
         lessonId="l1"
         categories={[{ id: "c1", label: "Classic ML" }]}
+        defaultCategoryId="c1"
+        defaultCategoryScope="lesson"
         lessonStatus="draft"
         moduleTestEnabled
         links={[

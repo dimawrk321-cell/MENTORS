@@ -20,6 +20,10 @@ import { bulkRecordingStatusAction } from "@/lib/actions/library";
 export interface LibRow {
   id: string;
   title: string;
+  /** Что видит ученик: своё название записи либо анонимный ярлык (заход C.6). */
+  studentTitle: string;
+  /** Задано ли собственное ученическое название — от этого зависит подпись. */
+  hasPublicTitle: boolean;
   cardTitle: string;
   status: "draft" | "published";
   complete: boolean;
@@ -115,7 +119,13 @@ export function LibraryBulkTable({ rows }: { rows: LibRow[] }) {
                 </td>
                 <td className="p-3">
                   <div className="text-text-1 font-medium">{r.title}</div>
-                  <div className="text-text-3 text-[12px]">{r.cardTitle}</div>
+                  {/* Заход C.6: в таблице видно оба названия — внутреннее
+                      сверху, ученическое строкой ниже с явной подписью, иначе
+                      их не отличить. */}
+                  <div className="text-text-3 text-[12px]">
+                    Ученик видит: {r.studentTitle}
+                    {!r.hasPublicTitle && " (своё название не задано)"}
+                  </div>
                 </td>
                 <td className="p-3">
                   {r.status === "published" ? (

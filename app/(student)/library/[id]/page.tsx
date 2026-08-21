@@ -10,6 +10,7 @@ import {
   RECORDING_ACCESS_WARNING,
   RECORDING_OUTCOME_LABEL,
   recordingCardTitle,
+  recordingStudentTitle,
 } from "@/lib/constants";
 import { RecordingOpenLink } from "@/components/features/recording-viewer";
 import { Badge } from "@/components/ui/badge";
@@ -43,8 +44,17 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
 
       <div>
         <h1 className="text-[24px] font-semibold tracking-[-0.02em] first-letter:uppercase">
-          {recordingCardTitle(recording)}
+          {recordingStudentTitle(recording)}
         </h1>
+        {/* Заход C.6: у записи со своим названием ярлык «{Этап} · {Направление}
+            · {грейд}» остаётся подзаголовком — он отвечает на «что это за
+            собеседование», а название на «про что оно». Пусто → ярлык уже стоит
+            заголовком, второй раз его не повторяем. */}
+        {recording.publicTitle?.trim() && (
+          <p className="text-text-2 mt-1 text-[14px] first-letter:uppercase">
+            {recordingCardTitle(recording)}
+          </p>
+        )}
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <Badge>{recording.durationMinutes} мин</Badge>
           <Badge>{COMPANY_TYPE_LABEL[recording.companyType] ?? recording.companyType}</Badge>

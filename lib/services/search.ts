@@ -8,7 +8,7 @@ import {
   QUESTION_TYPE_LABEL,
   RECORDING_OUTCOME_LABEL,
   SEARCH_GROUP_LIMIT,
-  recordingCardTitle,
+  recordingStudentTitle,
 } from "@/lib/constants";
 import { stripMarkdown } from "@/lib/utils/text";
 import { redactProtectedRecordingSnippet } from "@/lib/utils/content-safety";
@@ -318,7 +318,7 @@ async function searchGuides(db: Db, q: string, allow: GuideSectionAccess): Promi
 
 interface RecordingRow {
   id: string;
-  title: string;
+  publicTitle: string | null;
   snippet: string;
   stage: string;
   direction: string;
@@ -326,11 +326,22 @@ interface RecordingRow {
   outcome: string;
 }
 
+/**
+ * Заход C.6: и совпадение, и сниппет идут по УЧЕНИЧЕСКОМУ названию.
+ *
+ * До захода `search_vector` строился по внутреннему `title`, а ученику в выдаче
+ * показывался `ts_headline` по нему же — то есть поле, подписанное в админке
+ * «ученику не показывается», ученик читал прямо в результатах поиска и мог по
+ * нему проверить название компании (раздел 7.9 запрещает их публиковать).
+ * Триггер вектора переехал на `public_title` той же миграцией, поэтому запись
+ * без ученического названия текстовым поиском не находится — каталог с
+ * фильтрами остаётся её единственным входом.
+ */
 async function searchRecordings(db: Db, q: string): Promise<SearchItem[]> {
   const rows = await db.$queryRaw<RecordingRow[]>`
     SELECT r.id,
-           r.title,
-           ts_headline('russian', r.title, query, ${HEADLINE_OPTS}) AS snippet,
+           r.public_title AS "publicTitle",
+           ts_headline('russian', coalesce(r.public_title, ''), query, ${HEADLINE_OPTS}) AS snippet,
            r.stage::text AS stage,
            r.direction::text AS direction,
            r.grade::text AS grade,
@@ -342,9 +353,9 @@ async function searchRecordings(db: Db, q: string): Promise<SearchItem[]> {
     LIMIT ${SEARCH_GROUP_LIMIT}`;
   return rows.map((r) => ({
     id: r.id,
-    // Anonymized label is the student-facing title (spec 7.9); the matched raw
-    // title shows highlighted in the snippet.
-    title: recordingCardTitle(r),
+    // Заголовок результата — то же, что на карточке каталога (заход C.6):
+    // ученическое название, а пусто → анонимный ярлык из enum'ов.
+    title: recordingStudentTitle(r),
     snippet: renderSnippet(r.snippet),
     url: `/library/${r.id}`,
     meta: RECORDING_OUTCOME_LABEL[r.outcome] ?? r.outcome,
@@ -430,16 +441,22 @@ async function fuzzyQuestions(db: Db, q: string, scope: CategoryScope): Promise<
 
 async function fuzzyRecordings(db: Db, q: string): Promise<SearchItem[]> {
   const rows = await db.$queryRaw<
-    { id: string; stage: string; direction: string; grade: string }[]
+    { id: string; publicTitle: string | null; stage: string; direction: string; grade: string }[]
   >`
-    SELECT r.id, r.stage::text AS stage, r.direction::text AS direction, r.grade::text AS grade
+    SELECT r.id,
+           r.public_title AS "publicTitle",
+           r.stage::text AS stage,
+           r.direction::text AS direction,
+           r.grade::text AS grade
     FROM recordings r
-    WHERE r.status = 'published' AND ${q} <% r.title AND word_similarity(${q}, r.title) > 0.3
-    ORDER BY word_similarity(${q}, r.title) DESC, r.id
+    WHERE r.status = 'published'
+      AND ${q} <% coalesce(r.public_title, '')
+      AND word_similarity(${q}, coalesce(r.public_title, '')) > 0.3
+    ORDER BY word_similarity(${q}, coalesce(r.public_title, '')) DESC, r.id
     LIMIT ${SEARCH_GROUP_LIMIT}`;
   return rows.map((r) => ({
     id: r.id,
-    title: recordingCardTitle(r),
+    title: recordingStudentTitle(r),
     snippet: "",
     url: `/library/${r.id}`,
     meta: "",

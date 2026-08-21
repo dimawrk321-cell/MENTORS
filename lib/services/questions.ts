@@ -652,6 +652,145 @@ export async function createQuestion(
   return { ok: true, id: question.id };
 }
 
+/**
+ * Быстрое создание вопроса из редактора урока (заход C.6, блок 1).
+ *
+ * Одна транзакция: вопрос заводится ЧЕРНОВИКОМ и сразу привязывается к уроку с
+ * выбранной ролью — ментор не уходит со страницы. Статус проставлен явно, хотя
+ * он и так дефолт колонки: быстрый путь не должен облегчать черновику дорогу на
+ * экзамен (прецедент «пывапып», инцидент 19.08), поэтому «черновик» здесь —
+ * решение, а не побочный эффект умолчания. Публикация — отдельное действие
+ * (`setQuestionStatus`) с собственным предупреждением о боевых попытках.
+ *
+ * Аудит пишется двумя записями, как у ручного пути: `question.created` (актор —
+ * настоящий ментор, а не система) и `question.linked` от `upsert`-ветки ниже,
+ * повторённой здесь внутри транзакции.
+ */
+export interface NewLessonQuestion {
+  type: QuestionType;
+  categoryId: string;
+  textMd: string;
+  answerMd: string | null;
+  explanationMd: string | null;
+  options: Array<{ id: string; text: string; correct: boolean }> | null;
+  acceptedAnswers: string[] | null;
+  difficulty: number;
+  isKey: boolean;
+  inQuiz: boolean;
+}
+
+export async function createQuestionForLesson(
+  db: PrismaClient,
+  input: { actorId: string; lessonId: string; data: NewLessonQuestion },
+): Promise<{ ok: true; id: string } | { ok: false; code: "category_not_found" | "not_found" }> {
+  const [category, lesson] = await Promise.all([
+    db.questionCategory.findUnique({ where: { id: input.data.categoryId } }),
+    db.lesson.findUnique({ where: { id: input.lessonId } }),
+  ]);
+  if (!category) return { ok: false, code: "category_not_found" };
+  if (!lesson) return { ok: false, code: "not_found" };
+  const { data } = input;
+
+  const id = await db.$transaction(async (tx) => {
+    const question = await tx.question.create({
+      data: {
+        type: data.type,
+        categoryId: category.id,
+        textMd: data.textMd,
+        answerMd: data.answerMd,
+        explanationMd: data.explanationMd,
+        options: data.options === null ? Prisma.JsonNull : data.options,
+        acceptedAnswers: data.acceptedAnswers === null ? Prisma.JsonNull : data.acceptedAnswers,
+        difficulty: data.difficulty,
+        // Черновик — явно (см. комментарий выше).
+        status: "draft",
+        source: "manual",
+      },
+    });
+    await tx.questionLesson.create({
+      data: {
+        questionId: question.id,
+        lessonId: lesson.id,
+        isKey: data.isKey,
+        inQuiz: data.inQuiz,
+      },
+    });
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "question.created",
+      entityType: "question",
+      entityId: question.id,
+      after: {
+        type: data.type,
+        categoryId: category.id,
+        status: "draft",
+        via: "lesson_editor",
+        lessonId: lesson.id,
+      },
+    });
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "question.linked",
+      entityType: "lesson",
+      entityId: lesson.id,
+      after: { questionId: question.id, isKey: data.isKey, inQuiz: data.inQuiz },
+    });
+    return question.id;
+  });
+  return { ok: true, id };
+}
+
+/**
+ * Категория по умолчанию для быстрого создания (заход C.6, 1.3).
+ *
+ * DECISION (откуда берётся): по фактическим привязкам вопрос→урок, от узкого к
+ * широкому — этот урок → другие уроки этого модуля → уроки этого курса; берётся
+ * самая частая категория. Вывести категорию из курса нельзя: связи «курс ↔
+ * категории банка» (заход «Банк вопросов») на платформе пусты, и заполнять их
+ * скриптом владелец запретил. Заставлять же выбирать из 58 категорий на каждый
+ * вопрос — ровно та работа, ради устранения которой заводится быстрый путь.
+ * Ничего не нашлось (у курса нет ни одной привязки) → умолчания нет, ментор
+ * выбирает сам: подставить первую попавшуюся хуже пустого поля.
+ *
+ * Возвращается и категория, и уровень, на котором она нашлась, — интерфейс
+ * говорит ментору, откуда взялось умолчание, а не молча подставляет значение.
+ */
+export type CategorySuggestionScope = "lesson" | "module" | "course";
+
+export async function suggestQuestionCategory(
+  db: Db,
+  lessonId: string,
+): Promise<{ categoryId: string; scope: CategorySuggestionScope } | null> {
+  const lesson = await db.lesson.findUnique({
+    where: { id: lessonId },
+    select: { id: true, moduleId: true, module: { select: { courseId: true } } },
+  });
+  if (!lesson) return null;
+
+  const scopes: Array<{ scope: CategorySuggestionScope; where: Prisma.LessonWhereInput }> = [
+    { scope: "lesson", where: { id: lesson.id } },
+    { scope: "module", where: { moduleId: lesson.moduleId } },
+    { scope: "course", where: { module: { courseId: lesson.module.courseId } } },
+  ];
+  for (const { scope, where } of scopes) {
+    const links = await db.questionLesson.findMany({
+      where: { lesson: where },
+      select: { question: { select: { categoryId: true } } },
+    });
+    if (links.length === 0) continue;
+    const counts = new Map<string, number>();
+    for (const link of links) {
+      const key = link.question.categoryId;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    // Самая частая; при равенстве — лексикографически первый id, чтобы
+    // умолчание не прыгало между одинаково частыми категориями.
+    const best = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+    if (best) return { categoryId: best[0], scope };
+  }
+  return null;
+}
+
 export interface QuestionData {
   categoryId: string;
   textMd: string;

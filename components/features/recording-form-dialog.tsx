@@ -27,12 +27,14 @@ import {
   COMPANY_TYPES,
   COMPANY_TYPE_LABEL,
   isChecklistComplete,
+  recordingCardTitle,
   RECORDING_CHECKLIST_ITEMS,
   RECORDING_DIRECTIONS,
   RECORDING_DIRECTION_LABEL,
   RECORDING_GRADES,
   RECORDING_GRADE_LABEL,
   RECORDING_OUTCOMES,
+  RECORDING_PUBLIC_TITLE_HINT,
   RECORDING_OUTCOME_LABEL,
   RECORDING_STAGES,
   RECORDING_STAGE_LABEL,
@@ -48,6 +50,8 @@ interface Checklist {
 export interface RecordingFormValue {
   id: string;
   title: string;
+  /** Заход C.6: название, которое видит ученик; пусто → анонимный ярлык. */
+  publicTitle: string;
   stage: string;
   direction: string;
   grade: string;
@@ -60,6 +64,7 @@ export interface RecordingFormValue {
 
 interface FormState {
   title: string;
+  publicTitle: string;
   stage: string;
   direction: string;
   grade: string;
@@ -73,6 +78,7 @@ interface FormState {
 function initialState(recording?: RecordingFormValue): FormState {
   return {
     title: recording?.title ?? "",
+    publicTitle: recording?.publicTitle ?? "",
     stage: recording?.stage ?? "screening",
     direction: recording?.direction ?? "ds",
     grade: recording?.grade ?? "middle",
@@ -144,6 +150,7 @@ export function RecordingFormDialog({ recording }: { recording?: RecordingFormVa
       const res = await upsertRecordingAction({
         id: recording?.id ?? null,
         title: form.title,
+        publicTitle: form.publicTitle,
         stage: form.stage,
         direction: form.direction,
         grade: form.grade,
@@ -174,6 +181,9 @@ export function RecordingFormDialog({ recording }: { recording?: RecordingFormVa
   }
 
   const checklistComplete = isChecklistComplete(form.checklist);
+  // Что увидит ученик при пустом поле — показываем прямо в подсказке, чтобы
+  // «пусто» читалось как выбор, а не как незаполненное поле (заход C.6, 2.2).
+  const anonymousLabel = recordingCardTitle(form);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -196,16 +206,37 @@ export function RecordingFormDialog({ recording }: { recording?: RecordingFormVa
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
+          {/* Заход C.6: у записи два названия, и подпись у каждого
+              однозначная — «внутреннее» и «видит ученик». */}
           <div className="flex flex-col gap-1.5">
             <label htmlFor="rec-title" className="text-text-2 text-[13px]">
-              Название (внутреннее, ученику не показывается)
+              Внутреннее название — видит только команда
             </label>
             <Input
               id="rec-title"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="напр. NLP middle — оффер"
+              placeholder="напр. Иванов, Тинькофф, NLP middle — оффер"
             />
+            <p className="text-text-3 text-[12px]">
+              Для админ-таблицы и аудита: сюда можно писать компанию и фамилию — ученику это поле не
+              показывается нигде, включая поиск.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="rec-public-title" className="text-text-2 text-[13px]">
+              Название для ученика — видно в библиотеке
+            </label>
+            <Input
+              id="rec-public-title"
+              value={form.publicTitle}
+              onChange={(e) => setForm({ ...form, publicTitle: e.target.value })}
+              placeholder="напр. Лайфкодинг: словарь и бинарный поиск"
+            />
+            <p className="text-text-3 text-[12px]">
+              {RECORDING_PUBLIC_TITLE_HINT} Оставь пустым — ученик увидит «{anonymousLabel}».
+            </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -291,6 +322,12 @@ export function RecordingFormDialog({ recording }: { recording?: RecordingFormVa
                 {item.label}
               </label>
             ))}
+            {/* Заход C.6 (2.3): видимое название — часть анонимизации, поэтому
+                правило стоит рядом с чеклистом, а не только у поля. */}
+            <p className="text-text-3 text-[12px]">
+              Пятое, что проверяется глазами: {"«"}Название для ученика{"»"} выше — без компании,
+              имён и фамилий.
+            </p>
             {!checklistComplete && (
               <p className="text-text-3 text-[12px]">
                 Отметь все четыре пункта, чтобы стала доступна публикация.

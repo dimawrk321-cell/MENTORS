@@ -27,6 +27,7 @@ import {
   RECORDING_STAGES,
   RECORDING_STAGE_LABEL,
   recordingCardTitle,
+  recordingStudentTitle,
 } from "@/lib/constants";
 import {
   RecordingFormDialog,
@@ -145,6 +146,8 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
     return {
       id: recording.id,
       title: recording.title,
+      studentTitle: recordingStudentTitle(recording),
+      hasPublicTitle: !!recording.publicTitle?.trim(),
       cardTitle: recordingCardTitle(recording),
       status: recording.status,
       complete,
@@ -156,6 +159,7 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
       formValue: {
         id: recording.id,
         title: recording.title,
+        publicTitle: recording.publicTitle ?? "",
         stage: recording.stage,
         direction: recording.direction,
         grade: recording.grade,

@@ -3,7 +3,11 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
 import { getLessonForEditor } from "@/lib/services/content-admin";
-import { listCategoriesTree, listLessonQuestionLinks } from "@/lib/services/questions";
+import {
+  listCategoriesTree,
+  listLessonQuestionLinks,
+  suggestQuestionCategory,
+} from "@/lib/services/questions";
 import { hasReferenceAnswer } from "@/lib/services/question-access";
 import { stripMarkdown } from "@/lib/utils/text";
 import { LessonEditor } from "./lesson-editor";
@@ -23,7 +27,7 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
   const { id } = await params;
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();
-  const [questionLinks, categoryTree, moduleTest] = await Promise.all([
+  const [questionLinks, categoryTree, moduleTest, categorySuggestion] = await Promise.all([
     listLessonQuestionLinks(prisma, lesson.id),
     listCategoriesTree(prisma),
     // Заход C.1: секция «Вопросы урока» показывает, какие привязки идут в
@@ -33,6 +37,9 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
       where: { moduleId: lesson.moduleId },
       select: { enabled: true },
     }),
+    // Заход C.6, 1.3: умолчание категории для быстрого создания — по фактическим
+    // привязкам урока/модуля/курса (связи «курс ↔ категории банка» пусты).
+    suggestQuestionCategory(prisma, lesson.id),
   ]);
   // Root categories + children for the «+ Добавить вопрос» filter (13.6);
   // the service expands a root to its family, so either level works.
@@ -67,6 +74,8 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
         categories={categories}
         lessonStatus={lesson.status}
         moduleTestEnabled={moduleTest?.enabled ?? false}
+        defaultCategoryId={categorySuggestion?.categoryId ?? ""}
+        defaultCategoryScope={categorySuggestion?.scope ?? null}
         links={questionLinks.map((link) => ({
           questionId: link.questionId,
           teaser: stripMarkdown(link.question.textMd, 120) || "— без текста —",

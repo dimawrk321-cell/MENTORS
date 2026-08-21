@@ -1,6 +1,6 @@
 import type { GuideSection, RecentItemType } from "@prisma/client";
 import type { Db } from "@/lib/db";
-import { RECENT_KEEP, RECENT_SHOW, recordingCardTitle } from "@/lib/constants";
+import { RECENT_KEEP, RECENT_SHOW, recordingStudentTitle } from "@/lib/constants";
 import { stripMarkdown } from "@/lib/utils/text";
 
 // Recency index for the CommandPalette «Недавнее» first screen (spec 7.11).
@@ -115,7 +115,8 @@ export async function getRecentItems(
     input.libraryEnabled
       ? db.recording.findMany({
           where: { id: { in: idsByType("recording") }, status: "published" },
-          select: { id: true, stage: true, direction: true, grade: true },
+          // Заход C.6: «Недавнее» подписывается тем же названием, что каталог.
+          select: { id: true, publicTitle: true, stage: true, direction: true, grade: true },
         })
       : Promise.resolve([]),
   ]);
@@ -146,7 +147,7 @@ export async function getRecentItems(
     byId.set(`recording:${r.id}`, {
       type: "recording",
       id: r.id,
-      title: recordingCardTitle(r),
+      title: recordingStudentTitle(r),
       url: `/library/${r.id}`,
     });
 

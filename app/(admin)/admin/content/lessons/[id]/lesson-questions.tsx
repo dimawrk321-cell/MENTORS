@@ -2,7 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { AlertTriangle, CheckSquare, Link2, Plus, Search, Square, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckSquare,
+  Link2,
+  Plus,
+  Search,
+  Square,
+  Trash2,
+  Wand2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import {
   flagsFromRole,
@@ -26,8 +43,10 @@ import {
   bulkQuestionLinkRoleAction,
   removeQuestionLinkAction,
   searchQuestionsAction,
+  setQuestionStatusAction,
   upsertQuestionLinkAction,
 } from "@/lib/actions/questions-admin";
+import { QuestionQuickCreate, type CategorySuggestionScope } from "./question-quick-create";
 
 export interface LessonQuestionLinkRow {
   questionId: string;
@@ -58,6 +77,8 @@ export function LessonQuestions({
   categories,
   lessonStatus,
   moduleTestEnabled,
+  defaultCategoryId,
+  defaultCategoryScope,
 }: {
   lessonId: string;
   links: LessonQuestionLinkRow[];
@@ -67,6 +88,9 @@ export function LessonQuestions({
   lessonStatus: "draft" | "published";
   /** У модуля есть включённый тест (заход C.1). */
   moduleTestEnabled: boolean;
+  /** Умолчание категории для быстрого создания (заход C.6, 1.3). */
+  defaultCategoryId: string;
+  defaultCategoryScope: CategorySuggestionScope | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -74,6 +98,12 @@ export function LessonQuestions({
   // Fresh lesson with nothing linked → the panel starts open, so the way in is
   // visible without a click (changelog 13.6).
   const [adding, setAdding] = useState(links.length === 0);
+  // Две панели — «привязать существующий» и «создать новый» — взаимоисключающие:
+  // открытые одновременно они дают две формы с одинаковыми кнопками подряд.
+  const [creating, setCreating] = useState(false);
+  // Публикация черновика прямо из секции — через подтверждение, когда у неё есть
+  // немедленное последствие для учеников (заход C.6, 1.2).
+  const [publishing, setPublishing] = useState<LessonQuestionLinkRow | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<SearchRow[]>([]);
   const [searching, setSearching] = useState(false);
@@ -207,6 +237,26 @@ export function LessonQuestions({
     });
   }
 
+  /**
+   * Публикация вопроса из секции (заход C.6, 1.2).
+   *
+   * Действие то же, что в полном редакторе (`setQuestionStatusAction` — он же
+   * валидирует вопрос и пишет аудит), меняется только место вызова. Когда
+   * публикация уводит вопрос в боевые попытки модульного теста, она проходит
+   * через подтверждение с текстом C.2; во всех прочих случаях — сразу.
+   */
+  function publish(link: LessonQuestionLinkRow): void {
+    run(() => setQuestionStatusAction(link.questionId, "published"), "Вопрос опубликован");
+  }
+
+  function publishLink(link: LessonQuestionLinkRow): void {
+    const goesLive =
+      moduleTestEnabled &&
+      poolEligible({ questionType: link.type, questionStatus: "published", lessonStatus });
+    if (goesLive) setPublishing(link);
+    else publish(link);
+  }
+
   const allSelected = links.length > 0 && selected.size === links.length;
   const toggleAll = () =>
     setSelected(allSelected ? new Set() : new Set(links.map((link) => link.questionId)));
@@ -236,16 +286,37 @@ export function LessonQuestions({
             {links.length}
           </span>
         </h2>
-        <Button
-          variant={links.length === 0 ? "gradient" : "secondary"}
-          size="sm"
-          onClick={() => setAdding((prev) => !prev)}
-          aria-expanded={adding}
-          aria-controls="lesson-questions-add"
-        >
-          <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
-          {adding ? "Закрыть" : "Добавить вопрос"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Заход C.6, блок 1: рядом с привязкой существующего — создание
+              нового прямо здесь. Раньше единственным путём был уход в
+              /admin/questions, то есть потеря места в уроке. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setCreating((prev) => !prev);
+              setAdding(false);
+            }}
+            aria-expanded={creating}
+            aria-controls="lesson-questions-create"
+          >
+            <Wand2 size={15} strokeWidth={1.75} aria-hidden="true" />
+            {creating ? "Закрыть" : "Создать вопрос"}
+          </Button>
+          <Button
+            variant={links.length === 0 ? "gradient" : "secondary"}
+            size="sm"
+            onClick={() => {
+              setAdding((prev) => !prev);
+              setCreating(false);
+            }}
+            aria-expanded={adding}
+            aria-controls="lesson-questions-add"
+          >
+            <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+            {adding ? "Закрыть" : "Добавить из банка"}
+          </Button>
+        </div>
       </div>
       {/* Заход C.1, блок 2: подпись рассказывала только про роли и молчала о
           модульном тесте — а пул теста роль не смотрит вовсе. */}
@@ -306,7 +377,8 @@ export function LessonQuestions({
 
       {links.length === 0 ? (
         <p className="text-text-3 mb-4 text-[13px]">
-          Пока ничего не привязано — нажми «Добавить вопрос».
+          Пока ничего не привязано: «Создать вопрос» — завести новый прямо здесь, «Добавить из
+          банка» — привязать существующий.
         </p>
       ) : (
         <>
@@ -398,6 +470,19 @@ export function LessonQuestions({
                     в тесте
                   </Badge>
                 )}
+                {/* Заход C.6, 1.2: публикация — ОТДЕЛЬНОЕ действие. Быстрое
+                    создание не должно облегчать черновику путь на экзамен, но и
+                    гонять ментора в банк ради одной кнопки незачем. */}
+                {link.status === "draft" && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => publishLink(link)}
+                  >
+                    Опубликовать
+                  </Button>
+                )}
                 {/* Changelog этапа 3: роль одна — ключевой ИЛИ в квизе. */}
                 <QuestionRoleSelect
                   value={roleFromFlags(link.isKey, link.inQuiz)}
@@ -433,6 +518,16 @@ export function LessonQuestions({
             ))}
           </ul>
         </>
+      )}
+
+      {creating && (
+        <QuestionQuickCreate
+          lessonId={lessonId}
+          categories={categories}
+          defaultCategoryId={defaultCategoryId}
+          defaultCategoryScope={defaultCategoryScope}
+          onCreated={() => setCreating(false)}
+        />
       )}
 
       {adding && (
@@ -527,6 +622,37 @@ export function LessonQuestions({
           )}
         </div>
       )}
+
+      {/* Заход C.6, 1.2: то же предупреждение, что в редакторе вопроса (заход
+          C.2), — но здесь оно стоит подтверждением, потому что публикация
+          доступна в один клик прямо из списка привязок. */}
+      <Dialog open={publishing !== null} onOpenChange={(open) => !open && setPublishing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Опубликовать вопрос?</DialogTitle>
+            <DialogDescription>
+              Закрытый вопрос на опубликованном уроке идёт в модульный тест этого модуля при любой
+              роли — включая экстерн, который сдают, не проходя уроков. Опубликованный вопрос
+              попадёт в боевые попытки учеников сразу.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setPublishing(null)}>
+              Отмена
+            </Button>
+            <Button
+              loading={pending}
+              onClick={() => {
+                const target = publishing;
+                setPublishing(null);
+                if (target) publish(target);
+              }}
+            >
+              Опубликовать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

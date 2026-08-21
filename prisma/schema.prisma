@@ -1319,6 +1319,16 @@ enum GuideSection {
 model Recording {
   id              String                   @id @default(cuid())
   title           String
+  /**
+   * Заход C.6: второй заголовок — тот, который ВИДИТ УЧЕНИК. `title` выше
+   * остаётся внутренним (команда, админ-таблица, аудит) и ученику не
+   * показывается нигде; `public_title` — единственное название записи на
+   * ученической стороне. Пусто → ученик видит анонимный ярлык «{Этап} ·
+   * {Направление} · {грейд}», то есть ровно то, что видел до захода: молчаливой
+   * подстановки внутреннего названия нет и быть не должно — оно может содержать
+   * компанию и имена.
+   */
+  publicTitle     String?                  @map("public_title")
   stage           RecordingStage
   direction       RecordingDirection
   grade           RecordingGrade
@@ -1364,7 +1374,9 @@ model Recording {
   @@index([status])
   @@index([linkUpdatedAt])
   @@index([searchVector], type: Gin)
-  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "recordings_title_trgm_idx")
+  // Заход C.6: trgm-фолбэк поиска по опечаткам идёт по ученическому названию —
+  // по внутреннему искать нельзя, это выдало бы скрытое поле ученику.
+  @@index([publicTitle(ops: raw("gin_trgm_ops"))], type: Gin, map: "recordings_public_title_trgm_idx")
   @@map("recordings")
 }
 
