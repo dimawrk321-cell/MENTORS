@@ -55,7 +55,6 @@ export interface RecordingFormValue {
   companyType: string;
   durationMinutes: number;
   url: string;
-  embedUrl: string | null;
   checklist: Checklist;
 }
 
@@ -68,7 +67,6 @@ interface FormState {
   companyType: string;
   duration: string;
   url: string;
-  embedUrl: string;
   checklist: Checklist;
 }
 
@@ -82,7 +80,6 @@ function initialState(recording?: RecordingFormValue): FormState {
     companyType: recording?.companyType ?? "product",
     duration: recording ? String(recording.durationMinutes) : "60",
     url: recording?.url ?? "",
-    embedUrl: recording?.embedUrl ?? "",
     checklist: recording?.checklist ?? {
       faces: false,
       voice: false,
@@ -154,7 +151,6 @@ export function RecordingFormDialog({ recording }: { recording?: RecordingFormVa
         companyType: form.companyType,
         durationMinutes: Number(form.duration),
         url: form.url,
-        embedUrl: form.embedUrl,
         checklist: form.checklist,
         status,
       });
@@ -274,17 +270,9 @@ export function RecordingFormDialog({ recording }: { recording?: RecordingFormVa
               placeholder="https://disk.yandex.ru/i/…"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="rec-embed" className="text-text-2 text-[13px]">
-              Ссылка для встраивания плеера (необязательно)
-            </label>
-            <Input
-              id="rec-embed"
-              value={form.embedUrl}
-              onChange={(e) => setForm({ ...form, embedUrl: e.target.value })}
-              placeholder="https://disk.yandex.ru/embed/…"
-            />
-          </div>
+          {/* Заход C.5: поле «Ссылка для встраивания плеера» убрано. Оно обещало
+              плеер, которого не бывает: встраивание запрещает сам Я.Диск, и за всё
+              время поле не заполнил никто. Запись открывается в новой вкладке. */}
 
           {/* Чеклист анонимизации — гейт публикации (spec 7.9). */}
           <fieldset className="rounded-control border-border flex flex-col gap-2.5 border p-3">

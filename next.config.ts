@@ -1,22 +1,13 @@
 import type { NextConfig } from "next";
 
-// Spec 7.9 / 11: the recording viewer embeds a Я.Диск iframe, so /library/[id]
-// (and only that page) must allow the disk.yandex.* range as a frame source.
-// Host-source syntax can't wildcard a TLD, so the disk domains are enumerated;
-// *.yandex.net covers the CDN the embedded player streams from. Only frame-src
-// is set (no default-src) — a minimal, page-scoped relaxation, not a site CSP.
-const YANDEX_DISK_FRAME_SRC = [
-  "https://disk.yandex.ru",
-  "https://disk.yandex.com",
-  "https://disk.yandex.net",
-  "https://disk.yandex.kz",
-  "https://disk.yandex.by",
-  "https://disk.yandex.uz",
-  "https://disk.360.yandex.ru",
-  "https://disk.360.yandex.net",
-  "https://*.yandex.net",
-].join(" ");
-
+// Заход C.5: перечисление доменов disk.yandex.* в frame-src снято вместе с
+// веткой встраивания записей. Оно открывало НАШУ сторону там, где закрыта
+// сторона Диска: публичная страница записи отдаёт
+// `frame-ancestors webvisor.com *.webvisor.com …`, а `/embed/<ключ>` — 302 на
+// паспорт и `X-Frame-Options: SAMEORIGIN`. Потребителя у послабления не было ни
+// одного (замер перед миграцией: 1 запись, 0 с embed_url), поэтому CSP снова
+// одна на весь сайт, а /library/:id больше не нуждается в отдельном правиле.
+//
 // Site-wide CSP (spec 13.2 block 2). Notes on the relaxations:
 // - script-src 'unsafe-inline': Next App Router injects inline bootstrap/RSC
 //   scripts and the anti-FOUC theme script (app/layout.tsx) — nonce plumbing
@@ -27,12 +18,11 @@ const YANDEX_DISK_FRAME_SRC = [
 //   inline style attributes.
 // - img-src data: blob:: KaTeX data-URIs, upload previews; i.ytimg.com is the
 //   YouTube poster CDN (also used via next/image).
-// - frame-src youtube-nocookie: lesson video embeds (spec 5.3). The recording
-//   viewer additionally needs the Я.Диск range — appended point-wise on
-//   /library/:id only (spec 7.9), the rest of the site keeps the tight list.
+// - frame-src youtube-nocookie: lesson video embeds (spec 5.3) — единственный
+//   сторонний источник во фрейме на всей платформе (заход C.5).
 const isDev = process.env.NODE_ENV === "development";
 
-function csp(frameExtra = "", frameAncestors = "'none'"): string {
+function csp(frameAncestors = "'none'"): string {
   return [
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -40,7 +30,7 @@ function csp(frameExtra = "", frameAncestors = "'none'"): string {
     "img-src 'self' data: blob: https://i.ytimg.com",
     "font-src 'self'",
     `connect-src 'self'${isDev ? " ws:" : ""}`,
-    `frame-src 'self' https://www.youtube-nocookie.com${frameExtra ? ` ${frameExtra}` : ""}`,
+    "frame-src 'self' https://www.youtube-nocookie.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -82,22 +72,15 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Одно правило на весь сайт (заход C.5). До этого CSP жила отдельной
+        // строкой с негативным lookahead `/((?!library/).*)`, а рядом стояло
+        // правило под `/library/:id` с доменами Я.Диска во `frame-src`:
+        // два CSP-заголовка на одном ответе ПЕРЕСЕКАЮТСЯ, поэтому правила не
+        // имели права перекрываться. Послабление снято — исключение стало не
+        // нужно, и CSP переезжает к остальным заголовкам безопасности, вместо
+        // второй записи с тем же самым `source`.
         source: "/:path*",
-        headers: SECURITY_HEADERS,
-      },
-      {
-        // Everything except /library/<id> — tight frame-src. Multiple CSP
-        // headers on one response INTERSECT, so the two rules must not overlap:
-        // path-to-regexp negative lookahead keeps /library/* out of this rule
-        // (/library itself — no slash after — still matches and gets the tight CSP).
-        source: "/((?!library/).*)",
-        headers: [{ key: "Content-Security-Policy", value: csp() }],
-      },
-      {
-        // Recording viewer only (spec 7.9): the same CSP with the Я.Диск range
-        // appended to frame-src for the embedded player.
-        source: "/library/:id*",
-        headers: [{ key: "Content-Security-Policy", value: csp(YANDEX_DISK_FRAME_SRC) }],
+        headers: [...SECURITY_HEADERS, { key: "Content-Security-Policy", value: csp() }],
       },
       {
         // Editor live preview (spec 8.5 / changelog 13.6): the lesson and guide
@@ -111,10 +94,13 @@ const nextConfig: NextConfig = {
         // clickjacking stays impossible.
         // Order is load-bearing: headers() lets the LAST matching rule replace a
         // same-key header, so this is a point-wise override of the two rules above.
+        // Заход C.5: упрощение правила выше на это НЕ влияет — переопределение
+        // держится на порядке, а не на том, каким паттерном записан общий случай
+        // (проверено фактическими заголовками ответа, см. запись захода).
         source: "/(content-preview|guide-preview)/:id*",
         headers: [
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Content-Security-Policy", value: csp("", "'self'") },
+          { key: "Content-Security-Policy", value: csp("'self'") },
         ],
       },
     ];

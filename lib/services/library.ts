@@ -33,7 +33,6 @@ export interface RecordingData {
   companyType: CompanyType;
   durationMinutes: number;
   url: string;
-  embedUrl: string | null;
   checklist: RecordingChecklist;
   status: ContentStatus;
 }
@@ -87,13 +86,11 @@ export async function getRecordingForView(db: Db, id: string) {
       companyType: true,
       durationMinutes: true,
       url: true,
-      embedUrl: true,
     },
   });
 }
 
-export type OpenRecordingResult =
-  { ok: true; url: string; embedUrl: string | null } | { ok: false; code: "not_found" };
+export type OpenRecordingResult = { ok: true; url: string } | { ok: false; code: "not_found" };
 
 /**
  * Logs an open (spec 7.9: ЛЮБОЕ открытие → recording_views + recording.opened).
@@ -105,7 +102,7 @@ export async function logRecordingOpen(
 ): Promise<OpenRecordingResult> {
   const recording = await db.recording.findFirst({
     where: { id: input.recordingId, status: "published" },
-    select: { id: true, url: true, embedUrl: true },
+    select: { id: true, url: true },
   });
   if (!recording) return { ok: false, code: "not_found" };
 
@@ -123,7 +120,7 @@ export async function logRecordingOpen(
       },
     );
   });
-  return { ok: true, url: recording.url, embedUrl: recording.embedUrl };
+  return { ok: true, url: recording.url };
 }
 
 // --- Admin (spec 7.9 / 8.5) ---
@@ -186,7 +183,6 @@ export async function upsertRecording(
           companyType: data.companyType,
           durationMinutes: data.durationMinutes,
           url: data.url,
-          embedUrl: data.embedUrl,
           checklist,
           status: data.status,
           ...(linkRotated ? { linkUpdatedAt: now } : {}),
@@ -220,7 +216,6 @@ export async function upsertRecording(
         companyType: data.companyType,
         durationMinutes: data.durationMinutes,
         url: data.url,
-        embedUrl: data.embedUrl,
         checklist,
         status: data.status,
         linkUpdatedAt: now,

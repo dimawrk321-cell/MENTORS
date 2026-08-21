@@ -11,7 +11,7 @@ import {
   RECORDING_OUTCOME_LABEL,
   recordingCardTitle,
 } from "@/lib/constants";
-import { RecordingEmbed, RecordingOpenLink } from "@/components/features/recording-viewer";
+import { RecordingOpenLink } from "@/components/features/recording-viewer";
 import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
@@ -30,7 +30,7 @@ const OUTCOME_VARIANT: Record<string, "success" | "danger" | "warning"> = {
 
 /** Просмотр записи (spec 7.9). Виден только при library_enabled. */
 export default async function RecordingPage({ params }: RecordingPageProps) {
-  const { user, session } = await requireStudentZone();
+  const { user } = await requireStudentZone();
   if (!user.libraryEnabled) notFound();
 
   const { id } = await params;
@@ -60,21 +60,18 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
         <span>{RECORDING_ACCESS_WARNING}</span>
       </div>
 
-      {recording.embedUrl ? (
-        <RecordingEmbed
-          recordingId={recording.id}
-          embedUrl={recording.embedUrl}
-          watermarkEmail={session.user.email}
-        />
-      ) : (
-        <div className="rounded-card border-border bg-surface-1 flex flex-col items-center gap-3 border p-8 text-center">
-          <p className="text-text-2 text-[14px]">Запись открывается в новой вкладке на Я.Диске.</p>
-          <RecordingOpenLink recordingId={recording.id} url={recording.url} />
-        </div>
-      )}
+      {/* Заход C.5: ветка одна — встроить запись Я.Диска во фрейм нельзя. */}
+      <div className="rounded-card border-border bg-surface-1 flex flex-col items-center gap-3 border p-8 text-center">
+        <p className="text-text-2 text-[14px]">Запись открывается в новой вкладке на Я.Диске.</p>
+        <RecordingOpenLink recordingId={recording.id} url={recording.url} />
+      </div>
 
+      {/* Заход C.5: строка переписана честно. Прежняя обещала «скачивание
+          отключено» и водяной знак на каждой сессии просмотра — ни того, ни
+          другого на чужой вкладке у нас нет и не было (плеер не работал ни разу).
+          Обещать защиту, которой нет, хуже, чем назвать реальную. */}
       <p className="text-text-3 text-[12px]">
-        Скачивание отключено. Водяной знак с твоей почтой присутствует на каждой сессии просмотра.
+        Каждое открытие записи фиксируется за твоим аккаунтом.
       </p>
     </div>
   );

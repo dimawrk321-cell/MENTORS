@@ -28,7 +28,7 @@ import { touchRecentItem } from "@/lib/services/recent";
 
 // --- Student ---
 
-export type OpenRecordingData = { url: string; embedUrl: string | null };
+export type OpenRecordingData = { url: string };
 
 /**
  * Logs a recording open (spec 7.9: любое открытие → recording_views +
@@ -49,14 +49,14 @@ export async function openRecordingAction(
     if (auth.impersonated) {
       const recording = await getRecordingForView(prisma, id);
       if (!recording) throw new ActionError("not_found", "Запись не найдена");
-      return { url: recording.url, embedUrl: recording.embedUrl };
+      return { url: recording.url };
     }
 
     const res = await logRecordingOpen(prisma, { userId: auth.user.id, recordingId: id });
     if (!res.ok) throw new ActionError("not_found", "Запись не найдена");
     // Recency index for the palette (spec 7.11).
     await touchRecentItem(prisma, { userId: auth.user.id, itemType: "recording", entityId: id });
-    return { url: res.url, embedUrl: res.embedUrl };
+    return { url: res.url };
   });
 }
 
@@ -81,7 +81,6 @@ export async function upsertRecordingAction(input: unknown): Promise<ActionResul
       companyType: parsed.companyType,
       durationMinutes: parsed.durationMinutes,
       url: parsed.url,
-      embedUrl: parsed.embedUrl,
       checklist: parsed.checklist,
       status: parsed.status,
     };

@@ -27,7 +27,6 @@ function recordingData(overrides: Partial<RecordingData> = {}): RecordingData {
     companyType: "product",
     durationMinutes: 60,
     url: "https://disk.yandex.ru/i/abc",
-    embedUrl: null,
     checklist: COMPLETE,
     status: "draft",
     ...overrides,

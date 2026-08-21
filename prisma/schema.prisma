@@ -444,16 +444,16 @@ enum ContentReportStatus {
 }
 
 model Course {
-  id          String        @id @default(cuid())
-  slug        String        @unique
-  title       String
-  description String        @default("")
-  order       Int           @default(0)
-  gating      CourseGating  @default(strict)
-  status      ContentStatus @default(draft)
-  icon        String?
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id                 String                   @id @default(cuid())
+  slug               String                   @unique
+  title              String
+  description        String                   @default("")
+  order              Int                      @default(0)
+  gating             CourseGating             @default(strict)
+  status             ContentStatus            @default(draft)
+  icon               String?
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
   modules            Module[]
   access             CourseAccess[]
   questionCategories CourseQuestionCategory[]
@@ -473,9 +473,13 @@ model CourseAccess {
   courseId      String              @map("course_id")
   course        Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
   unlockedAt    DateTime?           @map("unlocked_at")
-  /** Кто открыл: цепь (system) или админ вручную (admin). */
+  /**
+   * Кто открыл: цепь (system) или админ вручную (admin).
+   */
   unlockedBy    CourseUnlockSource? @map("unlocked_by")
-  /** Админский замок — сильнее цепи: курс заперт, даже если предыдущий пройден. */
+  /**
+   * Админский замок — сильнее цепи: курс заперт, даже если предыдущий пройден.
+   */
   lockedByAdmin Boolean             @default(false) @map("locked_by_admin")
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
@@ -566,18 +570,18 @@ model TrackDef {
 }
 
 model LessonProgress {
-  id          String               @id @default(cuid())
-  userId      String               @map("user_id")
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lessonId    String               @map("lesson_id")
-  lesson      Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  status      LessonProgressStatus @default(in_progress)
-  completedAt DateTime?            @map("completed_at")
-  scrollPos   Float?               @map("scroll_pos")
-  videoPos    Int?                 @map("video_pos")
+  id           String               @id @default(cuid())
+  userId       String               @map("user_id")
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId     String               @map("lesson_id")
+  lesson       Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  status       LessonProgressStatus @default(in_progress)
+  completedAt  DateTime?            @map("completed_at")
+  scrollPos    Float?               @map("scroll_pos")
+  videoPos     Int?                 @map("video_pos")
   selectedPath LessonPathSelection? @map("selected_path")
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
 
   @@unique([userId, lessonId])
   @@index([lessonId])
@@ -605,17 +609,17 @@ enum TestKind {
 }
 
 model QuestionCategory {
-  id         String             @id @default(cuid())
+  id         String                   @id @default(cuid())
   title      String
-  slug       String             @unique
-  parentId   String?            @map("parent_id")
-  parent     QuestionCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children   QuestionCategory[] @relation("CategoryTree")
+  slug       String                   @unique
+  parentId   String?                  @map("parent_id")
+  parent     QuestionCategory?        @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   QuestionCategory[]       @relation("CategoryTree")
   // Spec 5.1/7.4: 8 muted pairs assigned to root categories in order.
-  colorIndex Int                @map("color_index")
-  order      Int                @default(0)
-  createdAt  DateTime           @default(now()) @map("created_at")
-  updatedAt  DateTime           @updatedAt @map("updated_at")
+  colorIndex Int                      @map("color_index")
+  order      Int                      @default(0)
+  createdAt  DateTime                 @default(now()) @map("created_at")
+  updatedAt  DateTime                 @updatedAt @map("updated_at")
   questions  Question[]
   courses    CourseQuestionCategory[]
 
@@ -625,7 +629,6 @@ model QuestionCategory {
 
 /**
  * Связь «курс ↔ категория банка вопросов» (заход «Банк вопросов»).
- *
  * Доступ к вопросу решается доступом к КУРСУ: категория видна ученику, если ей
  * сопоставлен хотя бы один открытый цепью курс. Категория, у которой здесь нет
  * ни одной строки, — общий пул: видна всем. Отдельных ручек по категориям нет
@@ -715,27 +718,27 @@ model QuestionLesson {
 }
 
 model ModuleTest {
-  id              String   @id @default(cuid())
-  moduleId        String   @unique @map("module_id")
-  module          Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  poolSize        Int      @default(12) @map("pool_size")
-  threshold       Int      @default(80)
-  cooldownMinutes Int      @default(45) @map("cooldown_minutes")
-  enabled         Boolean  @default(true)
+  id               String   @id @default(cuid())
+  moduleId         String   @unique @map("module_id")
+  module           Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  poolSize         Int      @default(12) @map("pool_size")
+  threshold        Int      @default(80)
+  cooldownMinutes  Int      @default(45) @map("cooldown_minutes")
+  enabled          Boolean  @default(true)
   /**
    * Экстерн разрешён (заход C.1). Тумблер только ЗАПРЕЩАЕТ: включённый не
    * делает экстерн доступным помимо правила 7.3 (strict-курс + незавершённые
    * уроки) — иначе он стал бы вторым источником правды о том, когда экстерн
    * уместен. Default true = прежнее поведение для существующих строк.
    */
-  testoutEnabled  Boolean  @default(true) @map("testout_enabled")
+  testoutEnabled   Boolean  @default(true) @map("testout_enabled")
   /**
    * Порог экстерна, % (заход C.1). Был код-константой TESTOUT_THRESHOLD = 90;
    * она осталась значением по умолчанию и фоллбэком там, где строки теста нет.
    */
-  testoutThreshold Int     @default(90) @map("testout_threshold")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  testoutThreshold Int      @default(90) @map("testout_threshold")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@map("module_tests")
 }
@@ -1329,10 +1332,15 @@ model Recording {
    */
   url             String
   /**
-   * Опциональный embed-URL для iframe-плеера поверх Watermark; при отсутствии —
-   * кнопка «Открыть запись» в новой вкладке (spec 7.9).
+   * Заход C.5: колонка `embed_url` снята. Встроить запись Я.Диска во фрейм
+   * нельзя — это запрещает сам источник (`frame-ancestors` его публичной
+   * страницы разрешает только домены Вебвизора), поэтому ветка «есть embed_url →
+   * iframe-плеер» не могла сработать ни разу и за всё время не сработала (замер
+   * перед миграцией: 1 запись, 0 заполненных). Единственный путь просмотра —
+   * «Открыть запись» в новой вкладке. Плеер вернётся вместе с переездом на
+   * видеохостинг с подписанными URL (V1 раздела 16) — и тогда это будет другая
+   * колонка с другим смыслом, а не воскрешение этой.
    */
-  embedUrl        String?                  @map("embed_url")
   linkUpdatedAt   DateTime                 @default(now()) @map("link_updated_at")
   /**
    * {faces,voice,names,consent}:bool — гейт публикации (spec 7.9): публикация
@@ -1445,39 +1453,39 @@ model RecentItem {
 // emailDispatch job (spec 7.12). `type` is a NotificationType string (config in
 // lib/services/notifications.ts) — not an enum, so new types don't need a migration.
 model Notification {
-  id            String    @id @default(cuid())
-  userId        String    @map("user_id")
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type          String
-  title         String
-  body          String    @default("")
-  url           String?
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            String
+  title           String
+  body            String    @default("")
+  url             String?
   /**
    * Visible in the bell + counts toward unread (false ⇒ email-only outbox row).
    */
-  inApp         Boolean   @default(true) @map("in_app")
-  readAt        DateTime? @map("read_at")
+  inApp           Boolean   @default(true) @map("in_app")
+  readAt          DateTime? @map("read_at")
   /**
    * Walk 13.4 (block 4.4): student cleared this from the bell («крестик» / «Очистить»).
    * Dismissed rows are hidden from the bell + unread count but retained; the admin
    * student-card «Уведомления» tab still shows them marked «скрыто учеником».
    */
-  dismissedAt   DateTime? @map("dismissed_at")
+  dismissedAt     DateTime? @map("dismissed_at")
   /**
    * Email queued but not yet sent (outbox).
    */
-  emailPending  Boolean   @default(false) @map("email_pending")
+  emailPending    Boolean   @default(false) @map("email_pending")
   /**
    * Earliest instant the email may be sent (now, or end of quiet hours).
    */
-  scheduledAt   DateTime? @map("scheduled_at")
+  scheduledAt     DateTime? @map("scheduled_at")
   /**
    * Relevance deadline for the email (§9 acceptance fix): for mock_* it is the
    * booking start. emailDispatch skips a pending email past its deadline so a
    * time-sensitive reminder never arrives after the mock. null ⇒ no deadline.
    */
-  emailDeadline DateTime? @map("email_deadline")
-  emailSentAt   DateTime? @map("email_sent_at")
+  emailDeadline   DateTime? @map("email_deadline")
+  emailSentAt     DateTime? @map("email_sent_at")
   /**
    * Walk 13.3 (spec 7.12/V1): Telegram outbox flag, mirroring email_pending. Set
    * when the user is linked and the type's telegram channel is enabled; flushed by
@@ -1487,7 +1495,7 @@ model Notification {
    */
   telegramPending Boolean   @default(false) @map("telegram_pending")
   telegramSentAt  DateTime? @map("telegram_sent_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   // Bell: unread count + recent 20 in-app (spec 7.12).
   @@index([userId, inApp, readAt])

@@ -163,7 +163,6 @@ export default async function AdminLibraryPage({ searchParams }: AdminLibraryPag
         companyType: recording.companyType,
         durationMinutes: recording.durationMinutes,
         url: recording.url,
-        embedUrl: recording.embedUrl,
         checklist,
       },
     };

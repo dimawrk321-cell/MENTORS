@@ -316,9 +316,8 @@ export const recordingUpsertSchema = z
       .min(1, "Длительность должна быть положительной")
       .max(600, "Слишком большая длительность"),
     url: z.url("Укажи корректную ссылку на запись").max(1000),
-    embedUrl: z
-      .union([z.literal(""), z.url("Некорректная ссылка для встраивания")])
-      .transform((value) => value || null),
+    // Заход C.5: `embedUrl` снят вместе с колонкой — встроить запись Я.Диска
+    // во фрейм запрещает сам источник, ветка не срабатывала ни разу.
     checklist: recordingChecklistSchema,
     status: z.enum(["draft", "published"]),
   })
