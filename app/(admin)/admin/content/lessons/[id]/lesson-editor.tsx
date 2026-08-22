@@ -111,6 +111,7 @@ export function LessonEditor({
   const [content, setContent] = useState(lesson.contentMd);
   const [saveState, setSaveState] = useState<"saved" | "dirty" | "saving">("saved");
   const [previewVersion, setPreviewVersion] = useState(0);
+  const [livePreviewHtml, setLivePreviewHtml] = useState<string | null>(null);
   const [readingMinutes, setReadingMinutes] = useState(lesson.readingMinutes);
   const [fullscreen, setFullscreen] = useState(false);
   const [pickingQuestion, setPickingQuestion] = useState(false);
@@ -138,7 +139,11 @@ export function LessonEditor({
   const noticeShown = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewRequest = useRef(0);
   const latestContent = useRef(content);
+  const lastSavedContent = useRef(content);
 
   const wordCount = useMemo(
     () => (content.trim() ? content.trim().split(/\s+/).length : 0),
@@ -168,14 +173,26 @@ export function LessonEditor({
     ],
   );
 
+  const returnToSavedPreview = useCallback(() => {
+    if (previewClearTimer.current) clearTimeout(previewClearTimer.current);
+    previewClearTimer.current = setTimeout(() => setLivePreviewHtml(null), 1200);
+  }, []);
+
   const flushSave = useCallback((): Promise<boolean> => {
     saveTimer.current = null;
+    const savingContent = latestContent.current;
     setSaveState("saving");
-    return saveLessonContentAction(lesson.id, latestContent.current).then((result) => {
+    return saveLessonContentAction(lesson.id, savingContent).then((result) => {
       if (result?.ok) {
         setReadingMinutes(result.data.readingMinutes);
-        setSaveState("saved");
+        lastSavedContent.current = savingContent;
+        const isLatest = latestContent.current === savingContent;
+        setSaveState(isLatest ? "saved" : "dirty");
         setPreviewVersion((version) => version + 1);
+        // Keep the unsaved render visible long enough to be perceived. If its
+        // server response is still in flight, that response schedules its own
+        // return to the exact saved iframe below.
+        if (isLatest) returnToSavedPreview();
         // Заход C.4: тост — один раз на переходе «не было → появилось», а не на
         // каждом автосейве (он идёт каждые несколько секунд и встал бы стеной
         // поверх редактора). Признак живёт в рефе, а не в апдейтере состояния:
@@ -195,7 +212,7 @@ export function LessonEditor({
       if (result) toast({ title: result.error.message, variant: "danger" });
       return false;
     });
-  }, [lesson.id]);
+  }, [lesson.id, returnToSavedPreview]);
 
   function onContentChange(value: string): void {
     setContent(value);
@@ -203,6 +220,31 @@ export function LessonEditor({
     setSaveState("dirty");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(flushSave, AUTOSAVE_MS);
+
+    // Rendering starts before autosave and has no DB write. A monotonically
+    // increasing id prevents a slow old response from replacing a newer one.
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    if (previewClearTimer.current) clearTimeout(previewClearTimer.current);
+    const requestId = ++previewRequest.current;
+    previewTimer.current = setTimeout(() => {
+      void fetch("/api/admin/content-preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ markdown: value }),
+      })
+        .then(async (response) => {
+          if (!response.ok) return null;
+          return (await response.json()) as { html?: unknown };
+        })
+        .then((result) => {
+          if (requestId !== previewRequest.current || typeof result?.html !== "string") return;
+          setLivePreviewHtml(result.html);
+          if (lastSavedContent.current === value) returnToSavedPreview();
+        })
+        .catch(() => {
+          // The last saved iframe stays visible; autosave will refresh it.
+        });
+    }, 180);
   }
 
   // Flush a pending save when leaving the editor.
@@ -212,6 +254,9 @@ export function LessonEditor({
         clearTimeout(saveTimer.current);
         flushSave();
       }
+      if (previewTimer.current) clearTimeout(previewTimer.current);
+      if (previewClearTimer.current) clearTimeout(previewClearTimer.current);
+      previewRequest.current += 1;
     };
   }, [flushSave]);
 
@@ -740,15 +785,27 @@ export function LessonEditor({
             )}
           />
         )}
-        <iframe
-          key={previewVersion}
-          src={`/content-preview/${lesson.id}?v=${previewVersion}`}
-          title="Предпросмотр урока"
-          className={cn(
-            "rounded-card border-border bg-bg w-full border",
-            fullscreen ? "h-[80dvh]" : "h-[70dvh]",
-          )}
-        />
+        {livePreviewHtml === null ? (
+          <iframe
+            key={previewVersion}
+            src={`/content-preview/${lesson.id}?v=${previewVersion}`}
+            title="Предпросмотр урока"
+            className={cn(
+              "rounded-card border-border bg-bg w-full border",
+              fullscreen ? "h-[80dvh]" : "h-[70dvh]",
+            )}
+          />
+        ) : (
+          <div
+            aria-label="Мгновенный предпросмотр урока"
+            aria-live="polite"
+            className={cn(
+              "lesson-prose reading-article rounded-card border-border bg-bg w-full overflow-y-auto border px-6 py-8",
+              fullscreen ? "h-[80dvh]" : "h-[70dvh]",
+            )}
+            dangerouslySetInnerHTML={{ __html: livePreviewHtml }}
+          />
+        )}
       </div>
 
       <QuestionBankPicker

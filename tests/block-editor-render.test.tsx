@@ -34,6 +34,14 @@ function render(zone: "lesson" | "guide", value = DOC): string {
 }
 
 describe("палитра вставки", () => {
+  it("отделяет типы контента от форматирования текста", () => {
+    const html = render("lesson", "Обычный текст.\n");
+    expect(html).toContain("Тип контента");
+    expect(html).toContain("Текст");
+    expect(html).toContain("Видео");
+    expect(html).toContain("Мок-интервью");
+  });
+
   it("в уроке есть кнопки «Скрытый ответ» и «Вопрос из банка»", () => {
     const html = render("lesson", "");
     expect(html).toContain("Скрытый ответ");

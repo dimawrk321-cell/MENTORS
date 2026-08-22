@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { QuestionBankPicker } from "@/components/features/question-bank-picker";
+import { RichTextEditor } from "@/components/features/rich-text-editor";
 import { lookupQuizQuestionAction, type QuizPickerRow } from "@/lib/actions/questions-admin";
 import {
   parse,
@@ -47,11 +48,9 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { parseYouTubeId, videoLinkHost } from "@/lib/utils/youtube";
 
-// Visual block editor (walk 13.6 block 1). The mentor never sees `:::`, `$$` or
-// triple backticks: recognised blocks render as titled cards with real fields,
-// while paragraphs/headings/lists stay in a plain textarea (markdown there is
-// readable — the complaint was about directive syntax). Storage stays markdown;
-// see lib/content/markdown-blocks.ts for the byte-fidelity guarantee.
+// Hybrid editor: prose is rich text, while semantic content types stay as
+// separate cards. Storage remains markdown; see markdown-blocks.ts for the
+// untouched-block byte-fidelity guarantee and rich-text.ts for inline styles.
 //
 // Заход «Редактор блоков» — шесть правок по жалобам владельца:
 //   • вставка идёт в предсказуемое место (после блока в фокусе или в выбранный
@@ -501,15 +500,29 @@ function BlockCard({
 
         {block.kind === "table" && <TableGrid block={block} onChange={onChange} />}
 
-        {block.kind === "prose" && (
-          <AutoTextarea
-            value={block.body}
-            onChange={(body) => onChange(withEdit(block, { body }))}
-            onBlur={onBlurBlock}
-            ariaLabel="Текст"
-            max={14}
-          />
-        )}
+        {block.kind === "prose" &&
+          (block.editable ? (
+            <RichTextEditor
+              value={block.body}
+              onChange={(body) => onChange(withEdit(block, { body }))}
+              onBlur={onBlurBlock}
+              ariaLabel="Текст урока"
+            />
+          ) : (
+            <>
+              <p className="text-warning text-[12px]">
+                Этот фрагмент содержит нестандартную Markdown-разметку. Он оставлен в исходном виде,
+                чтобы не повредить старый урок.
+              </p>
+              <AutoTextarea
+                value={block.body}
+                onChange={(body) => onChange(withEdit(block, { body }))}
+                onBlur={onBlurBlock}
+                ariaLabel="Нестандартный Markdown"
+                max={14}
+              />
+            </>
+          ))}
       </div>
     </div>
   );
@@ -709,19 +722,33 @@ function BlockPalette({
   templates,
   onPick,
   className,
+  labelled = false,
 }: {
   templates: NewBlockTemplate[];
   onPick: (template: NewBlockTemplate) => void;
   className?: string;
+  labelled?: boolean;
 }) {
   return (
-    <div className={cn("flex flex-wrap gap-1.5", className)}>
-      {templates.map((template) => (
-        <Button key={template.label} variant="secondary" size="sm" onClick={() => onPick(template)}>
-          <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
-          {template.label}
-        </Button>
-      ))}
+    <div className={cn("flex flex-col gap-1.5", className)}>
+      {labelled && (
+        <span className="text-text-3 text-[11px] font-medium tracking-wide uppercase">
+          Тип контента
+        </span>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {templates.map((template) => (
+          <Button
+            key={template.label}
+            variant="secondary"
+            size="sm"
+            onClick={() => onPick(template)}
+          >
+            <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+            {template.label}
+          </Button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -846,6 +873,7 @@ export function BlockEditor({
     <div className="flex flex-col gap-3">
       <BlockPalette
         templates={available}
+        labelled
         onPick={(template) =>
           insertAt(template, focused.current === null ? blocks.length : focused.current + 1)
         }

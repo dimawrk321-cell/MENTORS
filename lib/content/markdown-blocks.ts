@@ -1,10 +1,8 @@
 // Block segmentation over the markdown source (walk 13.6 block 1).
 //
-// DECISION: a segmented block wrapper over the SAME markdown string — not
-// CodeMirror widgets, and not a WYSIWYG (Tiptap stays out, see changelog 13.6).
-// Rationale: zero new dependencies, the storage format and the single render
-// path are untouched, and — decisive — byte fidelity is guaranteed *by
-// construction* rather than by a serializer we have to trust:
+// DECISION: a segmented block wrapper over the SAME markdown string. Prose now
+// has a rich-text surface, but storage, segmentation and the single lesson
+// render path stay unchanged. Byte fidelity remains guaranteed by construction:
 //
 //   • parse() splits the source into segments whose `raw` slices concatenate
 //     back to the original string EXACTLY (no normalisation anywhere);
@@ -235,7 +233,7 @@ export function parse(markdown: string): Block[] {
       if (!block.editable) {
         block.kind = "prose";
         block.body = raw;
-        block.editable = true;
+        block.editable = false;
       }
       blocks.push(block);
       i = j;
@@ -290,7 +288,7 @@ export function parse(markdown: string): Block[] {
       if (!block.editable) {
         block.kind = "prose";
         block.body = raw;
-        block.editable = true;
+        block.editable = false;
       }
       blocks.push(block);
       i = j;
@@ -322,7 +320,7 @@ export function parse(markdown: string): Block[] {
       if (!block.editable) {
         block.kind = "prose";
         block.body = raw;
-        block.editable = true;
+        block.editable = false;
       }
       blocks.push(block);
       i = j;

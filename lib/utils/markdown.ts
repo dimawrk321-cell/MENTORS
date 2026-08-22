@@ -59,10 +59,20 @@ const remarkDirectiveBlocks: Plugin<[], MdastRoot> = () => (tree) => {
       return;
     }
     const directive = node as unknown as DirectiveNode;
-    // Text directives (":name" inline) are not part of the content model —
-    // render their children as plain inline content.
+    // Hybrid rich text stores the two formats Markdown does not have natively
+    // as explicit text directives. Everything else still degrades to a plain
+    // span, so an unknown inline directive cannot crash an old lesson.
     if (directive.type === "textDirective") {
-      directive.data = { ...directive.data, hName: "span" };
+      const inline = {
+        underline: { hName: "u", hProperties: {} },
+        small: { hName: "span", hProperties: { className: ["rt-small"] } },
+        large: { hName: "span", hProperties: { className: ["rt-large"] } },
+      }[directive.name];
+      directive.data = {
+        ...directive.data,
+        hName: inline?.hName ?? "span",
+        ...(inline ? { hProperties: inline.hProperties } : {}),
+      };
       return;
     }
     const hName = DIRECTIVE_ELEMENTS[directive.name] ?? "div";

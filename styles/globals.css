@@ -272,6 +272,12 @@
   .lesson-prose strong {
     font-weight: 600;
   }
+  .lesson-prose .rt-small {
+    font-size: 0.875em;
+  }
+  .lesson-prose .rt-large {
+    font-size: 1.125em;
+  }
   .lesson-prose code:not(pre code) {
     border: 1px solid var(--border);
     border-radius: 5px;
@@ -302,6 +308,68 @@
   }
   .lesson-prose .lesson-callout p {
     margin: 0.35rem 0;
+  }
+
+  /* Authoring surface: the same typographic hierarchy as the lesson body,
+     scoped to TipTap so admin controls around it are unaffected. */
+  .rich-text-surface {
+    color: var(--text-1);
+    font-size: 14px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+  .rich-text-surface > :first-child {
+    margin-top: 0;
+  }
+  .rich-text-surface > :last-child {
+    margin-bottom: 0;
+  }
+  .rich-text-surface h1 {
+    margin: 1.25rem 0 0.5rem;
+    font-size: 1.75em;
+    font-weight: 600;
+  }
+  .rich-text-surface h2 {
+    margin: 1.1rem 0 0.45rem;
+    font-size: 1.4em;
+    font-weight: 600;
+  }
+  .rich-text-surface h3 {
+    margin: 0.9rem 0 0.35rem;
+    font-size: 1.125em;
+    font-weight: 600;
+  }
+  .rich-text-surface p {
+    margin: 0.55rem 0;
+  }
+  .rich-text-surface ul,
+  .rich-text-surface ol {
+    margin: 0.55rem 0;
+    padding-left: 1.5rem;
+  }
+  .rich-text-surface ul {
+    list-style: disc;
+  }
+  .rich-text-surface ol {
+    list-style: decimal;
+  }
+  .rich-text-surface blockquote {
+    margin: 0.75rem 0;
+    border-left: 2px solid var(--border-strong);
+    padding-left: 0.9rem;
+    color: var(--text-2);
+  }
+  .rich-text-surface a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .rich-text-surface code {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--code-inline-bg);
+    padding: 0.1em 0.35em;
+    font-size: 0.84em;
   }
   /* --- «Читалка v2»: статейная разметка читального экрана ---
      `.reading-article` ставится ТОЛЬКО на тело урока/гайда (и на их

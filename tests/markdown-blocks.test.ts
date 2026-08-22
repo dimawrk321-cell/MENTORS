@@ -144,7 +144,7 @@ describe("editability rail", () => {
     // as a visual block; it becomes plain text so nothing shifts silently.
     const [block] = parse(":::callout{type=tip}\nТело.\n:::\n");
     expect(block!.kind).toBe("prose");
-    expect(block!.editable).toBe(true);
+    expect(block!.editable).toBe(false);
     expect(block!.body).toBe(":::callout{type=tip}\nТело.\n:::\n");
   });
 
@@ -198,6 +198,27 @@ describe("editability rail", () => {
 });
 
 describe("editing", () => {
+  it("survives reorder, copy and delete before a save/load round-trip", () => {
+    const source = 'Первый.\n\n:::callout{type="tip"}\nСовет.\n:::\n\nПоследний.\n';
+    const blocks = parse(source);
+    const first = blocks[0]!;
+    const callout = blocks.find((block) => block.kind === "callout")!;
+    const last = blocks.at(-1)!;
+
+    // The same immutable array operations used by BlockEditor controls.
+    const reordered = [callout, first, last];
+    const copied = { ...callout, id: "copy", dirty: true };
+    const withCopy = [...reordered.slice(0, 1), copied, ...reordered.slice(1)];
+    const afterDelete = withCopy.filter((block) => block.id !== callout.id);
+    const saved = serialize(afterDelete);
+    const loaded = parse(saved);
+
+    expect(loaded.map((block) => block.kind)).toEqual(["callout", "prose"]);
+    expect(saved).toContain("Совет.");
+    expect(saved).not.toContain("Совет.\n:::\n\n:::callout");
+    expect(saved.indexOf("Первый.")).toBeLessThan(saved.indexOf("Последний."));
+  });
+
   it("re-serialises only the edited block and leaves neighbours byte-identical", () => {
     const md = 'Первый.\n\n:::callout{type="tip"}\nСтарое.\n:::\n\nПоследний.\n';
     const blocks = parse(md);
