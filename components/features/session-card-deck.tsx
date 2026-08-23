@@ -230,7 +230,7 @@ export function SessionCardDeck({
       // (spec 13). Вычет (--deck-chrome) и пол высоты живут в globals.css —
       // на альбомной ориентации телефона вычет должен быть меньше, а инлайновый
       // стиль медиазапроса не держит.
-      className="session-deck mx-auto flex w-full max-w-2xl flex-col gap-4"
+      className="session-deck mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4"
     >
       {/* Шапка сессии липнет к верху: на низком вьюпорте (альбомная ориентация)
           страница всё-таки скроллится, и счётчик с выходом уезжали бы за экран —
@@ -268,7 +268,7 @@ export function SessionCardDeck({
         <div
           className="rounded-pill bg-border h-1 w-full overflow-hidden"
           role="progressbar"
-          aria-valuenow={Math.round((index / total) * 100)}
+          aria-valuenow={Math.round(((index + 1) / total) * 100)}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label="Прогресс сессии"
@@ -276,7 +276,10 @@ export function SessionCardDeck({
           <div
             className="ease-app h-full rounded-full transition-[width] duration-300"
             style={{
-              width: `${Math.round((index / total) * 100)}%`,
+              // index нулевой, а счётчик на экране человеческий: первая
+              // карточка из 15 — это уже 1/15, не 0%. На скриншоте рядом с
+              // «1 / 15» полоса поэтому выглядела полностью пустой.
+              width: `${Math.round(((index + 1) / total) * 100)}%`,
               backgroundImage: "var(--gradient-accent)",
             }}
           />
@@ -411,7 +414,9 @@ export function SessionCardDeck({
       <div
         ref={panelRef}
         data-bottom-dock
-        className="bg-bg sticky bottom-0 z-10 flex flex-col gap-2 py-2"
+        // mt-auto прижимает действие к низу на короткой карточке; sticky
+        // сохраняет его на экране, когда длинный вопрос всё же требует скролла.
+        className="bg-bg sticky bottom-0 z-10 mt-auto flex flex-col gap-2 py-2"
       >
         {flipped ? (
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="Оценка карточки">

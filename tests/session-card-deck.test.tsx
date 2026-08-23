@@ -95,6 +95,10 @@ describe("высота граней флип-карточки", () => {
   it("панель оценок липкая, помечена нижним доком и содержит все три оценки", () => {
     const html = render(true);
     expect(html).toContain("sticky bottom-0");
+    // Контракт раскладки короткой карточки: дека занимает свободную высоту, а
+    // панель уходит вниз через mt-auto вместо зависания посередине экрана.
+    expect(html).toContain("max-w-2xl flex-1 flex-col");
+    expect(html).toContain("bottom-0 z-10 mt-auto");
     // Тост встаёт над ФАКТИЧЕСКИМ нижним контролом: в focused-зоне BottomNav
     // нет, есть эта панель (lib/utils/bottom-dock.ts).
     expect(html).toContain("data-bottom-dock");
@@ -105,6 +109,26 @@ describe("высота граней флип-карточки", () => {
 
   it("на нефлипнутой карточке видна кнопка «Показать ответ»", () => {
     expect(render(false)).toContain("Показать ответ");
+  });
+
+  it("первая карточка уже заполняет 1/total полосы, а не показывает 0%", () => {
+    const html = renderToStaticMarkup(
+      <SessionCardDeck
+        item={item}
+        index={0}
+        total={15}
+        flipped={false}
+        pending={false}
+        active
+        exitHref="/trainer"
+        exitLabel="Закончить"
+        exitConfirm="Прервать?"
+        onFlip={() => {}}
+        onGrade={() => {}}
+      />,
+    );
+    expect(html).toContain('aria-valuenow="7"');
+    expect(html).toContain("width:7%");
   });
 });
 

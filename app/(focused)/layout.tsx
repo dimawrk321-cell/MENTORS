@@ -40,7 +40,11 @@ export default async function FocusedLayout({ children }: { children: ReactNode 
         <header className="relative z-10 flex items-center justify-end px-4 py-3 md:px-6">
           <ThemeToggleIcon initialTheme={user.theme} />
         </header>
-        <main className="relative z-10 w-full flex-1 px-4 pb-16 md:px-6">
+        {/* flex-col нужен не для общей раскладки focused-страниц, а чтобы
+            короткая дека тренажёра могла занять остаток вьюпорта и прижать
+            нижнее действие к низу. Без него sticky-панель начиналась сразу
+            после короткой карточки и оставляла пол-экрана пустоты снизу. */}
+        <main className="relative z-10 flex w-full flex-1 flex-col px-4 pb-16 md:px-6">
           <ViewOnlyProvider value={impersonated}>{children}</ViewOnlyProvider>
         </main>
       </div>
