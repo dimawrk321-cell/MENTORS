@@ -24,6 +24,7 @@ export async function reviewCardAction(input: unknown): Promise<
     /** Серия продлилась этим ответом (для пилюли на done-экране) + её длина. */
     streakCounted: boolean;
     streakCurrent: number;
+    nextReviewAt: string;
     gamification: GamificationFeedback;
   }>
 > {
@@ -50,6 +51,7 @@ export async function reviewCardAction(input: unknown): Promise<
       queueCompleted: result.queueCompleted,
       streakCounted: result.streakCounted,
       streakCurrent: result.streakCurrent,
+      nextReviewAt: result.nextReviewAt.toISOString(),
       gamification: toFeedback(result),
     };
   });

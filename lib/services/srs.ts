@@ -29,6 +29,16 @@ export const SRS_SESSION_SIZE = 15;
 export const SRS_SECONDS_PER_CARD = 25;
 /** «Западающие темы» скрыты, пока ответов за 30 дней меньше 20 (spec 8.3). */
 export const LAGGING_MIN_ANSWERS = 20;
+/** Одна случайная ошибка не делает категорию слабой. */
+export const LAGGING_CATEGORY_MIN_ANSWERS = 5;
+
+export const SRS_SOURCE_LABEL: Record<SrsAddedFrom, string> = {
+  lesson_key: "Ключевой вопрос пройденного урока",
+  quiz_fail: "Вернулся после ошибки в квизе",
+  test_fail: "Вернулся после ошибки в тесте",
+  mock: "Добавлен по результатам мок-интервью",
+  manual: "Добавлен вручную",
+};
 
 export function estimateQueueMinutes(count: number): number {
   return Math.ceil((count * SRS_SECONDS_PER_CARD) / 60);
@@ -369,6 +379,8 @@ export type ReviewCardResult =
       /** Серия продлилась этим ответом (впервые засчитан день) + её длина. */
       streakCounted: boolean;
       streakCurrent: number;
+      /** Рассчитанная ядром дата следующего показа этой карточки. */
+      nextReviewAt: Date;
     }
   | { ok: false; code: "not_found" | "not_due" };
 
@@ -463,11 +475,13 @@ export async function reviewSrsCard(
     earnedAchievements: result.earnedAchievements,
     streakCounted: result.streakCounted,
     streakCurrent: result.streakCurrent,
+    nextReviewAt: transition.nextReviewAt,
   };
 }
 
 export interface SessionCard {
   cardId: string;
+  addedFrom: SrsAddedFrom;
   question: Question;
   category: { title: string; colorIndex: number };
   /** Привязанный урок для ссылки «Открыть урок» (is_key-привязка приоритетна). */
@@ -510,6 +524,7 @@ export async function getSessionCards(
       return [
         {
           cardId: card.id,
+          addedFrom: card.addedFrom,
           question,
           category: {
             title: question.category.title,
@@ -574,6 +589,10 @@ export interface LaggingCategory {
   colorIndex: number;
   againShare: number;
   answers: number;
+  againCount: number;
+  lastAgainAt: Date;
+  previousAgainShare: number | null;
+  trend: "improving" | "stable" | "worsening" | "new";
 }
 
 /**
@@ -586,10 +605,13 @@ export async function getLaggingCategories(
   input: { userId: string; now?: Date },
 ): Promise<LaggingCategory[] | null> {
   const now = input.now ?? new Date();
+  const currentStart = addDays(now, -30);
+  const previousStart = addDays(now, -60);
   const reviews = await db.srsReview.findMany({
-    where: { card: { userId: input.userId }, reviewedAt: { gte: addDays(now, -30) } },
+    where: { card: { userId: input.userId }, reviewedAt: { gte: previousStart } },
     select: {
       grade: true,
+      reviewedAt: true,
       card: {
         select: {
           question: {
@@ -608,9 +630,20 @@ export async function getLaggingCategories(
       },
     },
   });
-  if (reviews.length < LAGGING_MIN_ANSWERS) return null;
+  const currentReviews = reviews.filter((review) => review.reviewedAt >= currentStart);
+  if (currentReviews.length < LAGGING_MIN_ANSWERS) return null;
 
-  const byCategory = new Map<string, LaggingCategory & { again: number }>();
+  type Bucket = {
+    categoryId: string;
+    title: string;
+    colorIndex: number;
+    answers: number;
+    again: number;
+    previousAnswers: number;
+    previousAgain: number;
+    lastAgainAt: Date | null;
+  };
+  const byCategory = new Map<string, Bucket>();
   for (const review of reviews) {
     const category = review.card.question.category;
     const root = category.parent ?? category;
@@ -618,18 +651,56 @@ export async function getLaggingCategories(
       categoryId: root.id,
       title: root.title,
       colorIndex: root.colorIndex,
-      againShare: 0,
       answers: 0,
       again: 0,
+      previousAnswers: 0,
+      previousAgain: 0,
+      lastAgainAt: null,
     };
-    entry.answers += 1;
-    if (review.grade === "again") entry.again += 1;
+    if (review.reviewedAt >= currentStart) {
+      entry.answers += 1;
+      if (review.grade === "again") {
+        entry.again += 1;
+        if (!entry.lastAgainAt || review.reviewedAt > entry.lastAgainAt) {
+          entry.lastAgainAt = review.reviewedAt;
+        }
+      }
+    } else {
+      entry.previousAnswers += 1;
+      if (review.grade === "again") entry.previousAgain += 1;
+    }
     byCategory.set(root.id, entry);
   }
 
   return [...byCategory.values()]
-    .map(({ again, ...entry }) => ({ ...entry, againShare: again / entry.answers }))
-    .filter((entry) => entry.againShare > 0)
+    .filter(
+      (entry) =>
+        entry.answers >= LAGGING_CATEGORY_MIN_ANSWERS && entry.again > 0 && entry.lastAgainAt,
+    )
+    .map((entry) => {
+      const againShare = entry.again / entry.answers;
+      const previousAgainShare =
+        entry.previousAnswers > 0 ? entry.previousAgain / entry.previousAnswers : null;
+      const delta = previousAgainShare === null ? null : againShare - previousAgainShare;
+      return {
+        categoryId: entry.categoryId,
+        title: entry.title,
+        colorIndex: entry.colorIndex,
+        answers: entry.answers,
+        againCount: entry.again,
+        againShare,
+        lastAgainAt: entry.lastAgainAt!,
+        previousAgainShare,
+        trend:
+          delta === null
+            ? ("new" as const)
+            : Math.abs(delta) < 0.05
+              ? ("stable" as const)
+              : delta < 0
+                ? ("improving" as const)
+                : ("worsening" as const),
+      };
+    })
     .sort((a, b) => b.againShare - a.againShare || b.answers - a.answers)
     .slice(0, 3);
 }

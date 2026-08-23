@@ -39,6 +39,8 @@ import { StreakBadge } from "@/components/features/streak-badge";
 import { LevelBadge } from "@/components/features/level-badge";
 import { ActivityBar } from "@/components/features/activity-bar";
 import { MockBookingCard } from "@/components/features/mock-booking-card";
+import { TodayPlanCard } from "@/components/features/today-plan-card";
+import { buildTodayPlan } from "@/lib/utils/today-plan";
 
 export const metadata: Metadata = {
   title: "Главная",
@@ -125,6 +127,20 @@ export default async function DashboardPage() {
     cont && cont.moduleTotal > 0 ? Math.round((cont.moduleDone / cont.moduleTotal) * 100) : 0;
   const streakInfo = { current: streak.current, freezes: streak.freezes, atRisk: streak.atRisk };
   const showLagging = lagging !== null && lagging.length > 0;
+  const todayPlan = buildTodayPlan({
+    nowMs: now.getTime(),
+    mock: activeMock
+      ? {
+          bookingId: activeMock.bookingId,
+          startsAtMs: activeMock.startsAt.getTime(),
+          endsAtMs: activeMock.endsAt.getTime(),
+          whenLabel: formatDateTimeRu(activeMock.startsAt, user.timezone),
+        }
+      : null,
+    queue,
+    lesson: cont ? { id: cont.lessonId, title: cont.lessonTitle, mode: cont.mode } : null,
+    weak: lagging?.[0] ?? null,
+  });
 
   const queueBlock =
     queue.total > 0 ? (
@@ -218,6 +234,8 @@ export default async function DashboardPage() {
           xpMap={xpMap}
         />
       </section>
+
+      <TodayPlanCard plan={todayPlan} />
 
       {/* Hero «Продолжить» — полноградиентная карточка (design «Главная v2») */}
       {cont ? (
@@ -371,10 +389,10 @@ export default async function DashboardPage() {
                       {Math.max(1, Math.round(entry.againShare * 100))}% «не знаю»
                     </span>
                     <Link
-                      href={`/questions?category=${entry.categoryId}`}
+                      href={`/trainer/free/run?source=category&id=${entry.categoryId}&size=15`}
                       className="text-accent hover:text-accent-hover shrink-0 text-[13px] font-medium"
                     >
-                      Повторить
+                      Потренировать
                     </Link>
                   </li>
                 ))}

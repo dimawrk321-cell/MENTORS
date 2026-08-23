@@ -5,6 +5,7 @@ import {
   getNextReviewDate,
   getTrainerStats,
   reviewSrsCard,
+  SRS_SOURCE_LABEL,
   SRS_LEARNED_INTERVAL_DAYS,
 } from "@/lib/services/srs";
 import { countStreakDay } from "@/lib/services/streak";
@@ -91,6 +92,7 @@ describe("reviewSrsCard (spec 7.6)", () => {
       now: NOW,
     });
     expect(result).toMatchObject({ ok: true, prevStep: 1, newStep: 2 });
+    if (result.ok) expect(result.nextReviewAt).toEqual(addDays(TODAY, 7));
 
     const updated = await testDb.srsCard.findUniqueOrThrow({ where: { id: card.id } });
     expect(updated).toMatchObject({ step: 2, lapses: 0, reviewsCount: 2, lastGrade: "good" });
@@ -370,15 +372,16 @@ describe("статистика и агрегаторы", () => {
     const subA = await makeCategory({ slug: "a-sub", title: "A-sub", parentId: rootA.id });
     const rootB = await makeCategory({ slug: "b", title: "B" });
     const rootC = await makeCategory({ slug: "c", title: "C" });
+    const rootD = await makeCategory({ slug: "d", title: "D" });
 
-    async function review(categoryId: string, grade: "again" | "good", count: number) {
+    async function review(categoryId: string, grade: "again" | "good", count: number, daysAgo = 3) {
       for (let i = 0; i < count; i += 1) {
         const card = await makeCard(user.id, categoryId);
         await testDb.srsReview.create({
           data: {
             cardId: card.id,
             grade,
-            reviewedAt: addDays(NOW, -3),
+            reviewedAt: addDays(NOW, -daysAgo),
             prevStep: 0,
             newStep: grade === "good" ? 1 : 0,
           },
@@ -395,13 +398,28 @@ describe("статистика и агрегаторы", () => {
     await review(rootB.id, "again", 1);
     await review(rootB.id, "good", 9);
     await review(rootC.id, "good", 2);
+    await review(rootD.id, "again", 1);
+    await review(rootD.id, "good", 1);
+    // Предыдущие 30 дней: A была такой же, B была заметно слабее.
+    await review(rootA.id, "again", 5, 40);
+    await review(rootA.id, "good", 5, 40);
+    await review(rootB.id, "again", 5, 40);
+    await review(rootB.id, "good", 5, 40);
 
     const lagging = await getLaggingCategories(testDb, { userId: user.id, now: NOW });
     expect(lagging).not.toBeNull();
-    expect(lagging!.map((entry) => entry.title)).toEqual(["A", "B"]); // C без again — не западает
-    expect(lagging![0]).toMatchObject({ answers: 14 });
+    // C без again не западает; D с одной ошибкой не проходит порог 5 ответов.
+    expect(lagging!.map((entry) => entry.title)).toEqual(["A", "B"]);
+    expect(lagging![0]).toMatchObject({
+      answers: 14,
+      againCount: 7,
+      trend: "stable",
+      lastAgainAt: addDays(NOW, -3),
+    });
     expect(lagging![0]!.againShare).toBeCloseTo(7 / 14);
     expect(lagging![1]!.againShare).toBeCloseTo(0.1);
+    expect(lagging![1]!.previousAgainShare).toBeCloseTo(0.5);
+    expect(lagging![1]!.trend).toBe("improving");
 
     // Меньше 20 ответов за 30 дней — блок скрыт.
     const sparse = await makeStudent("sparse@test.local");
@@ -409,6 +427,16 @@ describe("статистика и агрегаторы", () => {
     await testDb.srsCard.deleteMany({ where: { userId: sparse.id } });
     const sparseResult = await getLaggingCategories(testDb, { userId: sparse.id, now: NOW });
     expect(sparseResult).toBeNull();
+  });
+
+  it("объясняет все фактические источники SRS без утверждения «выучено»", () => {
+    expect(SRS_SOURCE_LABEL).toEqual({
+      lesson_key: "Ключевой вопрос пройденного урока",
+      quiz_fail: "Вернулся после ошибки в квизе",
+      test_fail: "Вернулся после ошибки в тесте",
+      mock: "Добавлен по результатам мок-интервью",
+      manual: "Добавлен вручную",
+    });
   });
 
   it("«мои западающие»: lapses ≥ 1 или карточка из ошибок", async () => {

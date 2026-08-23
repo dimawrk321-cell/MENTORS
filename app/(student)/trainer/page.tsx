@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Dumbbell, Layers, MessageCircleQuestion, Play } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  Dumbbell,
+  Layers,
+  MessageCircleQuestion,
+  Minus,
+  Play,
+} from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import {
@@ -29,6 +38,13 @@ function accuracyTone(accuracy: number | null): string {
   if (accuracy >= 0.5) return "text-warning";
   return "text-danger";
 }
+
+const TREND = {
+  improving: { label: "лучше", tone: "text-success", icon: ArrowDownRight },
+  stable: { label: "без изменений", tone: "text-text-3", icon: Minus },
+  worsening: { label: "хуже", tone: "text-danger", icon: ArrowUpRight },
+  new: { label: "новая статистика", tone: "text-text-3", icon: Minus },
+} as const;
 
 /** Хаб тренажёра (spec 8.3): очередь, статистика, западающие темы, каталог. */
 export default async function TrainerPage() {
@@ -147,12 +163,37 @@ export default async function TrainerPage() {
           <Card>
             <ul className="divide-border divide-y">
               {lagging.map((entry) => (
-                <li key={entry.categoryId} className="flex items-center gap-3 px-5 py-3.5">
-                  <CategoryChip title={entry.title} colorIndex={entry.colorIndex} />
-                  <span className="text-text-2 ml-auto text-[13px]">
-                    {Math.round(entry.againShare * 100)}% «не знаю» · {entry.answers}{" "}
-                    {pluralRu(entry.answers, "ответ", "ответа", "ответов")}
+                <li
+                  key={entry.categoryId}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <CategoryChip title={entry.title} colorIndex={entry.colorIndex} />
+                    <p className="text-text-3 mt-1.5 text-[12px]">
+                      {entry.againCount} «Не знаю» из {entry.answers} · последняя ошибка{" "}
+                      {formatDateOnlyRu(entry.lastAgainAt)}
+                    </p>
+                  </div>
+                  {(() => {
+                    const trend = TREND[entry.trend];
+                    const TrendIcon = trend.icon;
+                    return (
+                      <span
+                        className={`inline-flex shrink-0 items-center gap-1 text-[12px] ${trend.tone}`}
+                      >
+                        <TrendIcon size={13} strokeWidth={1.75} aria-hidden="true" />
+                        {trend.label}
+                      </span>
+                    );
+                  })()}
+                  <span className="text-text-1 shrink-0 text-[14px] font-semibold tabular-nums">
+                    {Math.round(entry.againShare * 100)}%
                   </span>
+                  <Button asChild size="sm" variant="secondary">
+                    <Link href={`/trainer/free/run?source=category&id=${entry.categoryId}&size=15`}>
+                      Потренировать
+                    </Link>
+                  </Button>
                 </li>
               ))}
             </ul>

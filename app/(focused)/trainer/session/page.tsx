@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Layers } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
-import { getNextReviewDate, getSessionCards } from "@/lib/services/srs";
+import { getNextReviewDate, getSessionCards, SRS_SOURCE_LABEL } from "@/lib/services/srs";
 import { formatDateOnlyRu } from "@/lib/utils/dates";
 import { stripMarkdown } from "@/lib/utils/text";
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
@@ -49,6 +49,7 @@ export default async function TrainerSessionPage() {
 
   const items: SessionItem[] = cards.map((card) => ({
     cardId: card.cardId,
+    sourceLabel: SRS_SOURCE_LABEL[card.addedFrom],
     category: card.category,
     lesson: card.lesson,
     // Компактная строка вопроса над раскрытым ответом — тот же strip, что у

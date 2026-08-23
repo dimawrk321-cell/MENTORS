@@ -6,7 +6,7 @@ import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { Check, Eye, Flame, Layers, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
-import { pluralRu } from "@/lib/utils/dates";
+import { formatDateOnlyRu, pluralRu } from "@/lib/utils/dates";
 import { reviewCardAction } from "@/lib/actions/srs";
 import { celebrateGamification } from "@/components/features/gamification-celebrate";
 import { SessionCardDeck, type DeckGrade } from "@/components/features/session-card-deck";
@@ -26,6 +26,7 @@ import { useViewOnly } from "@/components/features/view-only";
 
 export interface SessionItem {
   cardId: string;
+  sourceLabel: string;
   category: { title: string; colorIndex: number };
   lesson: { id: string; title: string } | null;
   /** Вопрос простым текстом — компактная строка над раскрытым ответом. */
@@ -85,6 +86,10 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
         return;
       }
       setRemaining(result.data.remaining);
+      toast({
+        title: "Следующее повторение",
+        description: formatDateOnlyRu(new Date(result.data.nextReviewAt)),
+      });
       // Серия продлевается на первом качественном событии дня — копим флаг за сессию.
       if (result.data.streakCounted) {
         setStreakAdvanced(true);
@@ -212,6 +217,7 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
       active={phase === "cards"}
       exitHref="/trainer"
       exitLabel="Закончить"
+      note={item.sourceLabel}
       // Отвеченные карточки уже сохранены (каждый грейд — свой action), теряется
       // только неотвеченный остаток (spec 12.1/C7). В режиме просмотра не
       // сохраняется ничего, и обещать сохранность нельзя.
