@@ -22,17 +22,17 @@ export function TodayPlanCard({ plan }: { plan: TodayPlan }) {
         className="relative overflow-hidden rounded-[18px] text-white"
         style={{
           backgroundImage:
-            "radial-gradient(640px 220px at 88% -30%, rgb(255 255 255 / 0.28), transparent 70%), radial-gradient(400px 180px at 8% 120%, rgb(255 255 255 / 0.12), transparent 70%), var(--gradient-accent)",
-          boxShadow: "0 12px 40px color-mix(in srgb, var(--accent) 25%, transparent)",
+            "radial-gradient(420px 190px at 84% -12%, rgb(255 255 255 / 0.16), transparent 64%), radial-gradient(320px 190px at 4% 120%, rgb(17 20 61 / 0.5), transparent 72%), linear-gradient(112deg, color-mix(in srgb, var(--accent) 55%, #20275f) 0%, color-mix(in srgb, var(--accent) 88%, var(--violet)) 50%, var(--violet) 100%)",
+          boxShadow: "0 14px 42px color-mix(in srgb, var(--accent) 20%, transparent)",
         }}
       >
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute -top-20 -right-[60px] size-[260px] rounded-full border-[32px] border-white/8"
+          className="pointer-events-none absolute -top-20 -right-[60px] size-[260px] rounded-full border-[32px] border-white/5"
         />
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute right-[120px] -bottom-[110px] size-[220px] rounded-full border-[26px] border-white/6"
+          className="pointer-events-none absolute right-[120px] -bottom-[110px] size-[220px] rounded-full border-[26px] border-white/4"
         />
         <CardContent className="relative flex flex-col gap-5 p-5 sm:p-7">
           <div className="flex items-start gap-3.5">
