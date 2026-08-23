@@ -5,7 +5,7 @@
 // (Shiki theme CSS is global in globals.css). Without it injected math is unstyled.
 import "katex/dist/katex.min.css";
 
-import { useCallback, useState, type SyntheticEvent } from "react";
+import { useCallback, useMemo, useState, type SyntheticEvent } from "react";
 import Link from "next/link";
 import { BookOpen, ChevronDown, ChevronRight } from "lucide-react";
 import type { CatalogGroup, CatalogGroupQuestion } from "@/lib/services/questions";
@@ -36,6 +36,27 @@ type RowState =
 const answerCache = new Map<string, CatalogPayload>();
 const CATEGORY_CHUNK_SIZE = 12;
 
+export type CatalogSrsFilter = "available" | "inSrs" | "all";
+
+export function filterCatalogGroups(
+  groups: CatalogGroup[],
+  inSrs: ReadonlySet<string>,
+  filter: CatalogSrsFilter,
+): CatalogGroup[] {
+  if (filter === "all") return groups;
+  const wantsInSrs = filter === "inSrs";
+  return groups.flatMap((group) => {
+    const questions = group.questions.filter((question) => inSrs.has(question.id) === wantsInSrs);
+    return questions.length > 0 ? [{ ...group, questions }] : [];
+  });
+}
+
+export function catalogFilterEmptyMessage(filter: CatalogSrsFilter): string {
+  return filter === "available"
+    ? "Все вопросы из этого раздела уже добавлены в тренажёр."
+    : "Ты пока не добавил вопросы из этого раздела в тренажёр.";
+}
+
 function AnswerSkeleton() {
   return (
     <div className="flex flex-col gap-2 py-1" aria-hidden="true">
@@ -46,7 +67,15 @@ function AnswerSkeleton() {
   );
 }
 
-function CatalogRow({ question, inSrs }: { question: CatalogGroupQuestion; inSrs: boolean }) {
+function CatalogRow({
+  question,
+  inSrs,
+  onAdded,
+}: {
+  question: CatalogGroupQuestion;
+  inSrs: boolean;
+  onAdded: (questionId: string) => void;
+}) {
   const [state, setState] = useState<RowState>(() => {
     const cached = answerCache.get(question.id);
     return cached ? { status: "ready", ...cached } : { status: "idle" };
@@ -92,7 +121,12 @@ function CatalogRow({ question, inSrs }: { question: CatalogGroupQuestion; inSrs
           {QUESTION_DIFFICULTY_LABEL[question.difficulty]}
         </span>
         <span className="shrink-0">
-          <AddToSrsButton questionId={question.id} initialInSrs={inSrs} iconOnly />
+          <AddToSrsButton
+            questionId={question.id}
+            initialInSrs={inSrs}
+            iconOnly
+            onAdded={onAdded}
+          />
         </span>
       </summary>
 
@@ -153,17 +187,76 @@ export function CatalogAccordion({
   anyFilter: boolean;
   resultKey: string;
 }) {
-  const inSrs = new Set(inSrsIds);
+  const [filter, setFilter] = useState<CatalogSrsFilter>("available");
+  const [inSrs, setInSrs] = useState(() => new Set(inSrsIds));
+  const total = groups.reduce((sum, group) => sum + group.questions.length, 0);
+  const inSrsCount = groups.reduce(
+    (sum, group) => sum + group.questions.filter((question) => inSrs.has(question.id)).length,
+    0,
+  );
+  const availableCount = total - inSrsCount;
+  const visibleGroups = useMemo(
+    () => filterCatalogGroups(groups, inSrs, filter),
+    [filter, groups, inSrs],
+  );
+
+  function markAdded(questionId: string): void {
+    setInSrs((current) => {
+      const next = new Set(current);
+      next.add(questionId);
+      return next;
+    });
+  }
+
+  const filters: Array<{ value: CatalogSrsFilter; label: string; count: number }> = [
+    { value: "available", label: "Не добавлены", count: availableCount },
+    { value: "inSrs", label: "В тренажёре", count: inSrsCount },
+    { value: "all", label: "Все", count: total },
+  ];
+
   return (
-    <div className="flex flex-col gap-2">
-      {groups.map((group) => (
-        <CatalogCategory
-          key={`${group.categoryId}:${resultKey}`}
-          group={group}
-          inSrs={inSrs}
-          defaultOpen={anyFilter}
-        />
-      ))}
+    <div className="flex flex-col gap-3">
+      <div
+        className="bg-surface-2 border-border flex max-w-full [scrollbar-width:none] gap-1 overflow-x-auto rounded-lg border p-1 [&::-webkit-scrollbar]:hidden"
+        role="group"
+        aria-label="Фильтр по состоянию в тренажёре"
+      >
+        {filters.map((item) => {
+          const active = filter === item.value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setFilter(item.value)}
+              className={cn(
+                "rounded-control ease-app min-h-9 shrink-0 px-2 text-[13px] font-medium whitespace-nowrap transition-colors duration-150 sm:px-3",
+                active
+                  ? "bg-surface-1 text-text-1 shadow-sm"
+                  : "text-text-2 hover:bg-surface-1/60 hover:text-text-1",
+              )}
+            >
+              {item.label} <span className="ml-1 tabular-nums">{item.count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {visibleGroups.length === 0 ? (
+        <div className="border-border bg-surface-1 rounded-card border px-4 py-8 text-center">
+          <p className="text-text-2 text-[14px]">{catalogFilterEmptyMessage(filter)}</p>
+        </div>
+      ) : (
+        visibleGroups.map((group) => (
+          <CatalogCategory
+            key={`${group.categoryId}:${resultKey}:${filter}`}
+            group={group}
+            inSrs={inSrs}
+            defaultOpen={anyFilter}
+            onAdded={markAdded}
+          />
+        ))
+      )}
     </div>
   );
 }
@@ -172,10 +265,12 @@ function CatalogCategory({
   group,
   inSrs,
   defaultOpen,
+  onAdded,
 }: {
   group: CatalogGroup;
   inSrs: Set<string>;
   defaultOpen: boolean;
+  onAdded: (questionId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [visibleCount, setVisibleCount] = useState(CATEGORY_CHUNK_SIZE);
@@ -207,7 +302,7 @@ function CatalogCategory({
       <ul className="border-border border-t px-3 sm:px-4">
         {visibleQuestions.map((question) => (
           <li key={question.id}>
-            <CatalogRow question={question} inSrs={inSrs.has(question.id)} />
+            <CatalogRow question={question} inSrs={inSrs.has(question.id)} onAdded={onAdded} />
           </li>
         ))}
       </ul>

@@ -15,12 +15,15 @@ export function AddToSrsButton({
   initialInSrs,
   size = "md",
   iconOnly = false,
+  onAdded,
 }: {
   questionId: string;
   initialInSrs: boolean;
   size?: "sm" | "md";
   /** Иконка-кнопка без подписи (каталог-строка, walk 13.5 block 1.2). */
   iconOnly?: boolean;
+  /** Каталог поднимает состояние наверх, чтобы сразу убрать строку из рабочей очереди. */
+  onAdded?: (questionId: string) => void;
 }) {
   // «Глазами ученика»: чужие повторения не пополняем (spec 7.2) — кнопка видна,
   // но закрыта, вместо красного тоста после клика.
@@ -39,6 +42,7 @@ export function AddToSrsButton({
         return;
       }
       setInSrs(true);
+      onAdded?.(questionId);
       if (result.data.added) {
         toast({ title: "Добавлено в повторения", variant: "success" });
       } else {

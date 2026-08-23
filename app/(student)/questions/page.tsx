@@ -216,6 +216,13 @@ export default async function QuestionsPage({ searchParams }: QuestionsPageProps
         /* Все доступные категории видны сразу. Вопросы и эталоны раскрываются
            порциями уже внутри выбранной категории. */
         <CatalogAccordion
+          key={[
+            params.q?.trim() ?? "",
+            params.type ?? "",
+            params.difficulty ?? "",
+            params.lagging ?? "",
+            params.category ?? "",
+          ].join(":")}
           groups={groups}
           inSrsIds={[...inSrs]}
           anyFilter={anyFilter}
