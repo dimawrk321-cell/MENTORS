@@ -31,7 +31,6 @@ import { formatDateOnlyRu, formatDateTimeRu, localDateStr, pluralRu } from "@/li
 import { CategoryChip } from "@/components/features/category-chip";
 import { IconTile } from "@/components/features/icon-tile";
 import { ProgressRing } from "@/components/features/progress-ring";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DailyGoal } from "@/components/features/daily-goal";
@@ -45,14 +44,6 @@ import { buildTodayPlan } from "@/lib/utils/today-plan";
 export const metadata: Metadata = {
   title: "Главная",
 };
-
-// Full gradient hero card backdrop (design handoff «Главная v2»). The brand
-// gradient comes from the token, not a copied hex pair, so a token change can
-// never leave the hero behind (audit 13.6).
-const HERO_GRADIENT =
-  "radial-gradient(640px 220px at 88% -30%, rgb(255 255 255 / 0.28), transparent 70%)," +
-  "radial-gradient(400px 180px at 8% 120%, rgb(255 255 255 / 0.12), transparent 70%)," +
-  "var(--gradient-accent)";
 
 // Course mini-cards have no colour/icon field — derive a category colour + icon by index.
 const COURSE_ICONS: LucideIcon[] = [BarChart3, Bot, Blocks, Braces, Database, Cpu];
@@ -123,8 +114,6 @@ export default async function DashboardPage() {
     month: "long",
     timeZone: user.timezone,
   }).format(now);
-  const heroPct =
-    cont && cont.moduleTotal > 0 ? Math.round((cont.moduleDone / cont.moduleTotal) * 100) : 0;
   const streakInfo = { current: streak.current, freezes: streak.freezes, atRisk: streak.atRisk };
   const showLagging = lagging !== null && lagging.length > 0;
   const todayPlan = buildTodayPlan({
@@ -236,76 +225,6 @@ export default async function DashboardPage() {
       </section>
 
       <TodayPlanCard plan={todayPlan} />
-
-      {/* Hero «Продолжить» — полноградиентная карточка (design «Главная v2») */}
-      {cont ? (
-        <div
-          className="relative overflow-hidden rounded-[18px]"
-          style={{
-            backgroundImage: HERO_GRADIENT,
-            boxShadow: "0 12px 40px color-mix(in srgb, var(--accent) 25%, transparent)",
-          }}
-        >
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -top-20 -right-[60px] size-[260px] rounded-full border-[32px] border-white/8"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute right-[120px] -bottom-[110px] size-[220px] rounded-full border-[26px] border-white/6"
-          />
-          {/* break-words: a long lesson/course title was clipped mid-word by the
-              card's overflow-hidden (audit 13.6). */}
-          <div className="relative flex flex-col gap-[18px] p-7 break-words">
-            <div className="flex flex-col gap-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-pill inline-flex items-center bg-white/25 px-2.5 py-[3px] text-[12px] font-medium text-white">
-                  {cont.courseTitle}
-                </span>
-                <span className="truncate text-[13px] text-white/90">{cont.moduleTitle}</span>
-              </div>
-              <p className="text-[22px] leading-[1.3] font-bold tracking-[-0.01em] text-white">
-                {cont.lessonTitle}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <Link
-                href={`/lessons/${cont.lessonId}`}
-                className="text-accent rounded-control ease-app inline-flex h-10 items-center gap-2 bg-white px-5 text-[14px] font-semibold transition-transform duration-150 hover:-translate-y-px active:scale-[.98]"
-              >
-                <Play size={15} strokeWidth={1.75} aria-hidden="true" />
-                {cont.mode === "continue" ? "Продолжить" : "Начать обучение"}
-              </Link>
-              {cont.moduleTotal > 0 && (
-                <div className="flex min-w-[200px] items-center gap-2.5">
-                  <span className="rounded-pill block h-1.5 flex-1 overflow-hidden bg-white/25">
-                    <span
-                      className="rounded-pill block h-full bg-white"
-                      style={{ width: `${heroPct}%` }}
-                    />
-                  </span>
-                  <span className="text-[12px] font-medium whitespace-nowrap text-white">
-                    {cont.moduleDone}/{cont.moduleTotal} уроков
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <Card>
-          <EmptyState
-            icon={Sparkles}
-            title="Начни с первого урока"
-            description="Здесь появится твой прогресс"
-            action={
-              <Button asChild>
-                <Link href="/courses">Открыть курсы</Link>
-              </Button>
-            }
-          />
-        </Card>
-      )}
 
       {/* «Сегодня»: очередь + ближайший мок в две колонки (design «Главная v2») */}
       <section className="flex flex-col gap-3">
