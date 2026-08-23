@@ -145,22 +145,23 @@ model User {
   createdAt           DateTime        @default(now()) @map("created_at")
   updatedAt           DateTime        @updatedAt @map("updated_at")
 
-  sessions             Session[]           @relation("UserSessions")
-  impersonatedSessions Session[]           @relation("SessionImpersonator")
+  sessions             Session[]            @relation("UserSessions")
+  impersonatedSessions Session[]            @relation("SessionImpersonator")
   devices              Device[]
-  invitesSent          Invite[]            @relation("InviteInvitedBy")
+  invitesSent          Invite[]             @relation("InviteInvitedBy")
   passwordResets       PasswordReset[]
   emailVerifications   EmailVerification[]
-  accessExtensions     AccessExtension[]   @relation("ExtensionUser")
-  grantedExtensions    AccessExtension[]   @relation("ExtensionGrantedBy")
-  securityFlags        SecurityFlag[]      @relation("FlagUser")
-  resolvedFlags        SecurityFlag[]      @relation("FlagResolvedBy")
-  auditEntries         AuditLog[]          @relation("AuditActor")
+  accessExtensions     AccessExtension[]    @relation("ExtensionUser")
+  grantedExtensions    AccessExtension[]    @relation("ExtensionGrantedBy")
+  securityFlags        SecurityFlag[]       @relation("FlagUser")
+  resolvedFlags        SecurityFlag[]       @relation("FlagResolvedBy")
+  auditEntries         AuditLog[]           @relation("AuditActor")
   analyticsEvents      AnalyticsEvent[]
   lessonProgress       LessonProgress[]
+  lessonStepProgress   LessonStepProgress[]
   courseAccess         CourseAccess[]
-  contentReports       ContentReport[]     @relation("ReportAuthor")
-  resolvedReports      ContentReport[]     @relation("ReportResolvedBy")
+  contentReports       ContentReport[]      @relation("ReportAuthor")
+  resolvedReports      ContentReport[]      @relation("ReportResolvedBy")
   testAttempts         TestAttempt[]
   quizAnswers          QuizAnswer[]
   srsCards             SrsCard[]
@@ -541,6 +542,7 @@ model Lesson {
   createdAt        DateTime                 @default(now()) @map("created_at")
   updatedAt        DateTime                 @updatedAt @map("updated_at")
   progress         LessonProgress[]
+  steps            LessonStep[]
   reports          ContentReport[]
   questionLinks    QuestionLesson[]
   quizAnswers      QuizAnswer[]
@@ -555,6 +557,41 @@ model Lesson {
   @@index([searchVector], type: Gin)
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "lessons_title_trgm_idx")
   @@map("lessons")
+}
+
+model LessonStep {
+  id             String               @id @default(cuid())
+  lessonId       String               @map("lesson_id")
+  lesson         Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title          String
+  order          Int                  @default(0)
+  contentMd      String               @default("") @map("content_md")
+  readingMinutes Int                  @default(1) @map("reading_minutes")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  progress       LessonStepProgress[]
+  questionLinks  QuestionLesson[]
+
+  @@unique([lessonId, order])
+  @@index([lessonId])
+  @@map("lesson_steps")
+}
+
+model LessonStepProgress {
+  id          String               @id @default(cuid())
+  userId      String               @map("user_id")
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stepId      String               @map("step_id")
+  step        LessonStep           @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  status      LessonProgressStatus @default(in_progress)
+  completedAt DateTime?            @map("completed_at")
+  scrollPos   Float?               @map("scroll_pos")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  @@unique([userId, stepId])
+  @@index([stepId])
+  @@map("lesson_step_progress")
 }
 
 model TrackDef {
@@ -696,24 +733,27 @@ model Question {
 }
 
 model QuestionLesson {
-  id         String   @id @default(cuid())
-  questionId String   @map("question_id")
-  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  lessonId   String   @map("lesson_id")
-  lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  id         String      @id @default(cuid())
+  questionId String      @map("question_id")
+  question   Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  lessonId   String      @map("lesson_id")
+  lesson     Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  stepId     String?     @map("step_id")
+  step       LessonStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
   /**
    * Ключевой вопрос урока → в SRS при завершении (этап 4).
    */
-  isKey      Boolean  @default(false) @map("is_key")
+  isKey      Boolean     @default(false) @map("is_key")
   /**
    * Участвует в квизе урока.
    */
-  inQuiz     Boolean  @default(false) @map("in_quiz")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  inQuiz     Boolean     @default(false) @map("in_quiz")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
 
   @@unique([questionId, lessonId])
   @@index([lessonId])
+  @@index([stepId])
   @@map("question_lessons")
 }
 
