@@ -68,10 +68,9 @@ export function CompleteLessonStepButton({
   if (done && nextStepId) {
     return (
       <Button size="lg" asChild>
-        {" "}
         <Link href={`/lessons/${lessonId}?step=${nextStepId}`}>
           Следующий шаг <ChevronRight size={16} />
-        </Link>{" "}
+        </Link>
       </Button>
     );
   }
