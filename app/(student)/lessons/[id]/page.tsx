@@ -21,6 +21,10 @@ import { Watermark } from "@/components/features/watermark";
 import { LessonReader } from "@/components/features/lesson-reader";
 import { LessonTocRail, LessonTocSheet } from "@/components/features/lesson-toc";
 import { CompleteLessonButton } from "@/components/features/complete-lesson-button";
+import {
+  CompleteLessonStepButton,
+  LessonStepProgress,
+} from "@/components/features/lesson-step-navigation";
 import { ReportDialog } from "@/components/features/report-dialog";
 import { ReadingSizeControl } from "@/components/features/reading-size-control";
 import { ReadingTracker } from "@/components/features/reading-tracker";
@@ -38,6 +42,7 @@ const DIFFICULTY_LABEL = { intro: "интро", base: "база", advanced: "п�
 
 interface LessonPageProps {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ step?: string }>;
 }
 
 export async function generateMetadata({ params }: LessonPageProps): Promise<Metadata> {
@@ -47,7 +52,7 @@ export async function generateMetadata({ params }: LessonPageProps): Promise<Met
 }
 
 /** Lesson page — full anatomy per spec 7.3; quiz and key questions join at stage 3. */
-export default async function LessonPage({ params }: LessonPageProps) {
+export default async function LessonPage({ params, searchParams }: LessonPageProps) {
   const { user, session, impersonated } = await requireStudentZone();
   const { id } = await params;
   const view = await getLessonView(prisma, id, user.id);
@@ -93,16 +98,29 @@ export default async function LessonPage({ params }: LessonPageProps) {
     );
   }
 
+  const { step: requestedStepId } = (await searchParams) ?? {};
+  const hasMultipleSteps = view.lessonSteps.length > 1;
+  const activeStep =
+    view.lessonSteps.find((step) => step.id === requestedStepId) ??
+    view.lessonSteps.find((step) => step.completedAt === null) ??
+    view.lessonSteps[0] ??
+    null;
+  const activeStepIndex = activeStep
+    ? view.lessonSteps.findIndex((step) => step.id === activeStep.id)
+    : -1;
+  const isFinalStep = activeStepIndex === view.lessonSteps.length - 1;
+  const markdown = activeStep?.contentMd ?? view.lesson.contentMd;
+
   // Заход B.1: вопросы, вставленные в текст директивами, грузятся ОДНИМ
   // запросом до рендера — путь рендера остаётся без обращений к БД.
-  const inlineQuestions = await getInlineQuestionsForLesson(prisma, view.lesson.contentMd);
+  const inlineQuestions = await getInlineQuestionsForLesson(prisma, markdown);
   // Блок 3.4: CTA внутри `:::mock` подчиняется правилу «бронь после первого
   // курса». Считаем доступ только для уроков, где директива есть, — прогресс по
   // всем курсам ради урока без мока читать незачем.
-  const mockAccess = view.lesson.contentMd.includes(":::mock")
+  const mockAccess = markdown.includes(":::mock")
     ? await getMockBookingAccess(prisma, user.id)
     : null;
-  const { content, headings } = await renderLessonContent(view.lesson.contentMd, {
+  const { content, headings } = await renderLessonContent(markdown, {
     mockLocked:
       mockAccess && !mockAccess.open
         ? { unlockingCourseTitle: mockAccess.unlockingCourse?.title ?? null }
@@ -118,7 +136,7 @@ export default async function LessonPage({ params }: LessonPageProps) {
     },
   });
   const durationLabel = lessonDurationLabel({
-    readingMinutes: view.lesson.readingMinutes,
+    readingMinutes: activeStep?.readingMinutes ?? view.lesson.readingMinutes,
     textMinutes: view.lesson.textMinutes,
     videoMinutes: view.lesson.videoMinutes,
     practiceMinutes: view.lesson.practiceMinutes,
@@ -129,11 +147,16 @@ export default async function LessonPage({ params }: LessonPageProps) {
     videoPlayable: isPlayableVideoUrl(view.lesson.videoUrl),
   });
   const [keyQuestions, quizQuestions] = await Promise.all([
-    getKeyQuestionsForLesson(prisma, view.lesson.id),
+    getKeyQuestionsForLesson(
+      prisma,
+      view.lesson.id,
+      activeStep ? { stepId: activeStep.id, includeLessonLevel: isFinalStep } : undefined,
+    ),
     getQuizQuestionsForLesson(prisma, {
       lessonId: view.lesson.id,
       userId: user.id,
-      contentMd: view.lesson.contentMd,
+      contentMd: markdown,
+      ...(activeStep ? { stepId: activeStep.id, includeLessonLevel: isFinalStep } : {}),
     }),
   ]);
 
@@ -205,6 +228,9 @@ export default async function LessonPage({ params }: LessonPageProps) {
           <h1 className="text-[32px] leading-[1.2] font-semibold tracking-[-0.02em]">
             {view.lesson.title}
           </h1>
+          {hasMultipleSteps && activeStep && (
+            <p className="text-text-2 mt-2 text-lg font-medium">{activeStep.title}</p>
+          )}
           <div className="mt-2.5 mb-5 flex flex-wrap items-center gap-2">
             <Badge>{durationLabel}</Badge>
             <Badge>{DIFFICULTY_LABEL[view.lesson.difficulty]}</Badge>
@@ -216,15 +242,28 @@ export default async function LessonPage({ params }: LessonPageProps) {
             </div>
           </div>
 
+          {hasMultipleSteps && activeStep && (
+            <LessonStepProgress
+              lessonId={view.lesson.id}
+              activeStepId={activeStep.id}
+              steps={view.lessonSteps.map((step) => ({
+                id: step.id,
+                title: step.title,
+                completed: step.completedAt !== null,
+              }))}
+            />
+          )}
+
           <LessonReader
             lessonId={view.lesson.id}
-            initialScrollPos={view.progress.scrollPos}
+            stepId={activeStep?.id ?? null}
+            initialScrollPos={activeStep?.scrollPos ?? view.progress.scrollPos}
             initialVideoPos={view.progress.videoPos}
             completed={view.progress.completedAt !== null}
             impersonated={impersonated}
             pathPolicy={view.lesson.pathPolicy}
             initialSelectedPath={view.progress.selectedPath}
-            hasText={Boolean(view.lesson.contentMd.trim())}
+            hasText={Boolean(markdown.trim())}
             video={
               view.lesson.videoUrl
                 ? {
@@ -249,10 +288,19 @@ export default async function LessonPage({ params }: LessonPageProps) {
           {/* Completion + prev/next (spec 7.3) */}
           <div className="border-border mt-10 flex flex-col gap-5 border-t pt-6">
             <div className="flex justify-center">
-              <CompleteLessonButton
-                lessonId={view.lesson.id}
-                completed={view.progress.completedAt !== null}
-              />
+              {hasMultipleSteps && activeStep ? (
+                <CompleteLessonStepButton
+                  lessonId={view.lesson.id}
+                  stepId={activeStep.id}
+                  nextStepId={view.lessonSteps[activeStepIndex + 1]?.id ?? null}
+                  completed={activeStep.completedAt !== null}
+                />
+              ) : (
+                <CompleteLessonButton
+                  lessonId={view.lesson.id}
+                  completed={view.progress.completedAt !== null}
+                />
+              )}
             </div>
             <ReadingNavCards prev={prevNav} next={nextNav} />
           </div>

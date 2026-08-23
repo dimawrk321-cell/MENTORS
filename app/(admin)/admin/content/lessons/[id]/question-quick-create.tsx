@@ -89,12 +89,14 @@ const textareaClass =
 
 export function QuestionQuickCreate({
   lessonId,
+  stepId,
   categories,
   defaultCategoryId,
   defaultCategoryScope,
   onCreated,
 }: {
   lessonId: string;
+  stepId: string | null;
   categories: Array<{ id: string; label: string }>;
   /** Умолчание категории (заход C.6, 1.3); пусто — ментор выбирает сам. */
   defaultCategoryId: string;
@@ -139,6 +141,7 @@ export function QuestionQuickCreate({
   function payload() {
     return {
       lessonId,
+      stepId,
       type: form.type,
       categoryId: form.categoryId,
       textMd: form.textMd,

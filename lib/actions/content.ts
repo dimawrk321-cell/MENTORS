@@ -24,6 +24,7 @@ import {
 import { onboardingSchema, reportContentSchema, savePositionSchema } from "@/lib/utils/validation";
 import { toFeedback, type GamificationFeedback } from "@/lib/gamification";
 import { touchRecentItem } from "@/lib/services/recent";
+import { completeLessonStep, saveLessonStepPosition } from "@/lib/services/lesson-steps";
 
 /** Fired once on lesson open; impersonation views must not fake student activity. */
 export async function startLessonAction(lessonId: string): Promise<ActionResult<undefined>> {
@@ -85,6 +86,50 @@ export async function savePositionAction(input: unknown): Promise<ActionResult<u
       videoPos: parsed.video,
     });
     return undefined;
+  });
+}
+
+export async function completeLessonStepAction(
+  input: unknown,
+): Promise<ActionResult<{ nextStepId: string | null; lessonCompleted: boolean }>> {
+  return runAction(async () => {
+    const auth = await requireActionStudent();
+    assertNotImpersonating(auth);
+    assertActiveAccess(auth);
+    const parsed = parseInput(
+      z.object({ lessonId: z.string().min(1), stepId: z.string().min(1) }),
+      input,
+    );
+    const result = await completeLessonStep(prisma, { userId: auth.user.id, ...parsed });
+    if (!result.ok) {
+      const messages: Record<typeof result.code, string> = {
+        not_found: "Шаг не найден",
+        locked: "Урок ещё закрыт",
+        course_locked: "Курс ещё закрыт",
+        path_required: "Сначала выбери: смотреть видео или читать текст",
+        previous_step_required: "Сначала заверши предыдущий шаг",
+      };
+      throw new ActionError(result.code, messages[result.code]);
+    }
+    return { nextStepId: result.nextStepId, lessonCompleted: result.lessonCompleted };
+  });
+}
+
+export async function saveLessonStepPositionAction(
+  input: unknown,
+): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionStudent();
+    if (auth.impersonated || auth.accessExpired) return undefined;
+    const parsed = parseInput(
+      z.object({ stepId: z.string().min(1), scroll: z.number().min(0).max(1) }),
+      input,
+    );
+    await saveLessonStepPosition(prisma, {
+      userId: auth.user.id,
+      stepId: parsed.stepId,
+      scrollPos: parsed.scroll,
+    });
   });
 }
 

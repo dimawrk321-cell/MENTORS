@@ -77,6 +77,7 @@ const questionDataSchema = z.object({
  */
 const newLessonQuestionSchema = z.object({
   lessonId: idSchema,
+  stepId: idSchema.nullable().optional(),
   type: questionTypeSchema,
   categoryId: idSchema,
   textMd: z.string("Напиши текст вопроса").trim().min(1, "Напиши текст вопроса").max(50_000),
@@ -153,6 +154,7 @@ export async function createLessonQuestionAction(
     const result = await createQuestionForLesson(prisma, {
       actorId: auth.user.id,
       lessonId: parsed.lessonId,
+      stepId: parsed.stepId,
       data: {
         type: parsed.type,
         categoryId: parsed.categoryId,

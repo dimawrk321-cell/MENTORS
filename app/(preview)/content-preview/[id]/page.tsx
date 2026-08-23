@@ -19,22 +19,26 @@ const DIFFICULTY_LABEL = { intro: "интро", base: "база", advanced: "п�
 
 interface PreviewPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ step?: string }>;
 }
 
 // DECISION: the preview lives outside the (admin) group — the editor embeds it
 // in an iframe and «Открыть как ученика» opens it full-page, both without the
 // admin chrome. Same LessonRenderer as the student page = identical rendering.
-export default async function ContentPreviewPage({ params }: PreviewPageProps) {
+export default async function ContentPreviewPage({ params, searchParams }: PreviewPageProps) {
   const { user } = await requirePermission("content.manage");
   const { id } = await params;
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();
+  const { step: stepId } = await searchParams;
+  const step = lesson.steps.find((item) => item.id === stepId) ?? null;
+  const markdown = step?.contentMd ?? lesson.contentMd;
 
   // Заход B.1: вставленные в текст вопросы рисуются тем же компонентом, что у
   // ученика (spec 8.5 «предпросмотр идентичен виду ученика»), но отвечать в
   // предпросмотре некому — режим только чтение.
-  const inlineQuestions = await getInlineQuestionsForLesson(prisma, lesson.contentMd);
-  const { content } = await renderLessonContentSafe(lesson.contentMd, {
+  const inlineQuestions = await getInlineQuestionsForLesson(prisma, markdown);
+  const { content } = await renderLessonContentSafe(markdown, {
     inlineQuestion: (questionId) => {
       const entry = inlineQuestions.get(questionId);
       if (!entry?.question) {
@@ -52,8 +56,9 @@ export default async function ContentPreviewPage({ params }: PreviewPageProps) {
         {lesson.module.course.title} · {lesson.module.title}
       </p>
       <h1 className="text-[32px] font-semibold">{lesson.title}</h1>
+      {lesson.steps.length > 1 && step && <p className="text-text-2 mt-2 text-lg">{step.title}</p>}
       <div className="mt-2.5 mb-5 flex flex-wrap items-center gap-2">
-        <Badge>{lesson.readingMinutes} мин</Badge>
+        <Badge>{step?.readingMinutes ?? lesson.readingMinutes} мин</Badge>
         <Badge>{DIFFICULTY_LABEL[lesson.difficulty]}</Badge>
         {lesson.isOptional && <Badge>необязательный</Badge>}
         {lesson.status === "draft" && <Badge variant="warning">черновик</Badge>}

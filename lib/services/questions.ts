@@ -351,10 +351,22 @@ export async function logQuestionOpen(
  * которой привязка не доехала до ученика (черновик / нет эталона), называет
  * секция «Вопросы урока» в редакторе — по строкам, а не общим счётчиком.
  */
-export async function getKeyQuestionsForLesson(db: Db, lessonId: string) {
+export async function getKeyQuestionsForLesson(
+  db: Db,
+  lessonId: string,
+  options?: { stepId?: string; includeLessonLevel?: boolean },
+) {
   const links = await db.questionLesson.findMany({
     where: {
       lessonId,
+      ...(options?.stepId
+        ? {
+            OR: [
+              { stepId: options.stepId },
+              ...(options.includeLessonLevel ? [{ stepId: null }] : []),
+            ],
+          }
+        : {}),
       isKey: true,
       question: { status: "published", ...ANSWERED_QUESTION_WHERE },
     },
@@ -371,11 +383,22 @@ export async function getKeyQuestionsForLesson(db: Db, lessonId: string) {
  */
 export async function getQuizQuestionsForLesson(
   db: Db,
-  input: { lessonId: string; userId: string; contentMd?: string },
+  input: {
+    lessonId: string;
+    userId: string;
+    contentMd?: string;
+    stepId?: string;
+    includeLessonLevel?: boolean;
+  },
 ) {
   const links = await db.questionLesson.findMany({
     where: {
       lessonId: input.lessonId,
+      ...(input.stepId
+        ? {
+            OR: [{ stepId: input.stepId }, ...(input.includeLessonLevel ? [{ stepId: null }] : [])],
+          }
+        : {}),
       inQuiz: true,
       question: { status: "published", type: { in: [...CLOSED_QUESTION_TYPES] } },
     },
@@ -390,7 +413,10 @@ export async function getQuizQuestionsForLesson(
     input.contentMd ? extractInlineQuestionIds(input.contentMd) : ([] as string[]),
   );
   const questions = links.map((link) => link.question).filter((q) => !inline.has(q.id));
-  return seededShuffle(questions, `${input.userId}:${input.lessonId}`).slice(0, QUIZ_MAX_QUESTIONS);
+  return seededShuffle(
+    questions,
+    `${input.userId}:${input.lessonId}:${input.stepId ?? "lesson"}`,
+  ).slice(0, QUIZ_MAX_QUESTIONS);
 }
 
 export interface InlineQuestionEntry {
@@ -681,14 +707,16 @@ export interface NewLessonQuestion {
 
 export async function createQuestionForLesson(
   db: PrismaClient,
-  input: { actorId: string; lessonId: string; data: NewLessonQuestion },
+  input: { actorId: string; lessonId: string; stepId?: string | null; data: NewLessonQuestion },
 ): Promise<{ ok: true; id: string } | { ok: false; code: "category_not_found" | "not_found" }> {
-  const [category, lesson] = await Promise.all([
+  const [category, lesson, step] = await Promise.all([
     db.questionCategory.findUnique({ where: { id: input.data.categoryId } }),
     db.lesson.findUnique({ where: { id: input.lessonId } }),
+    input.stepId ? db.lessonStep.findUnique({ where: { id: input.stepId } }) : null,
   ]);
   if (!category) return { ok: false, code: "category_not_found" };
   if (!lesson) return { ok: false, code: "not_found" };
+  if (input.stepId && step?.lessonId !== lesson.id) return { ok: false, code: "not_found" };
   const { data } = input;
 
   const id = await db.$transaction(async (tx) => {
@@ -711,6 +739,7 @@ export async function createQuestionForLesson(
       data: {
         questionId: question.id,
         lessonId: lesson.id,
+        stepId: step?.id ?? null,
         isKey: data.isKey,
         inQuiz: data.inQuiz,
       },
@@ -726,6 +755,7 @@ export async function createQuestionForLesson(
         status: "draft",
         via: "lesson_editor",
         lessonId: lesson.id,
+        stepId: step?.id ?? null,
       },
     });
     await writeAudit(tx, {
@@ -733,7 +763,12 @@ export async function createQuestionForLesson(
       action: "question.linked",
       entityType: "lesson",
       entityId: lesson.id,
-      after: { questionId: question.id, isKey: data.isKey, inQuiz: data.inQuiz },
+      after: {
+        questionId: question.id,
+        stepId: step?.id ?? null,
+        isKey: data.isKey,
+        inQuiz: data.inQuiz,
+      },
     });
     return question.id;
   });
@@ -1079,29 +1114,38 @@ export async function upsertQuestionLessonLink(
     lessonId: string;
     isKey: boolean;
     inQuiz: boolean;
+    stepId?: string | null;
   },
 ): Promise<{ ok: true } | { ok: false; code: "not_found" }> {
-  const [question, lesson] = await Promise.all([
+  const [question, lesson, step] = await Promise.all([
     db.question.findUnique({ where: { id: input.questionId } }),
     db.lesson.findUnique({ where: { id: input.lessonId } }),
+    input.stepId ? db.lessonStep.findUnique({ where: { id: input.stepId } }) : null,
   ]);
   if (!question || !lesson) return { ok: false, code: "not_found" };
+  if (input.stepId && step?.lessonId !== lesson.id) return { ok: false, code: "not_found" };
   await db.questionLesson.upsert({
     where: { questionId_lessonId: { questionId: question.id, lessonId: lesson.id } },
     create: {
       questionId: question.id,
       lessonId: lesson.id,
+      stepId: step?.id ?? null,
       isKey: input.isKey,
       inQuiz: input.inQuiz,
     },
-    update: { isKey: input.isKey, inQuiz: input.inQuiz },
+    update: { stepId: step?.id ?? null, isKey: input.isKey, inQuiz: input.inQuiz },
   });
   await writeAudit(db, {
     actorId: input.actorId,
     action: "question.linked",
     entityType: "lesson",
     entityId: lesson.id,
-    after: { questionId: question.id, isKey: input.isKey, inQuiz: input.inQuiz },
+    after: {
+      questionId: question.id,
+      stepId: step?.id ?? null,
+      isKey: input.isKey,
+      inQuiz: input.inQuiz,
+    },
   });
   return { ok: true };
 }

@@ -35,6 +35,7 @@ import { BlockEditor } from "@/components/features/block-editor";
 import { QuestionBankPicker } from "@/components/features/question-bank-picker";
 import {
   saveLessonContentAction,
+  saveLessonStepContentAction,
   setLessonStatusAction,
   updateLessonMetaAction,
 } from "@/lib/actions/content-admin";
@@ -53,6 +54,13 @@ interface EditorLesson {
   textMinutes: number | null;
   videoMinutes: number | null;
   practiceMinutes: number | null;
+}
+
+interface EditorStep {
+  id: string;
+  title: string;
+  contentMd: string;
+  readingMinutes: number;
 }
 
 const DIFFICULTY_OPTIONS = [
@@ -100,19 +108,23 @@ const AUTOSAVE_MS = 1000;
  */
 export function LessonEditor({
   lesson,
+  activeStep,
   courseTitle,
   moduleTitle,
 }: {
   lesson: EditorLesson;
+  activeStep?: EditorStep | null;
   courseTitle: string;
   moduleTitle: string;
 }) {
   const router = useRouter();
-  const [content, setContent] = useState(lesson.contentMd);
+  const [content, setContent] = useState(activeStep?.contentMd ?? lesson.contentMd);
   const [saveState, setSaveState] = useState<"saved" | "dirty" | "saving">("saved");
   const [previewVersion, setPreviewVersion] = useState(0);
   const [livePreviewHtml, setLivePreviewHtml] = useState<string | null>(null);
-  const [readingMinutes, setReadingMinutes] = useState(lesson.readingMinutes);
+  const [readingMinutes, setReadingMinutes] = useState(
+    activeStep?.readingMinutes ?? lesson.readingMinutes,
+  );
   const [fullscreen, setFullscreen] = useState(false);
   const [pickingQuestion, setPickingQuestion] = useState(false);
   // Walk 13.6 rail 1: the block editor is offered ONLY when segmentation is
@@ -182,7 +194,10 @@ export function LessonEditor({
     saveTimer.current = null;
     const savingContent = latestContent.current;
     setSaveState("saving");
-    return saveLessonContentAction(lesson.id, savingContent).then((result) => {
+    const save = activeStep
+      ? saveLessonStepContentAction(activeStep.id, savingContent)
+      : saveLessonContentAction(lesson.id, savingContent);
+    return save.then((result) => {
       if (result?.ok) {
         setReadingMinutes(result.data.readingMinutes);
         lastSavedContent.current = savingContent;
@@ -197,22 +212,30 @@ export function LessonEditor({
         // каждом автосейве (он идёт каждые несколько секунд и встал бы стеной
         // поверх редактора). Признак живёт в рефе, а не в апдейтере состояния:
         // апдейтер React вправе вызвать дважды, и тост бы задвоился.
-        if (result.data.recordingNotice && !noticeShown.current) {
+        if (
+          "recordingNotice" in result.data &&
+          result.data.recordingNotice &&
+          !noticeShown.current
+        ) {
           toast({
             title: RECORDING_NOTICE_TITLE,
             description: RECORDING_NOTICE_TEXT,
             variant: "warning",
           });
         }
-        noticeShown.current = result.data.recordingNotice;
-        setRecordingNotice(result.data.recordingNotice);
+        const nextRecordingNotice =
+          "recordingNotice" in result.data && typeof result.data.recordingNotice === "boolean"
+            ? result.data.recordingNotice
+            : false;
+        noticeShown.current = nextRecordingNotice;
+        setRecordingNotice(nextRecordingNotice);
         return true;
       }
       setSaveState("dirty");
       if (result) toast({ title: result.error.message, variant: "danger" });
       return false;
     });
-  }, [lesson.id, returnToSavedPreview]);
+  }, [activeStep, lesson.id, returnToSavedPreview]);
 
   function onContentChange(value: string): void {
     setContent(value);
@@ -363,7 +386,8 @@ export function LessonEditor({
   }
 
   function copyPreviewLink(): void {
-    const url = `${window.location.origin}/content-preview/${lesson.id}`;
+    const stepQuery = activeStep ? `?step=${encodeURIComponent(activeStep.id)}` : "";
+    const url = `${window.location.origin}/content-preview/${lesson.id}${stepQuery}`;
     void navigator.clipboard
       .writeText(url)
       .then(() => toast({ title: "Ссылка на превью скопирована", variant: "success" }))
@@ -507,7 +531,7 @@ export function LessonEditor({
         {/* DECISION: студенческая зона закрыта для mentor+, поэтому «Открыть как
             ученика» открывает полностраничный превью-рендер (тот же LessonRenderer). */}
         <a
-          href={`/content-preview/${lesson.id}`}
+          href={`/content-preview/${lesson.id}${activeStep ? `?step=${activeStep.id}` : ""}`}
           target="_blank"
           rel="noreferrer"
           className="hover:text-text-1 ease-app inline-flex items-center gap-1.5 transition-colors duration-150"
@@ -788,7 +812,7 @@ export function LessonEditor({
         {livePreviewHtml === null ? (
           <iframe
             key={previewVersion}
-            src={`/content-preview/${lesson.id}?v=${previewVersion}`}
+            src={`/content-preview/${lesson.id}?v=${previewVersion}${activeStep ? `&step=${activeStep.id}` : ""}`}
             title="Предпросмотр урока"
             className={cn(
               "rounded-card border-border bg-bg w-full border",

@@ -50,7 +50,9 @@ export async function resetDb(): Promise<void> {
   await testDb.contentReport.deleteMany();
   await testDb.question.deleteMany();
   await testDb.questionCategory.deleteMany();
+  await testDb.lessonStepProgress.deleteMany();
   await testDb.lessonProgress.deleteMany();
+  await testDb.lessonStep.deleteMany();
   await testDb.lesson.deleteMany();
   await testDb.module.deleteMany();
   await testDb.course.deleteMany();

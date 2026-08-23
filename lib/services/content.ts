@@ -195,6 +195,15 @@ export interface LessonView {
     selectedPath: LessonPathSelection | null;
     completedAt: Date | null;
   };
+  lessonSteps: {
+    id: string;
+    title: string;
+    order: number;
+    contentMd: string;
+    readingMinutes: number;
+    completedAt: Date | null;
+    scrollPos: number | null;
+  }[];
   /**
    * Позиция урока в СВОЁМ модуле для шапки «Урок X из Y» и сегментированного
    * индикатора («Читалка v2»). Чистое представление — уже вычисленное состояние
@@ -214,7 +223,10 @@ export async function getLessonView(
 ): Promise<LessonView | null> {
   const lesson = await db.lesson.findUnique({
     where: { id: lessonId },
-    include: { module: { include: { course: true } } },
+    include: {
+      module: { include: { course: true } },
+      steps: { orderBy: [{ order: "asc" }, { createdAt: "asc" }] },
+    },
   });
   if (
     !lesson ||
@@ -275,6 +287,12 @@ export async function getLessonView(
   const progressRow = await db.lessonProgress.findUnique({
     where: { userId_lessonId: { userId, lessonId: lesson.id } },
   });
+  const stepProgress = lesson.steps.length
+    ? await db.lessonStepProgress.findMany({
+        where: { userId, stepId: { in: lesson.steps.map((step) => step.id) } },
+      })
+    : [];
+  const stepProgressById = new Map(stepProgress.map((progress) => [progress.stepId, progress]));
 
   // «Урок X из Y» считается по модулю, а не по курсу: модуль — это глава, и его
   // 1–14 уроков ложатся в сегментированный индикатор, тогда как курс целиком
@@ -323,6 +341,15 @@ export async function getLessonView(
       selectedPath: progressRow?.selectedPath ?? null,
       completedAt: progressRow?.completedAt ?? null,
     },
+    lessonSteps: lesson.steps.map((step) => ({
+      id: step.id,
+      title: step.title,
+      order: step.order,
+      contentMd: step.contentMd,
+      readingMinutes: step.readingMinutes,
+      completedAt: stepProgressById.get(step.id)?.completedAt ?? progressRow?.completedAt ?? null,
+      scrollPos: stepProgressById.get(step.id)?.scrollPos ?? null,
+    })),
     position: {
       index: steps.findIndex((s) => s.current) + 1,
       total: steps.length,

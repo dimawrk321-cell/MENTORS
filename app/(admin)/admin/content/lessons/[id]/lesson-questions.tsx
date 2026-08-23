@@ -59,6 +59,7 @@ export interface LessonQuestionLinkRow {
   hasAnswer: boolean;
   isKey: boolean;
   inQuiz: boolean;
+  stepId?: string | null;
 }
 
 interface SearchRow {
@@ -79,6 +80,8 @@ export function LessonQuestions({
   moduleTestEnabled,
   defaultCategoryId,
   defaultCategoryScope,
+  steps = [],
+  activeStepId = null,
 }: {
   lessonId: string;
   links: LessonQuestionLinkRow[];
@@ -91,6 +94,8 @@ export function LessonQuestions({
   /** Умолчание категории для быстрого создания (заход C.6, 1.3). */
   defaultCategoryId: string;
   defaultCategoryScope: CategorySuggestionScope | null;
+  steps?: Array<{ id: string; title: string }>;
+  activeStepId?: string | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -108,6 +113,7 @@ export function LessonQuestions({
   const [results, setResults] = useState<SearchRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [attachRole, setAttachRole] = useState<QuestionLinkRole>("quiz");
+  const [attachStepId, setAttachStepId] = useState(activeStepId ?? "lesson");
   const [pending, startTransition] = useTransition();
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -496,11 +502,40 @@ export function LessonQuestions({
                       upsertQuestionLinkAction({
                         questionId: link.questionId,
                         lessonId,
+                        stepId: link.stepId,
                         ...flagsFromRole(role),
                       }),
                     );
                   }}
                 />
+                {steps.length > 0 && (
+                  <Select
+                    value={link.stepId ?? "lesson"}
+                    onValueChange={(value) =>
+                      run(() =>
+                        upsertQuestionLinkAction({
+                          questionId: link.questionId,
+                          lessonId,
+                          stepId: value === "lesson" ? null : value,
+                          isKey: link.isKey,
+                          inQuiz: link.inQuiz,
+                        }),
+                      )
+                    }
+                  >
+                    <SelectTrigger className="w-44" aria-label="Шаг вопроса">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="lesson">Урок целиком</SelectItem>
+                      {steps.map((step) => (
+                        <SelectItem key={step.id} value={step.id}>
+                          {step.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <button
                   type="button"
                   aria-label="Отвязать вопрос"
@@ -523,6 +558,7 @@ export function LessonQuestions({
       {creating && (
         <QuestionQuickCreate
           lessonId={lessonId}
+          stepId={activeStepId}
           categories={categories}
           defaultCategoryId={defaultCategoryId}
           defaultCategoryScope={defaultCategoryScope}
@@ -576,6 +612,24 @@ export function LessonQuestions({
               ariaLabel="Роль для привязки из поиска"
             />
           </label>
+          {steps.length > 0 && (
+            <label className="text-text-2 flex items-center gap-2 text-[13px]">
+              Показывать на шаге
+              <Select value={attachStepId} onValueChange={setAttachStepId}>
+                <SelectTrigger className="w-52" aria-label="Шаг для новых привязок">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lesson">Урок целиком</SelectItem>
+                  {steps.map((step) => (
+                    <SelectItem key={step.id} value={step.id}>
+                      {step.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          )}
           {searching && <p className="text-text-3 text-[12px]">Ищу…</p>}
           {available.length > 0 && (
             <ul className="flex flex-col gap-1.5">
@@ -601,6 +655,7 @@ export function LessonQuestions({
                           upsertQuestionLinkAction({
                             questionId: row.id,
                             lessonId,
+                            stepId: attachStepId === "lesson" ? null : attachStepId,
                             ...flagsFromRole(attachRole),
                           }),
                         "Привязано",

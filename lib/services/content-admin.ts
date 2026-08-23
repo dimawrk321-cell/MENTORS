@@ -383,6 +383,51 @@ export async function createLesson(
   return { id: lesson.id };
 }
 
+export async function moveLessonToModule(
+  db: PrismaClient,
+  input: { actorId: string; lessonId: string; targetModuleId: string },
+): Promise<AdminContentResult> {
+  return db.$transaction(async (tx) => {
+    const [lesson, target] = await Promise.all([
+      tx.lesson.findUnique({ where: { id: input.lessonId } }),
+      tx.module.findUnique({ where: { id: input.targetModuleId } }),
+    ]);
+    if (!lesson || !target) return { ok: false, code: "not_found" } as const;
+    if (lesson.moduleId === target.id) return { ok: true } as const;
+    const slugOwner = await tx.lesson.findUnique({
+      where: { moduleId_slug: { moduleId: target.id, slug: lesson.slug } },
+    });
+    if (slugOwner) return { ok: false, code: "slug_taken" } as const;
+    const last = await tx.lesson.findFirst({
+      where: { moduleId: target.id },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+    const sourceModuleId = lesson.moduleId;
+    await tx.lesson.update({
+      where: { id: lesson.id },
+      data: { moduleId: target.id, order: (last?.order ?? -1) + 1 },
+    });
+    const sourceLessons = await tx.lesson.findMany({
+      where: { moduleId: sourceModuleId },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { id: true },
+    });
+    for (const [order, item] of sourceLessons.entries()) {
+      await tx.lesson.update({ where: { id: item.id }, data: { order } });
+    }
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "lesson.moved",
+      entityType: "lesson",
+      entityId: lesson.id,
+      before: { moduleId: sourceModuleId },
+      after: { moduleId: target.id, order: (last?.order ?? -1) + 1 },
+    });
+    return { ok: true } as const;
+  });
+}
+
 // --- Stage 9: lesson notification triggers (spec 7.12/task) ---
 
 /**
@@ -474,7 +519,10 @@ export async function notifyLessonUpdated(
 export async function getLessonForEditor(db: Db, lessonId: string) {
   return db.lesson.findUnique({
     where: { id: lessonId },
-    include: { module: { include: { course: { select: { id: true, title: true, slug: true } } } } },
+    include: {
+      steps: { orderBy: [{ order: "asc" }, { createdAt: "asc" }] },
+      module: { include: { course: { select: { id: true, title: true, slug: true } } } },
+    },
   });
 }
 

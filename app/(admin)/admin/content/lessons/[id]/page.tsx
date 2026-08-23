@@ -12,6 +12,7 @@ import { hasReferenceAnswer } from "@/lib/services/question-access";
 import { stripMarkdown } from "@/lib/utils/text";
 import { LessonEditor } from "./lesson-editor";
 import { LessonQuestions } from "./lesson-questions";
+import { LessonSteps } from "./lesson-steps";
 
 export const metadata: Metadata = {
   title: "Редактор урока",
@@ -19,14 +20,18 @@ export const metadata: Metadata = {
 
 interface EditorPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ step?: string }>;
 }
 
 /** Two-pane lesson editor (spec 8.5): markdown ↔ live preview + metadata. */
-export default async function LessonEditorPage({ params }: EditorPageProps) {
+export default async function LessonEditorPage({ params, searchParams }: EditorPageProps) {
   await requirePermission("content.manage");
   const { id } = await params;
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();
+  const { step: requestedStepId } = await searchParams;
+  const activeStep =
+    lesson.steps.find((step) => step.id === requestedStepId) ?? lesson.steps[0] ?? null;
   const [questionLinks, categoryTree, moduleTest, categorySuggestion] = await Promise.all([
     listLessonQuestionLinks(prisma, lesson.id),
     listCategoriesTree(prisma),
@@ -41,6 +46,15 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
     // привязкам урока/модуля/курса (связи «курс ↔ категории банка» пусты).
     suggestQuestionCategory(prisma, lesson.id),
   ]);
+  const courseModules = await prisma.module.findMany({
+    where: { courseId: lesson.module.course.id },
+    orderBy: { order: "asc" },
+    select: {
+      id: true,
+      title: true,
+      lessons: { orderBy: { order: "asc" }, select: { id: true, title: true } },
+    },
+  });
   // Root categories + children for the «+ Добавить вопрос» filter (13.6);
   // the service expands a root to its family, so either level works.
   const categories = categoryTree.flatMap((root) => [
@@ -50,7 +64,18 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      <LessonSteps
+        lessonId={lesson.id}
+        moduleId={lesson.moduleId}
+        steps={lesson.steps}
+        activeStepId={activeStep?.id ?? null}
+        modules={courseModules.map((module) => ({ id: module.id, title: module.title }))}
+        lessons={courseModules.flatMap((module) =>
+          module.lessons.map((item) => ({ id: item.id, title: `${module.title} · ${item.title}` })),
+        )}
+      />
       <LessonEditor
+        key={activeStep?.id ?? "legacy"}
         lesson={{
           id: lesson.id,
           title: lesson.title,
@@ -66,6 +91,7 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
           videoMinutes: lesson.videoMinutes,
           practiceMinutes: lesson.practiceMinutes,
         }}
+        activeStep={activeStep}
         courseTitle={lesson.module.course.title}
         moduleTitle={lesson.module.title}
       />
@@ -76,6 +102,8 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
         moduleTestEnabled={moduleTest?.enabled ?? false}
         defaultCategoryId={categorySuggestion?.categoryId ?? ""}
         defaultCategoryScope={categorySuggestion?.scope ?? null}
+        steps={lesson.steps.map((step) => ({ id: step.id, title: step.title }))}
+        activeStepId={activeStep?.id ?? null}
         links={questionLinks.map((link) => ({
           questionId: link.questionId,
           teaser: stripMarkdown(link.question.textMd, 120) || "— без текста —",
@@ -90,6 +118,7 @@ export default async function LessonEditorPage({ params }: EditorPageProps) {
           hasAnswer: hasReferenceAnswer(link.question),
           isKey: link.isKey,
           inQuiz: link.inQuiz,
+          stepId: link.stepId,
         }))}
       />
     </div>

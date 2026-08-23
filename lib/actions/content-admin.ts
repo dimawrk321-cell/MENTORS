@@ -20,7 +20,16 @@ import {
   setModuleStatus,
   updateCourse,
   updateLessonMeta,
+  moveLessonToModule,
 } from "@/lib/services/content-admin";
+import {
+  createLessonStep,
+  deleteLessonStep,
+  moveLessonStep,
+  renameLessonStep,
+  saveLessonStep,
+  splitLessonIntoSteps,
+} from "@/lib/services/lesson-steps";
 import {
   ActionError,
   parseInput,
@@ -45,6 +54,12 @@ const statusSchema = z.enum(["draft", "published"]);
 const optionalMinutesSchema = z
   .union([z.literal(""), z.coerce.number().int().min(1).max(1440)])
   .transform((value) => (value === "" ? null : value));
+
+const stepMoveSchema = z.object({
+  stepId: idSchema,
+  targetLessonId: idSchema,
+  targetIndex: z.coerce.number().int().min(0).max(500),
+});
 
 const courseUpdateSchema = z.object({
   courseId: idSchema,
@@ -94,8 +109,114 @@ function failWith(res: { ok: false; code: string }): never {
       "Для выбранного пути нужны соответствующие материалы: видео и/или текст урока",
     unsafe_recording_reference:
       "Прямую ссылку или пароль от записи интервью публиковать нельзя. Добавь запись в Библиотеку и пройди чеклист 4/4.",
+    last_step: "В уроке должен остаться хотя бы один шаг",
+    question_conflict:
+      "В целевом уроке уже есть один из вопросов этого шага — сначала убери дублирующую привязку",
   };
   throw new ActionError(res.code, messages[res.code] ?? "Не получилось выполнить действие");
+}
+
+export async function splitLessonIntoStepsAction(
+  lessonId: string,
+): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const result = await splitLessonIntoSteps(prisma, {
+      actorId: auth.user.id,
+      lessonId: parseInput(idSchema, lessonId),
+    });
+    revalidateContent(undefined, lessonId);
+    revalidatePath(`/admin/content/lessons/${lessonId}`);
+    return result;
+  });
+}
+
+export async function createLessonStepAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(z.object({ lessonId: idSchema, title: titleSchema }), input);
+    const result = await createLessonStep(prisma, { actorId: auth.user.id, ...parsed });
+    revalidateContent(undefined, parsed.lessonId);
+    revalidatePath(`/admin/content/lessons/${parsed.lessonId}`);
+    return result;
+  });
+}
+
+export async function saveLessonStepContentAction(
+  stepId: string,
+  contentMd: string,
+): Promise<ActionResult<{ readingMinutes: number; recordingNotice: boolean }>> {
+  return runAction(async () => {
+    await requireActionPermission("content.manage");
+    const markdown = parseInput(z.string().max(300_000, "Слишком большой документ"), contentMd);
+    const result = await saveLessonStep(prisma, {
+      stepId: parseInput(idSchema, stepId),
+      contentMd: markdown,
+    });
+    if (!result.ok) failWith(result);
+    revalidatePath(`/lessons/${result.lessonId}`);
+    return {
+      readingMinutes: Math.max(
+        1,
+        Math.ceil(markdown.trim().split(/\s+/).filter(Boolean).length / 200),
+      ),
+      recordingNotice: result.recordingNotice,
+    };
+  });
+}
+
+export async function renameLessonStepAction(input: unknown): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(z.object({ stepId: idSchema, title: titleSchema }), input);
+    const result = await renameLessonStep(prisma, { actorId: auth.user.id, ...parsed });
+    if (!result) throw new ActionError("not_found", "Шаг не найден");
+    revalidateContent(undefined, result.lessonId);
+    revalidatePath(`/admin/content/lessons/${result.lessonId}`);
+  });
+}
+
+export async function moveLessonStepAction(input: unknown): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(stepMoveSchema, input);
+    try {
+      await moveLessonStep(prisma, { actorId: auth.user.id, ...parsed });
+    } catch (error) {
+      if (error instanceof Error && error.message === "last_step")
+        failWith({ ok: false, code: "last_step" });
+      if (error instanceof Error && error.message === "question_conflict") {
+        failWith({ ok: false, code: "question_conflict" });
+      }
+      throw error;
+    }
+    revalidateContent();
+  });
+}
+
+export async function deleteLessonStepAction(stepId: string): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const result = await deleteLessonStep(prisma, {
+      actorId: auth.user.id,
+      stepId: parseInput(idSchema, stepId),
+    });
+    if (!result.ok) failWith(result);
+    revalidateContent();
+  });
+}
+
+export async function moveLessonToModuleAction(input: unknown): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(z.object({ lessonId: idSchema, targetModuleId: idSchema }), input);
+    const result = await moveLessonToModule(prisma, { actorId: auth.user.id, ...parsed });
+    if (!result.ok) failWith(result);
+    revalidateContent();
+    revalidatePath(`/admin/content/lessons/${parsed.lessonId}`);
+  });
 }
 
 /** Publication must be visible to students immediately (spec 12: on-demand revalidate). */

@@ -134,6 +134,7 @@ export const questionLinkSchema = z
   .object({
     questionId: z.string().min(1),
     lessonId: z.string().min(1),
+    stepId: z.string().min(1).nullable().optional(),
     isKey: z.boolean(),
     inQuiz: z.boolean(),
   })

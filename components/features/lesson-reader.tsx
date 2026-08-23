@@ -5,6 +5,7 @@ import type { LessonPathPolicy, LessonPathSelection } from "@prisma/client";
 import { VideoEmbed } from "@/components/blocks/video-embed";
 import {
   savePositionAction,
+  saveLessonStepPositionAction,
   selectLearningPathAction,
   startLessonAction,
 } from "@/lib/actions/content";
@@ -15,6 +16,7 @@ import { isPlayableVideoUrl } from "@/lib/utils/youtube";
 
 interface LessonReaderProps {
   lessonId: string;
+  stepId?: string | null;
   initialScrollPos: number | null;
   initialVideoPos: number | null;
   completed: boolean;
@@ -37,6 +39,7 @@ const SAVE_DEBOUNCE_MS = 2000;
  */
 export function LessonReader({
   lessonId,
+  stepId,
   initialScrollPos,
   initialVideoPos,
   completed,
@@ -81,8 +84,12 @@ export function LessonReader({
     const payload = dirty.current;
     dirty.current = {};
     if (payload.scroll === undefined && payload.video === undefined) return;
-    void savePositionAction({ lessonId, ...payload });
-  }, [lessonId]);
+    if (stepId && payload.scroll !== undefined) {
+      void saveLessonStepPositionAction({ stepId, scroll: payload.scroll });
+    } else {
+      void savePositionAction({ lessonId, ...payload });
+    }
+  }, [lessonId, stepId]);
 
   const scheduleFlush = useCallback(() => {
     if (impersonated) return;
