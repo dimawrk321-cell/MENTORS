@@ -196,15 +196,22 @@ export async function moveLessonStepAction(input: unknown): Promise<ActionResult
   });
 }
 
-export async function deleteLessonStepAction(stepId: string): Promise<ActionResult<undefined>> {
-  return runAction<undefined>(async () => {
+export async function deleteLessonStepAction(
+  stepId: string,
+): Promise<ActionResult<{ deletedProgressCount: number; detachedQuestionCount: number }>> {
+  return runAction(async () => {
     const auth = await requireActionPermission("content.manage");
     const result = await deleteLessonStep(prisma, {
       actorId: auth.user.id,
       stepId: parseInput(idSchema, stepId),
     });
     if (!result.ok) failWith(result);
-    revalidateContent();
+    revalidateContent(undefined, result.lessonId);
+    revalidatePath(`/admin/content/lessons/${result.lessonId}`);
+    return {
+      deletedProgressCount: result.deletedProgressCount,
+      detachedQuestionCount: result.detachedQuestionCount,
+    };
   });
 }
 

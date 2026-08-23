@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ArrowDown, ArrowUp, Check, GripVertical, Pencil, Plus, Split, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import {
@@ -50,6 +58,7 @@ export function LessonSteps({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [deletingStep, setDeletingStep] = useState<StepItem | null>(null);
 
   function run(
     work: () => Promise<{ ok: boolean; error?: { message: string }; data?: unknown }>,
@@ -239,7 +248,7 @@ export function LessonSteps({
                     size="sm"
                     variant="ghost"
                     aria-label="Удалить шаг"
-                    onClick={() => run(() => deleteLessonStepAction(step.id))}
+                    onClick={() => setDeletingStep(step)}
                   >
                     <Trash2 size={14} />
                   </Button>
@@ -285,6 +294,53 @@ export function LessonSteps({
           </div>
         ))}
       </div>
+      <Dialog open={deletingStep !== null} onOpenChange={(open) => !open && setDeletingStep(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Удалить шаг «{deletingStep?.title}»?</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Шаг и весь прогресс учеников по нему будут удалены без возможности восстановления.
+                </p>
+                <p>
+                  Вопросы не удалятся из банка: они останутся в этом уроке без привязки к шагу.
+                  Остальные шаги и их прогресс не изменятся.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setDeletingStep(null)}>
+              Отмена
+            </Button>
+            <Button
+              variant="danger"
+              loading={pending}
+              onClick={() => {
+                if (!deletingStep) return;
+                const stepId = deletingStep.id;
+                run(
+                  () => deleteLessonStepAction(stepId),
+                  (data) => {
+                    const result = data as { deletedProgressCount: number };
+                    setDeletingStep(null);
+                    toast({
+                      title: `Шаг удалён. Записей прогресса удалено: ${result.deletedProgressCount}`,
+                      variant: "success",
+                    });
+                    if (activeStepId === stepId) {
+                      router.replace(`/admin/content/lessons/${lessonId}`);
+                    }
+                  },
+                );
+              }}
+            >
+              Удалить шаг и прогресс
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <form
         className="mt-3 flex max-w-md gap-2"
         onSubmit={(event) => {

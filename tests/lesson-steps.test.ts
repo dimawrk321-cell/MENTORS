@@ -3,6 +3,7 @@ import { createTestUser, resetDb, testDb } from "./helpers/db";
 import {
   completeLessonStep,
   createLessonStep,
+  deleteLessonStep,
   moveLessonStep,
   splitLessonIntoSteps,
 } from "@/lib/services/lesson-steps";
@@ -129,6 +130,36 @@ describe("шаги урока", () => {
         targetIndex: 0,
       }),
     ).rejects.toThrow("last_step");
+  });
+
+  it("удаляет выбранный шаг вместе с его прогрессом, не затрагивая остальные шаги", async () => {
+    const { mentor, student, lesson } = await fixture();
+    const first = await splitLessonIntoSteps(testDb, { actorId: mentor.id, lessonId: lesson.id });
+    const second = await createLessonStep(testDb, {
+      actorId: mentor.id,
+      lessonId: lesson.id,
+      title: "Случайный шаг",
+    });
+    await testDb.lessonStepProgress.createMany({
+      data: [
+        { userId: student.id, stepId: first.id, status: "completed", completedAt: new Date() },
+        { userId: student.id, stepId: second.id, status: "in_progress" },
+      ],
+    });
+
+    await expect(
+      deleteLessonStep(testDb, { actorId: mentor.id, stepId: second.id }),
+    ).resolves.toMatchObject({ ok: true, deletedProgressCount: 1 });
+    await expect(testDb.lessonStep.findUnique({ where: { id: second.id } })).resolves.toBeNull();
+    await expect(
+      testDb.lessonStepProgress.findMany({ where: { userId: student.id } }),
+    ).resolves.toMatchObject([{ stepId: first.id, status: "completed" }]);
+
+    const audit = await testDb.auditLog.findFirst({
+      where: { action: "lesson_step.deleted", entityId: second.id },
+    });
+    expect(audit?.actorId).toBe(mentor.id);
+    expect(audit?.before).toMatchObject({ deletedProgressCount: 1 });
   });
 
   it("показывает на шаге только его вопросы, а общие — на финальном шаге", async () => {

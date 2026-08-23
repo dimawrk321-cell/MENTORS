@@ -260,16 +260,25 @@ export async function moveLessonStep(
 export async function deleteLessonStep(
   db: PrismaClient,
   input: { actorId: string; stepId: string },
-): Promise<{ ok: true } | { ok: false; code: "not_found" | "last_step" | "has_student_data" }> {
+): Promise<
+  | {
+      ok: true;
+      lessonId: string;
+      deletedProgressCount: number;
+      detachedQuestionCount: number;
+    }
+  | { ok: false; code: "not_found" | "last_step" }
+> {
   return db.$transaction(async (tx) => {
     const step = await tx.lessonStep.findUnique({
       where: { id: input.stepId },
-      include: { _count: { select: { progress: true } } },
+      include: { _count: { select: { progress: true, questionLinks: true } } },
     });
     if (!step) return { ok: false, code: "not_found" } as const;
-    if (step._count.progress > 0) return { ok: false, code: "has_student_data" } as const;
     const count = await tx.lessonStep.count({ where: { lessonId: step.lessonId } });
     if (count <= 1) return { ok: false, code: "last_step" } as const;
+    const deletedProgressCount = step._count.progress;
+    const detachedQuestionCount = step._count.questionLinks;
     await tx.lessonStep.delete({ where: { id: step.id } });
     const rest = await tx.lessonStep.findMany({
       where: { lessonId: step.lessonId },
@@ -287,9 +296,19 @@ export async function deleteLessonStep(
       action: "lesson_step.deleted",
       entityType: "lesson_step",
       entityId: step.id,
-      before: { lessonId: step.lessonId, title: step.title },
+      before: {
+        lessonId: step.lessonId,
+        title: step.title,
+        deletedProgressCount,
+        detachedQuestionCount,
+      },
     });
-    return { ok: true } as const;
+    return {
+      ok: true,
+      lessonId: step.lessonId,
+      deletedProgressCount,
+      detachedQuestionCount,
+    } as const;
   });
 }
 
