@@ -342,6 +342,7 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
           lessonId={view.lesson.id}
           steps={outlineSteps}
           activeStepId={activeStep?.id}
+          reserveReportActionSpace
         />
       </div>
       <ReportDialog lessonId={view.lesson.id} />

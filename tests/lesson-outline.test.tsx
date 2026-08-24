@@ -15,6 +15,7 @@ describe("ученическая навигация по шагам", () => {
         lessonId="lesson-1"
         steps={STEPS}
         activeStepId="step-2"
+        reserveReportActionSpace
         title="В этом шаге"
         headings={[
           { id: "intro", text: "Введение", depth: 2 },
@@ -31,6 +32,7 @@ describe("ученическая навигация по шагам", () => {
     expect(html).toContain('aria-disabled="true"');
     expect(html).not.toContain('href="/lessons/lesson-1?step=step-3"');
     expect(html).toContain("[scrollbar-width:none]");
+    expect(html).toContain("pb-14");
     expect(html).not.toContain("overflow-x-auto");
   });
 
@@ -51,6 +53,7 @@ describe("ученическая навигация по шагам", () => {
   it("не добавляет искусственную навигацию цельному уроку", () => {
     const html = renderToStaticMarkup(<LessonTocRail headings={[]} />);
     expect(html).not.toContain("Шаги урока");
+    expect(html).not.toContain("pb-14");
     expect(html).toContain('aria-hidden="true"');
   });
 });

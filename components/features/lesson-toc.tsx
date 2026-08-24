@@ -181,12 +181,15 @@ export function LessonTocRail({
   lessonId,
   steps = [],
   activeStepId,
+  reserveReportActionSpace = false,
 }: {
   headings: ReadingHeading[];
   title?: string;
   lessonId?: string;
   steps?: LessonOutlineStep[];
   activeStepId?: string;
+  /** Keep the reading counter clear of the lesson's fixed report action. */
+  reserveReportActionSpace?: boolean;
 }) {
   const { activeId } = useReadingTracker();
   const hasStepNavigation = Boolean(lessonId && activeStepId && steps.length > 1);
@@ -198,7 +201,12 @@ export function LessonTocRail({
     return <aside aria-hidden="true" className="hidden w-56 shrink-0 min-[1264px]:block" />;
   }
   return (
-    <aside className="sticky top-[76px] hidden max-h-[calc(100dvh-7rem)] w-56 shrink-0 flex-col self-start min-[1264px]:flex">
+    <aside
+      className={cn(
+        "sticky top-[76px] hidden max-h-[calc(100dvh-7rem)] w-56 shrink-0 flex-col self-start min-[1264px]:flex",
+        reserveReportActionSpace && "pb-14",
+      )}
+    >
       <div className="flex min-h-0 flex-1 flex-col pr-1">
         {hasToc && (
           <section
