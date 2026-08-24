@@ -21,10 +21,7 @@ import { Watermark } from "@/components/features/watermark";
 import { LessonReader } from "@/components/features/lesson-reader";
 import { LessonTocRail, LessonTocSheet } from "@/components/features/lesson-toc";
 import { CompleteLessonButton } from "@/components/features/complete-lesson-button";
-import {
-  CompleteLessonStepButton,
-  LessonStepProgress,
-} from "@/components/features/lesson-step-navigation";
+import { CompleteLessonStepButton } from "@/components/features/lesson-step-navigation";
 import { ReportDialog } from "@/components/features/report-dialog";
 import { ReadingSizeControl } from "@/components/features/reading-size-control";
 import { ReadingTracker } from "@/components/features/reading-tracker";
@@ -36,6 +33,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { ProgressSegment } from "@/components/ui/progress-bar";
 import { lessonDurationLabel } from "@/lib/utils/lesson-path";
+import { lessonStepMarkdownForDisplay } from "@/lib/utils/lesson-step-content";
 import { isPlayableVideoUrl } from "@/lib/utils/youtube";
 
 const DIFFICULTY_LABEL = { intro: "интро", base: "база", advanced: "продвинутый" } as const;
@@ -109,7 +107,14 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
     ? view.lessonSteps.findIndex((step) => step.id === activeStep.id)
     : -1;
   const isFinalStep = activeStepIndex === view.lessonSteps.length - 1;
-  const markdown = activeStep?.contentMd ?? view.lesson.contentMd;
+  const markdown = activeStep
+    ? lessonStepMarkdownForDisplay(activeStep.contentMd)
+    : view.lesson.contentMd;
+  const outlineSteps = view.lessonSteps.map((step) => ({
+    id: step.id,
+    title: step.title,
+    completed: step.completedAt !== null,
+  }));
 
   // Заход B.1: вопросы, вставленные в текст директивами, грузятся ОДНИМ
   // запросом до рендера — путь рендера остаётся без обращений к БД.
@@ -165,22 +170,34 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
     step.current ? "current" : step.completed ? "done" : step.unlocked ? "todo" : "locked",
   );
 
-  // Карточки «Предыдущий/Следующий урок». Доступность решена на сервере: цепь
-  // курсов уже пропустила нас сюда (redirect выше), внутрикурсовой гейтинг —
-  // в `unlocked`. Закрытый следующий урок рендерится замком и не кликается.
-  const prevNav: ReadingNavItem | null =
-    view.prev && view.prev.unlocked
+  // В составном уроке нижние карточки ведут по шагам. Только на границах
+  // возвращаем соседний урок — так ученик не перескакивает через материал.
+  const previousStep = activeStepIndex > 0 ? view.lessonSteps[activeStepIndex - 1] : null;
+  const nextStep = activeStepIndex >= 0 ? view.lessonSteps[activeStepIndex + 1] : null;
+  const prevNav: ReadingNavItem | null = previousStep
+    ? {
+        href: `/lessons/${view.lesson.id}?step=${previousStep.id}`,
+        title: previousStep.title,
+        kicker: "Предыдущий шаг",
+      }
+    : view.prev && view.prev.unlocked
       ? { href: `/lessons/${view.prev.id}`, title: view.prev.title, kicker: "Предыдущий урок" }
       : null;
-  const nextNav: ReadingNavItem | null = view.next
+  const nextNav: ReadingNavItem | null = nextStep
     ? {
-        href: `/lessons/${view.next.id}`,
-        title: view.next.title,
-        kicker: "Следующий урок",
-        locked: !view.next.unlocked,
-        lockHint: view.next.unlocked ? undefined : "Откроется после предыдущих шагов курса",
+        href: `/lessons/${view.lesson.id}?step=${nextStep.id}`,
+        title: nextStep.title,
+        kicker: "Следующий шаг",
       }
-    : null;
+    : view.next
+      ? {
+          href: `/lessons/${view.next.id}`,
+          title: view.next.title,
+          kicker: "Следующий урок",
+          locked: !view.next.unlocked,
+          lockHint: view.next.unlocked ? undefined : "Откроется после предыдущих шагов курса",
+        }
+      : null;
 
   return (
     <ReadingTracker headingIds={headings.map((heading) => heading.id)}>
@@ -229,7 +246,12 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
             {view.lesson.title}
           </h1>
           {hasMultipleSteps && activeStep && (
-            <p className="text-text-2 mt-2 text-lg font-medium">{activeStep.title}</p>
+            <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="text-accent text-[11px] font-semibold tracking-[0.08em] uppercase">
+                Шаг {activeStepIndex + 1} из {view.lessonSteps.length}
+              </span>
+              <span className="text-text-2 text-base font-medium">{activeStep.title}</span>
+            </p>
           )}
           <div className="mt-2.5 mb-5 flex flex-wrap items-center gap-2">
             <Badge>{durationLabel}</Badge>
@@ -238,21 +260,15 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
             {view.state.updatedSinceCompletion && <Badge variant="accent">обновлён</Badge>}
             <div className="ml-auto flex items-center gap-2">
               <ReadingSizeControl initial={user.readingFontSize} />
-              <LessonTocSheet headings={headings} />
+              <LessonTocSheet
+                headings={headings}
+                title={hasMultipleSteps ? "В этом шаге" : "В этом уроке"}
+                lessonId={view.lesson.id}
+                steps={outlineSteps}
+                activeStepId={activeStep?.id}
+              />
             </div>
           </div>
-
-          {hasMultipleSteps && activeStep && (
-            <LessonStepProgress
-              lessonId={view.lesson.id}
-              activeStepId={activeStep.id}
-              steps={view.lessonSteps.map((step) => ({
-                id: step.id,
-                title: step.title,
-                completed: step.completedAt !== null,
-              }))}
-            />
-          )}
 
           <LessonReader
             lessonId={view.lesson.id}
@@ -306,7 +322,13 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
           </div>
         </div>
 
-        <LessonTocRail headings={headings} title="В этом уроке" />
+        <LessonTocRail
+          headings={headings}
+          title={hasMultipleSteps ? "В этом шаге" : "В этом уроке"}
+          lessonId={view.lesson.id}
+          steps={outlineSteps}
+          activeStepId={activeStep?.id}
+        />
       </div>
       <ReportDialog lessonId={view.lesson.id} />
     </ReadingTracker>

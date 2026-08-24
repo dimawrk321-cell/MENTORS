@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/actions/content-admin", () => ({
   copyLessonAction: async () => ({ ok: true, data: { id: "copy" } }),
   copyLessonAsStepAction: async () => ({ ok: true, data: { id: "step-copy" } }),
+  copyLessonsAsStepsAction: async () => ({ ok: true, data: { ids: ["step-copy"] } }),
   createLessonStepAction: async () => ({ ok: true, data: { id: "step" } }),
   deleteLessonStepAction: async () => ({ ok: true, data: {} }),
   moveLessonStepAction: async () => ({ ok: true }),
@@ -58,5 +59,4 @@ describe("повторное использование уроков в реда
     expect(html).toContain("Добавить урок как шаг");
     expect(html).toContain("1. Материал");
   });
-
 });

@@ -25,6 +25,7 @@ import {
 } from "@/lib/services/content-admin";
 import {
   copyLessonAsStep,
+  copyLessonsAsSteps,
   createLessonStep,
   deleteLessonStep,
   moveLessonStep,
@@ -73,6 +74,18 @@ const lessonAsStepSchema = z.object({
   sourceLessonId: idSchema,
   targetLessonId: idSchema,
   title: titleSchema,
+});
+
+const lessonsAsStepsSchema = z.object({
+  targetLessonId: idSchema,
+  sources: z
+    .array(z.object({ sourceLessonId: idSchema, title: titleSchema }))
+    .min(1, "Выбери хотя бы один урок")
+    .max(100, "За один раз можно добавить не больше 100 уроков")
+    .refine(
+      (sources) => new Set(sources.map((source) => source.sourceLessonId)).size === sources.length,
+      "Один урок выбран несколько раз",
+    ),
 });
 
 const courseUpdateSchema = z.object({
@@ -127,6 +140,7 @@ function failWith(res: { ok: false; code: string }): never {
     question_conflict:
       "В целевом уроке уже есть один из вопросов этого шага — сначала убери дублирующую привязку",
     same_lesson: "Нельзя добавить урок как шаг самого в себя — выбери другой исходный урок",
+    duplicate_source: "Один исходный урок выбран несколько раз",
   };
   throw new ActionError(res.code, messages[res.code] ?? "Не получилось выполнить действие");
 }
@@ -176,6 +190,30 @@ export async function copyLessonAsStepAction(input: unknown): Promise<
     revalidatePath(`/admin/content/lessons/${parsed.targetLessonId}`);
     return {
       id: result.id,
+      copiedQuestionCount: result.copiedQuestionCount,
+      skippedQuestionCount: result.skippedQuestionCount,
+      recordingNotice: result.recordingNotice,
+    };
+  });
+}
+
+export async function copyLessonsAsStepsAction(input: unknown): Promise<
+  ActionResult<{
+    ids: string[];
+    copiedQuestionCount: number;
+    skippedQuestionCount: number;
+    recordingNotice: boolean;
+  }>
+> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(lessonsAsStepsSchema, input);
+    const result = await copyLessonsAsSteps(prisma, { actorId: auth.user.id, ...parsed });
+    if (!result.ok) failWith(result);
+    revalidateContent(undefined, parsed.targetLessonId);
+    revalidatePath(`/admin/content/lessons/${parsed.targetLessonId}`);
+    return {
+      ids: result.ids,
       copiedQuestionCount: result.copiedQuestionCount,
       skippedQuestionCount: result.skippedQuestionCount,
       recordingNotice: result.recordingNotice,

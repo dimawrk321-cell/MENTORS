@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { copyLesson, deleteLesson } from "@/lib/services/content-admin";
-import { copyLessonAsStep } from "@/lib/services/lesson-steps";
+import { copyLessonAsStep, copyLessonsAsSteps } from "@/lib/services/lesson-steps";
 import { createTestUser, resetDb, testDb } from "./helpers/db";
 
 beforeEach(async () => resetDb());
@@ -277,6 +277,85 @@ describe("копирование уроков", () => {
         title: lesson.title,
       }),
     ).resolves.toEqual({ ok: false, code: "same_lesson" });
+  });
+
+  it("добавляет несколько уроков шагами в выбранном порядке одной транзакцией", async () => {
+    const { mentor, student, category, sourceModule, targetModule } = await baseFixture();
+    const sources = await Promise.all(
+      [
+        { title: "Первый источник", slug: "batch-source-one", contentMd: "Текст первого" },
+        {
+          title: "Второй источник",
+          slug: "batch-source-two",
+          contentMd: "Текст второго",
+          videoUrl: "https://youtu.be/batch-video",
+        },
+      ].map((data) => testDb.lesson.create({ data: { moduleId: sourceModule.id, ...data } })),
+    );
+    const target = await testDb.lesson.create({
+      data: {
+        moduleId: targetModule.id,
+        title: "Целевой урок",
+        slug: "batch-target",
+        contentMd: "Сохранённый исходный материал",
+      },
+    });
+    const [sharedQuestion, firstOnlyQuestion] = await Promise.all(
+      ["Общий вопрос", "Вопрос первого"].map((textMd) =>
+        testDb.question.create({
+          data: {
+            categoryId: category.id,
+            type: "open",
+            status: "published",
+            textMd,
+            answerMd: "Ответ",
+          },
+        }),
+      ),
+    );
+    await testDb.questionLesson.createMany({
+      data: [
+        { questionId: sharedQuestion!.id, lessonId: sources[0]!.id, isKey: true },
+        { questionId: firstOnlyQuestion!.id, lessonId: sources[0]!.id, inQuiz: true },
+        { questionId: sharedQuestion!.id, lessonId: sources[1]!.id, inQuiz: true },
+      ],
+    });
+    await testDb.lessonProgress.create({
+      data: { userId: student.id, lessonId: sources[0]!.id, status: "completed" },
+    });
+
+    const result = await copyLessonsAsSteps(testDb, {
+      actorId: mentor.id,
+      targetLessonId: target.id,
+      sources: [
+        { sourceLessonId: sources[1]!.id, title: "Сначала второй" },
+        { sourceLessonId: sources[0]!.id, title: "Потом первый" },
+      ],
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      copiedQuestionCount: 2,
+      skippedQuestionCount: 1,
+      recordingNotice: false,
+    });
+    if (!result.ok) throw new Error("batch copy failed");
+
+    const steps = await testDb.lessonStep.findMany({
+      where: { lessonId: target.id },
+      orderBy: { order: "asc" },
+    });
+    expect(steps.map((step) => step.title)).toEqual(["Материал", "Сначала второй", "Потом первый"]);
+    expect(steps[0]).toMatchObject({ contentMd: "Сохранённый исходный материал" });
+    expect(steps[1]!.contentMd).toContain("https://youtu.be/batch-video");
+    expect(result.ids).toEqual([steps[1]!.id, steps[2]!.id]);
+    await expect(
+      testDb.lessonStepProgress.count({ where: { step: { lessonId: target.id } } }),
+    ).resolves.toBe(0);
+    await expect(
+      testDb.auditLog.count({
+        where: { action: "lesson_steps.copied_from_lessons", entityId: target.id },
+      }),
+    ).resolves.toBe(1);
   });
 
   it("не добавляет защищённую запись в опубликованный урок", async () => {

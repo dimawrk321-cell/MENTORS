@@ -10,6 +10,7 @@ import { InlineQuestionUnavailable } from "@/components/blocks/inline-question-s
 import { VideoEmbed } from "@/components/blocks/video-embed";
 import { Watermark } from "@/components/features/watermark";
 import { Badge } from "@/components/ui/badge";
+import { lessonStepMarkdownForDisplay } from "@/lib/utils/lesson-step-content";
 
 export const metadata: Metadata = {
   title: "Предпросмотр",
@@ -32,7 +33,8 @@ export default async function ContentPreviewPage({ params, searchParams }: Previ
   if (!lesson) notFound();
   const { step: stepId } = await searchParams;
   const step = lesson.steps.find((item) => item.id === stepId) ?? null;
-  const markdown = step?.contentMd ?? lesson.contentMd;
+  const markdown = step ? lessonStepMarkdownForDisplay(step.contentMd) : lesson.contentMd;
+  const stepIndex = step ? lesson.steps.findIndex((item) => item.id === step.id) : -1;
 
   // Заход B.1: вставленные в текст вопросы рисуются тем же компонентом, что у
   // ученика (spec 8.5 «предпросмотр идентичен виду ученика»), но отвечать в
@@ -56,7 +58,14 @@ export default async function ContentPreviewPage({ params, searchParams }: Previ
         {lesson.module.course.title} · {lesson.module.title}
       </p>
       <h1 className="text-[32px] font-semibold">{lesson.title}</h1>
-      {lesson.steps.length > 1 && step && <p className="text-text-2 mt-2 text-lg">{step.title}</p>}
+      {lesson.steps.length > 1 && step && (
+        <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-accent text-[11px] font-semibold tracking-[0.08em] uppercase">
+            Шаг {stepIndex + 1} из {lesson.steps.length}
+          </span>
+          <span className="text-text-2 text-base font-medium">{step.title}</span>
+        </p>
+      )}
       <div className="mt-2.5 mb-5 flex flex-wrap items-center gap-2">
         <Badge>{step?.readingMinutes ?? lesson.readingMinutes} мин</Badge>
         <Badge>{DIFFICULTY_LABEL[lesson.difficulty]}</Badge>

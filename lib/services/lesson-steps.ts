@@ -254,6 +254,168 @@ export async function copyLessonAsStep(
   };
 }
 
+export type CopyLessonsAsStepsResult =
+  | {
+      ok: true;
+      ids: string[];
+      copiedQuestionCount: number;
+      skippedQuestionCount: number;
+      recordingNotice: boolean;
+    }
+  | {
+      ok: false;
+      code: "not_found" | "same_lesson" | "duplicate_source" | "unsafe_recording_reference";
+    };
+
+/** Copies several lesson snapshots as ordered steps in one transaction and audit event. */
+export async function copyLessonsAsSteps(
+  db: PrismaClient,
+  input: {
+    actorId: string;
+    targetLessonId: string;
+    sources: Array<{ sourceLessonId: string; title: string }>;
+  },
+): Promise<CopyLessonsAsStepsResult> {
+  if (input.sources.length === 0) return { ok: false, code: "not_found" };
+  if (input.sources.some((source) => source.sourceLessonId === input.targetLessonId)) {
+    return { ok: false, code: "same_lesson" };
+  }
+  const sourceIds = input.sources.map((source) => source.sourceLessonId);
+  if (new Set(sourceIds).size !== sourceIds.length) {
+    return { ok: false, code: "duplicate_source" };
+  }
+
+  const result = await db.$transaction(async (tx) => {
+    const [sourceRows, target] = await Promise.all([
+      tx.lesson.findMany({
+        where: { id: { in: sourceIds } },
+        select: {
+          id: true,
+          title: true,
+          contentMd: true,
+          videoUrl: true,
+          questionLinks: {
+            orderBy: { createdAt: "asc" },
+            select: { questionId: true, isKey: true, inQuiz: true },
+          },
+        },
+      }),
+      tx.lesson.findUnique({
+        where: { id: input.targetLessonId },
+        select: {
+          id: true,
+          status: true,
+          contentMd: true,
+          steps: { orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true } },
+          questionLinks: { select: { questionId: true } },
+        },
+      }),
+    ]);
+    if (!target || sourceRows.length !== input.sources.length) {
+      return { ok: false, code: "not_found" } as const;
+    }
+    const sourceById = new Map(sourceRows.map((source) => [source.id, source]));
+    const sources = input.sources.map((selection) => ({
+      selection,
+      source: sourceById.get(selection.sourceLessonId)!,
+    }));
+    const prepared = sources.map(({ selection, source }) => ({
+      selection,
+      source,
+      contentMd: lessonMarkdownForStep(source),
+    }));
+    const recordingNotice = prepared.some((item) => hasUnsafeRecordingReference(item.contentMd));
+    if (target.status === "published" && recordingNotice) {
+      return { ok: false, code: "unsafe_recording_reference" } as const;
+    }
+
+    let enabledSteps = false;
+    if (target.steps.length === 0) {
+      await tx.lessonStep.create({
+        data: {
+          lessonId: target.id,
+          title: "Материал",
+          order: 0,
+          contentMd: target.contentMd,
+          readingMinutes: computeReadingMinutes(target.contentMd),
+        },
+      });
+      enabledSteps = true;
+    }
+
+    const existingQuestions = new Set(target.questionLinks.map((link) => link.questionId));
+    const stepIds: string[] = [];
+    let copiedQuestionCount = 0;
+    let skippedQuestionCount = 0;
+    const firstOrder = target.steps.length === 0 ? 1 : target.steps.length;
+    for (const [index, item] of prepared.entries()) {
+      const step = await tx.lessonStep.create({
+        data: {
+          lessonId: target.id,
+          title: item.selection.title,
+          order: firstOrder + index,
+          contentMd: item.contentMd,
+          readingMinutes: computeReadingMinutes(item.contentMd),
+        },
+      });
+      stepIds.push(step.id);
+
+      const questionLinks = item.source.questionLinks.filter(
+        (link) => !existingQuestions.has(link.questionId),
+      );
+      questionLinks.forEach((link) => existingQuestions.add(link.questionId));
+      let createdQuestionCount = 0;
+      if (questionLinks.length > 0) {
+        const created = await tx.questionLesson.createMany({
+          data: questionLinks.map((link) => ({
+            questionId: link.questionId,
+            lessonId: target.id,
+            stepId: step.id,
+            isKey: link.isKey,
+            inQuiz: link.inQuiz,
+          })),
+          skipDuplicates: true,
+        });
+        createdQuestionCount = created.count;
+        copiedQuestionCount += createdQuestionCount;
+      }
+      skippedQuestionCount += item.source.questionLinks.length - createdQuestionCount;
+    }
+
+    await syncLessonAggregate(tx, target.id);
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "lesson_steps.copied_from_lessons",
+      entityType: "lesson",
+      entityId: target.id,
+      after: {
+        sourceLessonIds: sourceIds,
+        stepIds,
+        enabledSteps,
+        copiedQuestionCount,
+        skippedQuestionCount,
+      },
+    });
+    return {
+      ok: true,
+      ids: stepIds,
+      copiedQuestionCount,
+      skippedQuestionCount,
+      recordingNotice,
+      targetPublished: target.status === "published",
+    } as const;
+  });
+  if (!result.ok) return result;
+  if (result.targetPublished) await notifyLessonUpdated(db, input.targetLessonId);
+  return {
+    ok: true,
+    ids: [...result.ids],
+    copiedQuestionCount: result.copiedQuestionCount,
+    skippedQuestionCount: result.skippedQuestionCount,
+    recordingNotice: result.recordingNotice,
+  };
+}
+
 /** Content autosave is intentionally not audited; title changes are audited by the caller action. */
 export async function saveLessonStep(
   db: PrismaClient,

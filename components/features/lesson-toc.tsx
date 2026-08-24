@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ListTree } from "lucide-react";
+import Link from "next/link";
+import { Check, ListTree } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -73,6 +74,72 @@ function TocLinks({
   );
 }
 
+export interface LessonOutlineStep {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+function StepLinks({
+  lessonId,
+  steps,
+  activeStepId,
+  onNavigate,
+}: {
+  lessonId: string;
+  steps: readonly LessonOutlineStep[];
+  activeStepId: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <ol className="flex flex-col gap-1">
+      {steps.map((step, index) => {
+        const active = step.id === activeStepId;
+        return (
+          <li key={step.id}>
+            <Link
+              href={`/lessons/${lessonId}?step=${step.id}`}
+              onClick={onNavigate}
+              aria-current={active ? "step" : undefined}
+              className={cn(
+                "ease-app grid grid-cols-[24px_minmax(0,1fr)] gap-2 rounded-lg border px-2.5 py-2 transition-colors duration-150",
+                active
+                  ? "border-accent/55 bg-accent/10 text-text-1"
+                  : "text-text-2 hover:border-border hover:bg-surface-2 hover:text-text-1 border-transparent",
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 flex size-5 items-center justify-center rounded-full text-[11px] tabular-nums",
+                  step.completed
+                    ? "bg-success/15 text-success"
+                    : active
+                      ? "bg-accent/20 text-accent"
+                      : "bg-surface-2 text-text-3",
+                )}
+              >
+                {step.completed ? (
+                  <Check size={12} strokeWidth={2.25} aria-hidden="true" />
+                ) : (
+                  index + 1
+                )}
+              </span>
+              <span className="min-w-0">
+                <span className="text-text-3 block text-[10px] font-semibold tracking-[0.06em] uppercase">
+                  Шаг {index + 1}
+                </span>
+                <span className="mt-0.5 block text-[13px] leading-snug font-medium break-words">
+                  {step.title}
+                </span>
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function ReadCounter({ className }: { className?: string }) {
   const { fraction } = useReadingTracker();
   const percent = readingPercent(fraction);
@@ -87,25 +154,49 @@ function ReadCounter({ className }: { className?: string }) {
 export function LessonTocRail({
   headings,
   title = "В этом уроке",
+  lessonId,
+  steps = [],
+  activeStepId,
 }: {
   headings: ReadingHeading[];
   title?: string;
+  lessonId?: string;
+  steps?: LessonOutlineStep[];
+  activeStepId?: string;
 }) {
   const { activeId } = useReadingTracker();
+  const hasStepNavigation = Boolean(lessonId && activeStepId && steps.length > 1);
+  const hasToc = headings.length >= 2;
   // Материал без заголовков оглавления не получает — но колонку СОХРАНЯЕТ пустой
   // и невидимой: иначе читальная колонка прыгала бы по горизонтали при переходе
   // между соседними главами раздела (одна с заголовками, другая без).
-  if (headings.length < 2) {
+  if (!hasToc && !hasStepNavigation) {
     return <aside aria-hidden="true" className="hidden w-56 shrink-0 min-[1264px]:block" />;
   }
   return (
     <aside className="sticky top-[76px] hidden max-h-[calc(100dvh-7rem)] w-56 shrink-0 flex-col self-start min-[1264px]:flex">
-      <p className="text-text-3 mb-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase">
-        {title}
-      </p>
-      <nav aria-label={title} className="min-h-0 flex-1 overflow-y-auto">
-        <TocLinks headings={headings} activeId={activeId} />
-      </nav>
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        {hasToc && (
+          <section>
+            <p className="text-text-3 mb-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase">
+              {title}
+            </p>
+            <nav aria-label={title}>
+              <TocLinks headings={headings} activeId={activeId} />
+            </nav>
+          </section>
+        )}
+        {hasStepNavigation && lessonId && activeStepId && (
+          <section className={cn(hasToc && "border-border mt-4 border-t pt-4")}>
+            <p className="text-text-3 mb-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase">
+              Шаги урока
+            </p>
+            <nav aria-label="Шаги урока">
+              <StepLinks lessonId={lessonId} steps={steps} activeStepId={activeStepId} />
+            </nav>
+          </section>
+        )}
+      </div>
       <ReadCounter className="mt-3" />
     </aside>
   );
@@ -114,13 +205,22 @@ export function LessonTocRail({
 export function LessonTocSheet({
   headings,
   title = "В этом уроке",
+  lessonId,
+  steps = [],
+  activeStepId,
 }: {
   headings: ReadingHeading[];
   title?: string;
+  lessonId?: string;
+  steps?: LessonOutlineStep[];
+  activeStepId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const { activeId } = useReadingTracker();
-  if (headings.length < 2) return null;
+  const hasStepNavigation = Boolean(lessonId && activeStepId && steps.length > 1);
+  const hasToc = headings.length >= 2;
+  if (!hasToc && !hasStepNavigation) return null;
+  const activeStepIndex = steps.findIndex((step) => step.id === activeStepId);
 
   return (
     <div className="min-[1264px]:hidden">
@@ -128,14 +228,41 @@ export function LessonTocSheet({
         <SheetTrigger asChild>
           <Button variant="secondary" size="sm">
             <ListTree size={15} strokeWidth={1.75} aria-hidden="true" />
-            Оглавление
+            {hasStepNavigation && activeStepIndex >= 0
+              ? `Шаг ${activeStepIndex + 1} из ${steps.length}`
+              : "Оглавление"}
           </Button>
         </SheetTrigger>
         <SheetContent>
-          <SheetTitle>{title}</SheetTitle>
-          <nav aria-label={title}>
-            <TocLinks headings={headings} activeId={activeId} onNavigate={() => setOpen(false)} />
-          </nav>
+          <SheetTitle>{hasStepNavigation ? "Шаги урока" : title}</SheetTitle>
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+            {hasStepNavigation && lessonId && activeStepId && (
+              <nav aria-label="Шаги урока">
+                <StepLinks
+                  lessonId={lessonId}
+                  steps={steps}
+                  activeStepId={activeStepId}
+                  onNavigate={() => setOpen(false)}
+                />
+              </nav>
+            )}
+            {hasToc && (
+              <section className={cn(hasStepNavigation && "border-border mt-5 border-t pt-5")}>
+                {hasStepNavigation && (
+                  <p className="text-text-3 mb-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase">
+                    {title}
+                  </p>
+                )}
+                <nav aria-label={title}>
+                  <TocLinks
+                    headings={headings}
+                    activeId={activeId}
+                    onNavigate={() => setOpen(false)}
+                  />
+                </nav>
+              </section>
+            )}
+          </div>
           <ReadCounter className="mt-4" />
         </SheetContent>
       </Sheet>

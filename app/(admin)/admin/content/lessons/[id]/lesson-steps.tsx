@@ -16,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -35,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import {
   copyLessonAction,
-  copyLessonAsStepAction,
+  copyLessonsAsStepsAction,
   createLessonStepAction,
   deleteLessonStepAction,
   moveLessonStepAction,
@@ -85,7 +86,7 @@ export function LessonSteps({
   const [copyTargetModuleId, setCopyTargetModuleId] = useState(moduleId);
   const [importOpen, setImportOpen] = useState(false);
   const [sourceQuery, setSourceQuery] = useState("");
-  const [sourceLessonId, setSourceLessonId] = useState("");
+  const [sourceLessonIds, setSourceLessonIds] = useState<string[]>([]);
   const [importTitle, setImportTitle] = useState("");
 
   function run(
@@ -110,7 +111,22 @@ export function LessonSteps({
         item.label.toLocaleLowerCase("ru").includes(normalizedQuery),
       )
     : availableSources;
-  const selectedSource = availableSources.find((item) => item.id === sourceLessonId) ?? null;
+  const selectedSources = sourceLessonIds.flatMap((id) => {
+    const source = availableSources.find((item) => item.id === id);
+    return source ? [source] : [];
+  });
+
+  function toggleSource(source: (typeof availableSources)[number]) {
+    const nextIds = sourceLessonIds.includes(source.id)
+      ? sourceLessonIds.filter((id) => id !== source.id)
+      : [...sourceLessonIds, source.id];
+    setSourceLessonIds(nextIds);
+    if (nextIds.length === 1) {
+      setImportTitle(availableSources.find((item) => item.id === nextIds[0])?.title ?? "");
+    } else {
+      setImportTitle("");
+    }
+  }
 
   const reuseButtons = (
     <div className="flex flex-wrap items-center gap-2">
@@ -131,7 +147,7 @@ export function LessonSteps({
         disabled={availableSources.length === 0}
         onClick={() => {
           setSourceQuery("");
-          setSourceLessonId("");
+          setSourceLessonIds([]);
           setImportTitle("");
           setImportOpen(true);
         }}
@@ -223,8 +239,8 @@ export function LessonSteps({
           <DialogHeader>
             <DialogTitle>Добавить урок как шаг</DialogTitle>
             <DialogDescription>
-              В текущий урок добавится независимая копия материала, видео и вопросов. Исходный урок
-              останется без изменений.
+              Выбери один или несколько уроков. Они добавятся в текущий урок независимыми шагами
+              вместе с материалом, видео и вопросами; источники останутся без изменений.
             </DialogDescription>
           </DialogHeader>
           {lessonStatus === "published" && (
@@ -243,29 +259,39 @@ export function LessonSteps({
             />
             <div className="border-border max-h-64 overflow-y-auto rounded-lg border p-1">
               {filteredSources.length > 0 ? (
-                filteredSources.map((source) => (
-                  <button
-                    key={source.id}
-                    type="button"
-                    onClick={() => {
-                      setSourceLessonId(source.id);
-                      setImportTitle(source.title);
-                    }}
-                    className={cn(
-                      "rounded-control w-full px-3 py-2 text-left text-sm transition-colors",
-                      source.id === sourceLessonId
-                        ? "bg-accent/12 text-text-1"
-                        : "text-text-2 hover:bg-surface-2 hover:text-text-1",
-                    )}
-                  >
-                    {source.label}
-                  </button>
-                ))
+                filteredSources.map((source) => {
+                  const selectedIndex = sourceLessonIds.indexOf(source.id);
+                  const selected = selectedIndex >= 0;
+                  return (
+                    <label
+                      key={source.id}
+                      className={cn(
+                        "rounded-control flex w-full cursor-pointer items-start gap-3 px-3 py-2.5 text-left text-sm transition-colors",
+                        selected
+                          ? "bg-accent/12 text-text-1"
+                          : "text-text-2 hover:bg-surface-2 hover:text-text-1",
+                      )}
+                    >
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={() => toggleSource(source)}
+                        aria-label={`Выбрать урок ${source.title}`}
+                        className="mt-0.5"
+                      />
+                      <span className="min-w-0 flex-1 break-words">{source.label}</span>
+                      {selected && (
+                        <span className="bg-accent/15 text-accent flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums">
+                          {selectedIndex + 1}
+                        </span>
+                      )}
+                    </label>
+                  );
+                })
               ) : (
                 <p className="text-text-3 px-3 py-6 text-center text-sm">Ничего не найдено</p>
               )}
             </div>
-            {selectedSource && (
+            {selectedSources.length === 1 && (
               <label className="flex flex-col gap-1.5 text-sm">
                 <span className="text-text-2">Название нового шага</span>
                 <Input
@@ -276,6 +302,20 @@ export function LessonSteps({
                 />
               </label>
             )}
+            {selectedSources.length > 1 && (
+              <div className="border-border bg-surface-2 rounded-lg border p-3">
+                <p className="text-text-2 text-sm font-medium">
+                  Порядок добавления · {selectedSources.length}
+                </p>
+                <ol className="text-text-3 mt-2 flex max-h-32 list-decimal flex-col gap-1 overflow-y-auto pl-5 text-xs">
+                  {selectedSources.map((source) => (
+                    <li key={source.id} className="pl-1">
+                      {source.label}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setImportOpen(false)}>
@@ -283,25 +323,30 @@ export function LessonSteps({
             </Button>
             <Button
               loading={pending}
-              disabled={!sourceLessonId || !importTitle.trim()}
+              disabled={
+                selectedSources.length === 0 ||
+                (selectedSources.length === 1 && !importTitle.trim())
+              }
               onClick={() =>
                 run(
                   () =>
-                    copyLessonAsStepAction({
-                      sourceLessonId,
+                    copyLessonsAsStepsAction({
                       targetLessonId: lessonId,
-                      title: importTitle,
+                      sources: selectedSources.map((source) => ({
+                        sourceLessonId: source.id,
+                        title: selectedSources.length === 1 ? importTitle : source.title,
+                      })),
                     }),
                   (data) => {
                     const result = data as {
-                      id: string;
+                      ids: string[];
                       copiedQuestionCount: number;
                       skippedQuestionCount: number;
                       recordingNotice: boolean;
                     };
                     setImportOpen(false);
                     toast({
-                      title: "Урок добавлен как шаг",
+                      title: `Добавлено шагов: ${result.ids.length}`,
                       description:
                         `Вопросов перенесено: ${result.copiedQuestionCount}` +
                         (result.skippedQuestionCount > 0
@@ -309,12 +354,15 @@ export function LessonSteps({
                           : ""),
                       variant: result.recordingNotice ? "warning" : "success",
                     });
-                    router.push(`/admin/content/lessons/${lessonId}?step=${result.id}`);
+                    const firstStepId = result.ids[0];
+                    if (firstStepId) {
+                      router.push(`/admin/content/lessons/${lessonId}?step=${firstStepId}`);
+                    }
                   },
                 )
               }
             >
-              Добавить шаг
+              Добавить выбранные ({selectedSources.length})
             </Button>
           </DialogFooter>
         </DialogContent>
