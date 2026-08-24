@@ -29,6 +29,7 @@ import {
   makeModuleTestHook,
   type ModuleTestState,
 } from "@/lib/services/tests";
+import { withLessonStepAccess } from "@/lib/utils/lesson-step-access";
 
 // Student-facing content domain (spec 7.3): course/module/lesson reading model,
 // gating, reading positions, completion, content reports. The admin studio
@@ -203,6 +204,7 @@ export interface LessonView {
     readingMinutes: number;
     completedAt: Date | null;
     scrollPos: number | null;
+    unlocked: boolean;
   }[];
   /**
    * Позиция урока в СВОЁМ модуле для шапки «Урок X из Y» и сегментированного
@@ -293,6 +295,17 @@ export async function getLessonView(
       })
     : [];
   const stepProgressById = new Map(stepProgress.map((progress) => [progress.stepId, progress]));
+  const lessonSteps = withLessonStepAccess(
+    lesson.steps.map((step) => ({
+      id: step.id,
+      title: step.title,
+      order: step.order,
+      contentMd: step.contentMd,
+      readingMinutes: step.readingMinutes,
+      completedAt: stepProgressById.get(step.id)?.completedAt ?? progressRow?.completedAt ?? null,
+      scrollPos: stepProgressById.get(step.id)?.scrollPos ?? null,
+    })),
+  );
 
   // «Урок X из Y» считается по модулю, а не по курсу: модуль — это глава, и его
   // 1–14 уроков ложатся в сегментированный индикатор, тогда как курс целиком
@@ -341,15 +354,7 @@ export async function getLessonView(
       selectedPath: progressRow?.selectedPath ?? null,
       completedAt: progressRow?.completedAt ?? null,
     },
-    lessonSteps: lesson.steps.map((step) => ({
-      id: step.id,
-      title: step.title,
-      order: step.order,
-      contentMd: step.contentMd,
-      readingMinutes: step.readingMinutes,
-      completedAt: stepProgressById.get(step.id)?.completedAt ?? progressRow?.completedAt ?? null,
-      scrollPos: stepProgressById.get(step.id)?.scrollPos ?? null,
-    })),
+    lessonSteps,
     position: {
       index: steps.findIndex((s) => s.current) + 1,
       total: steps.length,

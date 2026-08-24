@@ -22,8 +22,13 @@ export function CompleteLessonStepButton({
 }) {
   const router = useRouter();
   const viewOnly = useViewOnly();
-  const [done, setDone] = useState(completed);
+  const [optimisticallyCompletedStepId, setOptimisticallyCompletedStepId] = useState<string | null>(
+    null,
+  );
   const [pending, startTransition] = useTransition();
+  // If the client component survives navigation, the optimistic state is tied
+  // to its original step id and cannot leak into the next unfinished step.
+  const done = completed || optimisticallyCompletedStepId === stepId;
 
   if (done && nextStepId) {
     return (
@@ -62,7 +67,7 @@ export function CompleteLessonStepButton({
             if (result) toast({ title: result.error.message, variant: "danger" });
             return;
           }
-          setDone(true);
+          setOptimisticallyCompletedStepId(stepId);
           router.refresh();
         })
       }

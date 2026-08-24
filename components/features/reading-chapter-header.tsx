@@ -12,6 +12,8 @@ export interface ReadingChapterHeaderProps {
   index: number;
   total: number;
   segments: readonly ProgressSegment[];
+  /** Steps inside the current lesson; its outer lesson tick is subdivided. */
+  currentSegments?: readonly ProgressSegment[];
   className?: string;
 }
 
@@ -20,6 +22,7 @@ export function ReadingChapterHeader({
   index,
   total,
   segments,
+  currentSegments,
   className,
 }: ReadingChapterHeaderProps) {
   if (total < 2) return null;
@@ -29,7 +32,15 @@ export function ReadingChapterHeader({
       <span className="text-text-3 text-[11px] font-semibold tracking-[0.08em] uppercase tabular-nums">
         {label}
       </span>
-      <SegmentedProgress segments={segments} aria-label={label} />
+      <SegmentedProgress
+        segments={segments}
+        expandedSegment={
+          currentSegments && currentSegments.length > 1
+            ? { index: index - 1, segments: currentSegments }
+            : undefined
+        }
+        aria-label={label}
+      />
     </div>
   );
 }

@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { LessonTocRail, LessonTocSheet } from "@/components/features/lesson-toc";
 
 const STEPS = [
-  { id: "step-1", title: "Материал", completed: true },
-  { id: "step-2", title: "Практика", completed: false },
-  { id: "step-3", title: "Итоги", completed: false },
+  { id: "step-1", title: "Материал", completed: true, unlocked: true },
+  { id: "step-2", title: "Практика", completed: false, unlocked: true },
+  { id: "step-3", title: "Итоги", completed: false, unlocked: false },
 ];
 
 describe("ученическая навигация по шагам", () => {
@@ -28,6 +28,9 @@ describe("ученическая навигация по шагам", () => {
     expect(html).toContain('aria-current="step"');
     expect(html).toContain('href="/lessons/lesson-1?step=step-2"');
     expect(html).toContain("Шаг 2");
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).not.toContain('href="/lessons/lesson-1?step=step-3"');
+    expect(html).toContain("[scrollbar-width:none]");
     expect(html).not.toContain("overflow-x-auto");
   });
 

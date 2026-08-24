@@ -74,6 +74,13 @@ describe("шаги урока", () => {
       title: "Практика",
     });
 
+    await expect(getLessonView(testDb, lesson.id, student.id)).resolves.toMatchObject({
+      lessonSteps: [
+        { id: first.id, unlocked: true, completedAt: null },
+        { id: second.id, unlocked: false, completedAt: null },
+      ],
+    });
+
     expect(
       await completeLessonStep(testDb, {
         userId: student.id,
@@ -100,6 +107,12 @@ describe("шаги урока", () => {
         where: { userId_lessonId: { userId: student.id, lessonId: lesson.id } },
       }),
     ).toBeNull();
+    await expect(getLessonView(testDb, lesson.id, student.id)).resolves.toMatchObject({
+      lessonSteps: [
+        { id: first.id, unlocked: true },
+        { id: second.id, unlocked: true },
+      ],
+    });
 
     const final = await completeLessonStep(testDb, {
       userId: student.id,
@@ -114,6 +127,36 @@ describe("шаги урока", () => {
         })
       )?.status,
     ).toBe("completed");
+    await expect(getLessonView(testDb, lesson.id, student.id)).resolves.toMatchObject({
+      lessonSteps: [
+        { id: first.id, unlocked: true },
+        { id: second.id, unlocked: true },
+      ],
+    });
+  });
+
+  it("сохраняет совместимость старого завершённого урока после добавления шагов", async () => {
+    const { mentor, student, lesson } = await fixture();
+    await testDb.lessonProgress.create({
+      data: {
+        userId: student.id,
+        lessonId: lesson.id,
+        status: "completed",
+        completedAt: new Date("2026-08-24T10:00:00Z"),
+      },
+    });
+    await splitLessonIntoSteps(testDb, { actorId: mentor.id, lessonId: lesson.id });
+    await createLessonStep(testDb, {
+      actorId: mentor.id,
+      lessonId: lesson.id,
+      title: "Добавленный позже шаг",
+    });
+
+    const view = await getLessonView(testDb, lesson.id, student.id);
+    expect(view?.lessonSteps).toHaveLength(2);
+    expect(view?.lessonSteps.every((step) => step.completedAt !== null && step.unlocked)).toBe(
+      true,
+    );
   });
 
   it("не позволяет вынести из урока последний шаг", async () => {

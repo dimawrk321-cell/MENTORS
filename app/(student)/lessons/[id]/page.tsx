@@ -33,6 +33,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { ProgressSegment } from "@/components/ui/progress-bar";
 import { lessonDurationLabel } from "@/lib/utils/lesson-path";
+import { resolveAccessibleLessonStep } from "@/lib/utils/lesson-step-access";
 import { lessonStepMarkdownForDisplay } from "@/lib/utils/lesson-step-content";
 import { isPlayableVideoUrl } from "@/lib/utils/youtube";
 
@@ -98,11 +99,12 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
 
   const { step: requestedStepId } = (await searchParams) ?? {};
   const hasMultipleSteps = view.lessonSteps.length > 1;
-  const activeStep =
-    view.lessonSteps.find((step) => step.id === requestedStepId) ??
-    view.lessonSteps.find((step) => step.completedAt === null) ??
-    view.lessonSteps[0] ??
-    null;
+  const activeStep = resolveAccessibleLessonStep(view.lessonSteps, requestedStepId);
+  // Keep the active step stable after router.refresh() and prevent a direct URL
+  // from opening a future step before its predecessors are completed.
+  if (hasMultipleSteps && activeStep && requestedStepId !== activeStep.id) {
+    redirect(`/lessons/${view.lesson.id}?step=${encodeURIComponent(activeStep.id)}`);
+  }
   const activeStepIndex = activeStep
     ? view.lessonSteps.findIndex((step) => step.id === activeStep.id)
     : -1;
@@ -114,6 +116,7 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
     id: step.id,
     title: step.title,
     completed: step.completedAt !== null,
+    unlocked: step.unlocked,
   }));
 
   // Заход B.1: вопросы, вставленные в текст директивами, грузятся ОДНИМ
@@ -169,6 +172,15 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
   const segments: ProgressSegment[] = view.position.steps.map((step) =>
     step.current ? "current" : step.completed ? "done" : step.unlocked ? "todo" : "locked",
   );
+  const stepSegments: ProgressSegment[] = view.lessonSteps.map((step) =>
+    step.id === activeStep?.id
+      ? "current"
+      : step.completedAt !== null
+        ? "done"
+        : step.unlocked
+          ? "todo"
+          : "locked",
+  );
 
   // В составном уроке нижние карточки ведут по шагам. Только на границах
   // возвращаем соседний урок — так ученик не перескакивает через материал.
@@ -183,13 +195,13 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
     : view.prev && view.prev.unlocked
       ? { href: `/lessons/${view.prev.id}`, title: view.prev.title, kicker: "Предыдущий урок" }
       : null;
-  const nextNav: ReadingNavItem | null = nextStep
+  const nextNav: ReadingNavItem | null = nextStep?.unlocked
     ? {
         href: `/lessons/${view.lesson.id}?step=${nextStep.id}`,
         title: nextStep.title,
         kicker: "Следующий шаг",
       }
-    : view.next
+    : !nextStep && activeStep?.completedAt !== null && view.next
       ? {
           href: `/lessons/${view.next.id}`,
           title: view.next.title,
@@ -240,6 +252,7 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
             index={view.position.index}
             total={view.position.total}
             segments={segments}
+            currentSegments={hasMultipleSteps ? stepSegments : undefined}
           />
 
           <h1 className="text-[32px] leading-[1.2] font-semibold tracking-[-0.02em]">
@@ -306,6 +319,7 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
             <div className="flex justify-center">
               {hasMultipleSteps && activeStep ? (
                 <CompleteLessonStepButton
+                  key={activeStep.id}
                   lessonId={view.lesson.id}
                   stepId={activeStep.id}
                   nextStepId={view.lessonSteps[activeStepIndex + 1]?.id ?? null}

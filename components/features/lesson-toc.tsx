@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, ListTree } from "lucide-react";
+import { Check, ListTree, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -78,6 +78,7 @@ export interface LessonOutlineStep {
   id: string;
   title: string;
   completed: boolean;
+  unlocked: boolean;
 }
 
 function StepLinks({
@@ -91,48 +92,71 @@ function StepLinks({
   activeStepId: string;
   onNavigate?: () => void;
 }) {
+  const activeStepRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    activeStepRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeStepId]);
+
   return (
     <ol className="flex flex-col gap-1">
       {steps.map((step, index) => {
         const active = step.id === activeStepId;
-        return (
-          <li key={step.id}>
-            <Link
-              href={`/lessons/${lessonId}?step=${step.id}`}
-              onClick={onNavigate}
-              aria-current={active ? "step" : undefined}
+        const content = (
+          <>
+            <span
               className={cn(
-                "ease-app grid grid-cols-[24px_minmax(0,1fr)] gap-2 rounded-lg border px-2.5 py-2 transition-colors duration-150",
-                active
-                  ? "border-accent/55 bg-accent/10 text-text-1"
-                  : "text-text-2 hover:border-border hover:bg-surface-2 hover:text-text-1 border-transparent",
+                "mt-0.5 flex size-5 items-center justify-center rounded-full text-[11px] tabular-nums",
+                step.completed
+                  ? "bg-success/15 text-success"
+                  : active
+                    ? "bg-accent/20 text-accent"
+                    : "bg-surface-2 text-text-3",
               )}
             >
-              <span
+              {step.completed ? (
+                <Check size={12} strokeWidth={2.25} aria-hidden="true" />
+              ) : step.unlocked ? (
+                index + 1
+              ) : (
+                <Lock size={11} strokeWidth={1.8} aria-hidden="true" />
+              )}
+            </span>
+            <span className="min-w-0">
+              <span className="text-text-3 block text-[10px] font-semibold tracking-[0.06em] uppercase">
+                Шаг {index + 1}
+              </span>
+              <span className="mt-0.5 block text-[13px] leading-snug font-medium break-words">
+                {step.title}
+              </span>
+            </span>
+          </>
+        );
+        return (
+          <li key={step.id} ref={active ? activeStepRef : undefined}>
+            {step.unlocked ? (
+              <Link
+                href={`/lessons/${lessonId}?step=${step.id}`}
+                onClick={onNavigate}
+                aria-current={active ? "step" : undefined}
                 className={cn(
-                  "mt-0.5 flex size-5 items-center justify-center rounded-full text-[11px] tabular-nums",
-                  step.completed
-                    ? "bg-success/15 text-success"
-                    : active
-                      ? "bg-accent/20 text-accent"
-                      : "bg-surface-2 text-text-3",
+                  "ease-app grid grid-cols-[24px_minmax(0,1fr)] gap-2 rounded-lg border px-2.5 py-2 transition-colors duration-150",
+                  active
+                    ? "border-accent/55 bg-accent/10 text-text-1"
+                    : "text-text-2 hover:border-border hover:bg-surface-2 hover:text-text-1 border-transparent",
                 )}
               >
-                {step.completed ? (
-                  <Check size={12} strokeWidth={2.25} aria-hidden="true" />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <span className="min-w-0">
-                <span className="text-text-3 block text-[10px] font-semibold tracking-[0.06em] uppercase">
-                  Шаг {index + 1}
-                </span>
-                <span className="mt-0.5 block text-[13px] leading-snug font-medium break-words">
-                  {step.title}
-                </span>
-              </span>
-            </Link>
+                {content}
+              </Link>
+            ) : (
+              <div
+                aria-disabled="true"
+                title="Сначала заверши предыдущий шаг"
+                className="text-text-3 grid cursor-not-allowed grid-cols-[24px_minmax(0,1fr)] gap-2 rounded-lg border border-transparent px-2.5 py-2 opacity-60"
+              >
+                {content}
+              </div>
+            )}
           </li>
         );
       })}
@@ -175,9 +199,16 @@ export function LessonTocRail({
   }
   return (
     <aside className="sticky top-[76px] hidden max-h-[calc(100dvh-7rem)] w-56 shrink-0 flex-col self-start min-[1264px]:flex">
-      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+      <div className="flex min-h-0 flex-1 flex-col pr-1">
         {hasToc && (
-          <section>
+          <section
+            className={cn(
+              "[scrollbar-width:none] overscroll-contain [&::-webkit-scrollbar]:hidden",
+              hasStepNavigation
+                ? "max-h-[42%] shrink-0 overflow-y-auto"
+                : "min-h-0 flex-1 overflow-y-auto",
+            )}
+          >
             <p className="text-text-3 mb-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase">
               {title}
             </p>
@@ -187,11 +218,19 @@ export function LessonTocRail({
           </section>
         )}
         {hasStepNavigation && lessonId && activeStepId && (
-          <section className={cn(hasToc && "border-border mt-4 border-t pt-4")}>
+          <section
+            className={cn(
+              "flex min-h-0 flex-1 flex-col",
+              hasToc && "border-border mt-4 border-t pt-4",
+            )}
+          >
             <p className="text-text-3 mb-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase">
               Шаги урока
             </p>
-            <nav aria-label="Шаги урока">
+            <nav
+              aria-label="Шаги урока"
+              className="min-h-0 flex-1 [scrollbar-width:none] overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:hidden"
+            >
               <StepLinks lessonId={lessonId} steps={steps} activeStepId={activeStepId} />
             </nav>
           </section>
@@ -235,7 +274,7 @@ export function LessonTocSheet({
         </SheetTrigger>
         <SheetContent>
           <SheetTitle>{hasStepNavigation ? "Шаги урока" : title}</SheetTitle>
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="mt-4 min-h-0 flex-1 [scrollbar-width:none] overflow-y-auto overscroll-contain pr-1 [&::-webkit-scrollbar]:hidden">
             {hasStepNavigation && lessonId && activeStepId && (
               <nav aria-label="Шаги урока">
                 <StepLinks

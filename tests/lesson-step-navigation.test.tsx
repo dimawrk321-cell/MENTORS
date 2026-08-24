@@ -25,4 +25,19 @@ describe("lesson step navigation", () => {
     expect(html).toContain('href="/lessons/lesson-1?step=step-2"');
     expect(html).toContain("Следующий шаг");
   });
+
+  it("не предлагает следующий шаг, пока текущий не завершён", () => {
+    const html = renderToStaticMarkup(
+      <CompleteLessonStepButton
+        lessonId="lesson-1"
+        stepId="step-1"
+        nextStepId="step-2"
+        completed={false}
+      />,
+    );
+
+    expect(html).toContain("Завершить шаг");
+    expect(html).not.toContain("Следующий шаг");
+    expect(html).not.toContain('href="/lessons/lesson-1?step=step-2"');
+  });
 });

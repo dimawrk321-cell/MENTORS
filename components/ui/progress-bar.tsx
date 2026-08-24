@@ -62,10 +62,13 @@ const MAX_SEGMENTS = 24;
  */
 export function SegmentedProgress({
   segments,
+  expandedSegment,
   className,
   "aria-label": ariaLabel,
 }: {
   segments: readonly ProgressSegment[];
+  /** Split one outer tick into the steps of the current lesson. */
+  expandedSegment?: { index: number; segments: readonly ProgressSegment[] };
   className?: string;
   "aria-label": string;
 }) {
@@ -87,13 +90,38 @@ export function SegmentedProgress({
       aria-label={ariaLabel}
       className={cn("flex w-full items-center gap-1", className)}
     >
-      {segments.map((state, index) => (
-        <span
-          key={index}
-          className={cn("rounded-pill h-1 min-w-1.5 flex-1", segmentClasses[state])}
-          style={state === "current" ? { backgroundImage: "var(--gradient-accent)" } : undefined}
-        />
-      ))}
+      {segments.map((state, index) => {
+        if (expandedSegment?.index === index && expandedSegment.segments.length > 1) {
+          return (
+            <span
+              key={index}
+              data-expanded-progress-segment="true"
+              className="rounded-pill flex h-1 min-w-1.5 flex-1 gap-px overflow-hidden"
+              aria-hidden="true"
+            >
+              {expandedSegment.segments.map((innerState, innerIndex) => (
+                <span
+                  key={innerIndex}
+                  data-step-progress-segment={innerState}
+                  className={cn("h-full min-w-px flex-1", segmentClasses[innerState])}
+                  style={
+                    innerState === "current"
+                      ? { backgroundImage: "var(--gradient-accent)" }
+                      : undefined
+                  }
+                />
+              ))}
+            </span>
+          );
+        }
+        return (
+          <span
+            key={index}
+            className={cn("rounded-pill h-1 min-w-1.5 flex-1", segmentClasses[state])}
+            style={state === "current" ? { backgroundImage: "var(--gradient-accent)" } : undefined}
+          />
+        );
+      })}
     </div>
   );
 }
