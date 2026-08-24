@@ -46,15 +46,35 @@ export default async function LessonEditorPage({ params, searchParams }: EditorP
     // привязкам урока/модуля/курса (связи «курс ↔ категории банка» пусты).
     suggestQuestionCategory(prisma, lesson.id),
   ]);
-  const courseModules = await prisma.module.findMany({
-    where: { courseId: lesson.module.course.id },
-    orderBy: { order: "asc" },
-    select: {
-      id: true,
-      title: true,
-      lessons: { orderBy: { order: "asc" }, select: { id: true, title: true } },
-    },
-  });
+  const [courseModules, allCourseContent] = await Promise.all([
+    prisma.module.findMany({
+      where: { courseId: lesson.module.course.id },
+      orderBy: { order: "asc" },
+      select: {
+        id: true,
+        title: true,
+        lessons: { orderBy: { order: "asc" }, select: { id: true, title: true } },
+      },
+    }),
+    prisma.course.findMany({
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        modules: {
+          orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+          select: {
+            id: true,
+            title: true,
+            lessons: {
+              orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+              select: { id: true, title: true },
+            },
+          },
+        },
+      },
+    }),
+  ]);
   // Root categories + children for the «+ Добавить вопрос» filter (13.6);
   // the service expands a root to its family, so either level works.
   const categories = categoryTree.flatMap((root) => [
@@ -66,12 +86,29 @@ export default async function LessonEditorPage({ params, searchParams }: EditorP
     <div className="flex flex-col gap-4">
       <LessonSteps
         lessonId={lesson.id}
+        lessonTitle={lesson.title}
+        lessonStatus={lesson.status}
         moduleId={lesson.moduleId}
         steps={lesson.steps}
         activeStepId={activeStep?.id ?? null}
         modules={courseModules.map((module) => ({ id: module.id, title: module.title }))}
         lessons={courseModules.flatMap((module) =>
           module.lessons.map((item) => ({ id: item.id, title: `${module.title} · ${item.title}` })),
+        )}
+        copyTargets={allCourseContent.flatMap((course) =>
+          course.modules.map((module) => ({
+            id: module.id,
+            title: `${course.title} · ${module.title}`,
+          })),
+        )}
+        lessonSources={allCourseContent.flatMap((course) =>
+          course.modules.flatMap((module) =>
+            module.lessons.map((item) => ({
+              id: item.id,
+              title: item.title,
+              label: `${course.title} · ${module.title} · ${item.title}`,
+            })),
+          ),
         )}
       />
       <LessonEditor

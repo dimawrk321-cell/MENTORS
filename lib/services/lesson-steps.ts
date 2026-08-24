@@ -34,6 +34,17 @@ async function syncLessonAggregate(tx: Tx, lessonId: string): Promise<void> {
   });
 }
 
+function lessonMarkdownForStep(source: {
+  title: string;
+  contentMd: string;
+  videoUrl: string | null;
+}): string {
+  const video = source.videoUrl
+    ? `:::video{url=${JSON.stringify(source.videoUrl)} title=${JSON.stringify(source.title)}}\n:::`
+    : "";
+  return [video, source.contentMd.trim()].filter(Boolean).join("\n\n");
+}
+
 /** Converts a legacy lesson only when the mentor explicitly asks to split it. */
 export async function splitLessonIntoSteps(
   db: PrismaClient,
@@ -108,6 +119,139 @@ export async function createLessonStep(
     });
     return { id: step.id };
   });
+}
+
+export type CopyLessonAsStepResult =
+  | {
+      ok: true;
+      id: string;
+      copiedQuestionCount: number;
+      skippedQuestionCount: number;
+      recordingNotice: boolean;
+    }
+  | { ok: false; code: "not_found" | "same_lesson" | "unsafe_recording_reference" };
+
+/** Copies a lesson snapshot into one independent step of another lesson. */
+export async function copyLessonAsStep(
+  db: PrismaClient,
+  input: {
+    actorId: string;
+    sourceLessonId: string;
+    targetLessonId: string;
+    title: string;
+  },
+): Promise<CopyLessonAsStepResult> {
+  if (input.sourceLessonId === input.targetLessonId) {
+    return { ok: false, code: "same_lesson" };
+  }
+  const result = await db.$transaction(async (tx) => {
+    const [source, target] = await Promise.all([
+      tx.lesson.findUnique({
+        where: { id: input.sourceLessonId },
+        select: {
+          id: true,
+          title: true,
+          contentMd: true,
+          videoUrl: true,
+          questionLinks: {
+            orderBy: { createdAt: "asc" },
+            select: { questionId: true, isKey: true, inQuiz: true },
+          },
+        },
+      }),
+      tx.lesson.findUnique({
+        where: { id: input.targetLessonId },
+        select: {
+          id: true,
+          status: true,
+          contentMd: true,
+          steps: { orderBy: [{ order: "asc" }, { createdAt: "asc" }] },
+          questionLinks: { select: { questionId: true } },
+        },
+      }),
+    ]);
+    if (!source || !target) return { ok: false, code: "not_found" } as const;
+
+    const contentMd = lessonMarkdownForStep(source);
+    const recordingNotice = hasUnsafeRecordingReference(contentMd);
+    if (target.status === "published" && recordingNotice) {
+      return { ok: false, code: "unsafe_recording_reference" } as const;
+    }
+
+    let enabledSteps = false;
+    if (target.steps.length === 0) {
+      await tx.lessonStep.create({
+        data: {
+          lessonId: target.id,
+          title: "Материал",
+          order: 0,
+          contentMd: target.contentMd,
+          readingMinutes: computeReadingMinutes(target.contentMd),
+        },
+      });
+      enabledSteps = true;
+    }
+    const step = await tx.lessonStep.create({
+      data: {
+        lessonId: target.id,
+        title: input.title,
+        order: target.steps.length === 0 ? 1 : target.steps.length,
+        contentMd,
+        readingMinutes: computeReadingMinutes(contentMd),
+      },
+    });
+
+    const existingQuestions = new Set(target.questionLinks.map((link) => link.questionId));
+    const questionLinks = source.questionLinks.filter(
+      (link) => !existingQuestions.has(link.questionId),
+    );
+    let copiedQuestionCount = 0;
+    if (questionLinks.length > 0) {
+      const created = await tx.questionLesson.createMany({
+        data: questionLinks.map((link) => ({
+          questionId: link.questionId,
+          lessonId: target.id,
+          stepId: step.id,
+          isKey: link.isKey,
+          inQuiz: link.inQuiz,
+        })),
+        skipDuplicates: true,
+      });
+      copiedQuestionCount = created.count;
+    }
+    await syncLessonAggregate(tx, target.id);
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "lesson_step.copied_from_lesson",
+      entityType: "lesson_step",
+      entityId: step.id,
+      after: {
+        sourceLessonId: source.id,
+        targetLessonId: target.id,
+        title: step.title,
+        enabledSteps,
+        copiedQuestionCount,
+        skippedQuestionCount: source.questionLinks.length - copiedQuestionCount,
+      },
+    });
+    return {
+      ok: true,
+      id: step.id,
+      copiedQuestionCount,
+      skippedQuestionCount: source.questionLinks.length - copiedQuestionCount,
+      recordingNotice,
+      targetPublished: target.status === "published",
+    } as const;
+  });
+  if (!result.ok) return result;
+  if (result.targetPublished) await notifyLessonUpdated(db, input.targetLessonId);
+  return {
+    ok: true,
+    id: result.id,
+    copiedQuestionCount: result.copiedQuestionCount,
+    skippedQuestionCount: result.skippedQuestionCount,
+    recordingNotice: result.recordingNotice,
+  };
 }
 
 /** Content autosave is intentionally not audited; title changes are audited by the caller action. */

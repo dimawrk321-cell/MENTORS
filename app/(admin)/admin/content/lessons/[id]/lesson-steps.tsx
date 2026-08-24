@@ -3,7 +3,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, Check, GripVertical, Pencil, Plus, Split, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Copy,
+  GripVertical,
+  ListPlus,
+  Pencil,
+  Plus,
+  Split,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +34,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  copyLessonAction,
+  copyLessonAsStepAction,
   createLessonStepAction,
   deleteLessonStepAction,
   moveLessonStepAction,
@@ -39,18 +52,26 @@ interface StepItem {
 
 export function LessonSteps({
   lessonId,
+  lessonTitle,
+  lessonStatus,
   moduleId,
   steps,
   activeStepId,
   modules,
   lessons,
+  copyTargets,
+  lessonSources,
 }: {
   lessonId: string;
+  lessonTitle: string;
+  lessonStatus: "draft" | "published";
   moduleId: string;
   steps: StepItem[];
   activeStepId: string | null;
   modules: Array<{ id: string; title: string }>;
   lessons: Array<{ id: string; title: string }>;
+  copyTargets: Array<{ id: string; title: string }>;
+  lessonSources: Array<{ id: string; title: string; label: string }>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -59,6 +80,13 @@ export function LessonSteps({
   const [editingTitle, setEditingTitle] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [deletingStep, setDeletingStep] = useState<StepItem | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyTitle, setCopyTitle] = useState(`${lessonTitle} — копия`);
+  const [copyTargetModuleId, setCopyTargetModuleId] = useState(moduleId);
+  const [importOpen, setImportOpen] = useState(false);
+  const [sourceQuery, setSourceQuery] = useState("");
+  const [sourceLessonId, setSourceLessonId] = useState("");
+  const [importTitle, setImportTitle] = useState("");
 
   function run(
     work: () => Promise<{ ok: boolean; error?: { message: string }; data?: unknown }>,
@@ -75,6 +103,225 @@ export function LessonSteps({
     });
   }
 
+  const availableSources = lessonSources.filter((item) => item.id !== lessonId);
+  const normalizedQuery = sourceQuery.trim().toLocaleLowerCase("ru");
+  const filteredSources = normalizedQuery
+    ? availableSources.filter((item) =>
+        item.label.toLocaleLowerCase("ru").includes(normalizedQuery),
+      )
+    : availableSources;
+  const selectedSource = availableSources.find((item) => item.id === sourceLessonId) ?? null;
+
+  const reuseButtons = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {
+          setCopyTitle(`${lessonTitle} — копия`);
+          setCopyTargetModuleId(moduleId);
+          setCopyOpen(true);
+        }}
+      >
+        <Copy size={15} aria-hidden="true" /> Копировать урок
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={availableSources.length === 0}
+        onClick={() => {
+          setSourceQuery("");
+          setSourceLessonId("");
+          setImportTitle("");
+          setImportOpen(true);
+        }}
+      >
+        <ListPlus size={15} aria-hidden="true" /> Добавить урок как шаг
+      </Button>
+    </div>
+  );
+
+  const reuseDialogs = (
+    <>
+      <Dialog open={copyOpen} onOpenChange={setCopyOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Копировать урок</DialogTitle>
+            <DialogDescription>
+              Создаст самостоятельный черновик со всем контентом, шагами и вопросами. Прогресс
+              учеников и публикация не копируются.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!copyTitle.trim() || !copyTargetModuleId) return;
+              run(
+                () =>
+                  copyLessonAction({
+                    sourceLessonId: lessonId,
+                    targetModuleId: copyTargetModuleId,
+                    title: copyTitle,
+                  }),
+                (data) => {
+                  const result = data as {
+                    id: string;
+                    copiedStepCount: number;
+                    copiedQuestionCount: number;
+                  };
+                  setCopyOpen(false);
+                  toast({
+                    title: "Копия урока создана",
+                    description: `Шагов: ${result.copiedStepCount} · вопросов: ${result.copiedQuestionCount}`,
+                    variant: "success",
+                  });
+                  router.push(`/admin/content/lessons/${result.id}`);
+                },
+              );
+            }}
+          >
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="text-text-2">Название копии</span>
+              <Input
+                value={copyTitle}
+                onChange={(event) => setCopyTitle(event.target.value)}
+                maxLength={200}
+                autoFocus
+                required
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="text-text-2">Курс и модуль</span>
+              <Select value={copyTargetModuleId} onValueChange={setCopyTargetModuleId}>
+                <SelectTrigger aria-label="Курс и модуль для копии">
+                  <SelectValue placeholder="Выбери модуль" />
+                </SelectTrigger>
+                <SelectContent>
+                  {copyTargets.map((target) => (
+                    <SelectItem key={target.id} value={target.id}>
+                      {target.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setCopyOpen(false)}>
+                Отмена
+              </Button>
+              <Button type="submit" loading={pending} disabled={!copyTitle.trim()}>
+                Создать копию
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Добавить урок как шаг</DialogTitle>
+            <DialogDescription>
+              В текущий урок добавится независимая копия материала, видео и вопросов. Исходный урок
+              останется без изменений.
+            </DialogDescription>
+          </DialogHeader>
+          {lessonStatus === "published" && (
+            <p className="rounded-control border-warning/35 bg-warning/6 text-text-2 border px-3 py-2 text-sm">
+              Текущий урок опубликован: новый шаг сразу увидят ученики. У уже завершивших урок
+              завершение не отменится, а у нового шага не будет старого прогресса.
+            </p>
+          )}
+          <div className="flex flex-col gap-4">
+            <Input
+              value={sourceQuery}
+              onChange={(event) => setSourceQuery(event.target.value)}
+              placeholder="Найти по курсу, модулю или названию урока"
+              aria-label="Поиск исходного урока"
+              autoFocus
+            />
+            <div className="border-border max-h-64 overflow-y-auto rounded-lg border p-1">
+              {filteredSources.length > 0 ? (
+                filteredSources.map((source) => (
+                  <button
+                    key={source.id}
+                    type="button"
+                    onClick={() => {
+                      setSourceLessonId(source.id);
+                      setImportTitle(source.title);
+                    }}
+                    className={cn(
+                      "rounded-control w-full px-3 py-2 text-left text-sm transition-colors",
+                      source.id === sourceLessonId
+                        ? "bg-accent/12 text-text-1"
+                        : "text-text-2 hover:bg-surface-2 hover:text-text-1",
+                    )}
+                  >
+                    {source.label}
+                  </button>
+                ))
+              ) : (
+                <p className="text-text-3 px-3 py-6 text-center text-sm">Ничего не найдено</p>
+              )}
+            </div>
+            {selectedSource && (
+              <label className="flex flex-col gap-1.5 text-sm">
+                <span className="text-text-2">Название нового шага</span>
+                <Input
+                  value={importTitle}
+                  onChange={(event) => setImportTitle(event.target.value)}
+                  maxLength={200}
+                  required
+                />
+              </label>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setImportOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              loading={pending}
+              disabled={!sourceLessonId || !importTitle.trim()}
+              onClick={() =>
+                run(
+                  () =>
+                    copyLessonAsStepAction({
+                      sourceLessonId,
+                      targetLessonId: lessonId,
+                      title: importTitle,
+                    }),
+                  (data) => {
+                    const result = data as {
+                      id: string;
+                      copiedQuestionCount: number;
+                      skippedQuestionCount: number;
+                      recordingNotice: boolean;
+                    };
+                    setImportOpen(false);
+                    toast({
+                      title: "Урок добавлен как шаг",
+                      description:
+                        `Вопросов перенесено: ${result.copiedQuestionCount}` +
+                        (result.skippedQuestionCount > 0
+                          ? ` · уже были в уроке: ${result.skippedQuestionCount}`
+                          : ""),
+                      variant: result.recordingNotice ? "warning" : "success",
+                    });
+                    router.push(`/admin/content/lessons/${lessonId}?step=${result.id}`);
+                  },
+                )
+              }
+            >
+              Добавить шаг
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+
   if (steps.length === 0) {
     return (
       <section className="border-border bg-surface-1 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
@@ -84,21 +331,26 @@ export function LessonSteps({
             Сейчас это обычный цельный урок. Разделение не изменит его текст.
           </p>
         </div>
-        <Button
-          variant="secondary"
-          loading={pending}
-          onClick={() =>
-            run(
-              () => splitLessonIntoStepsAction(lessonId),
-              (data) => {
-                const id = (data as { id: string }).id;
-                router.push(`/admin/content/lessons/${lessonId}?step=${id}`);
-              },
-            )
-          }
-        >
-          <Split size={16} aria-hidden="true" /> Разделить на шаги
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {reuseButtons}
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={pending}
+            onClick={() =>
+              run(
+                () => splitLessonIntoStepsAction(lessonId),
+                (data) => {
+                  const id = (data as { id: string }).id;
+                  router.push(`/admin/content/lessons/${lessonId}?step=${id}`);
+                },
+              )
+            }
+          >
+            <Split size={15} aria-hidden="true" /> Разделить на шаги
+          </Button>
+        </div>
+        {reuseDialogs}
       </section>
     );
   }
@@ -112,7 +364,10 @@ export function LessonSteps({
             Каждый шаг — самостоятельный мини-урок с контентом и вопросами.
           </p>
         </div>
-        <span className="text-text-3 text-sm">{steps.length}</span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {reuseButtons}
+          <span className="text-text-3 min-w-6 text-right text-sm">{steps.length}</span>
+        </div>
       </div>
       {modules.length > 1 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
@@ -364,6 +619,7 @@ export function LessonSteps({
           <Plus size={16} /> Добавить
         </Button>
       </form>
+      {reuseDialogs}
     </section>
   );
 }

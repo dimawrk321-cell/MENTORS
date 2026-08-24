@@ -383,6 +383,117 @@ export async function createLesson(
   return { id: lesson.id };
 }
 
+export interface LessonCopyResult {
+  id: string;
+  copiedStepCount: number;
+  copiedQuestionCount: number;
+}
+
+/**
+ * Creates an independent draft snapshot of a lesson in any module. Student
+ * progress/history is intentionally outside the selected graph and therefore
+ * can never leak into the copy.
+ */
+export async function copyLesson(
+  db: PrismaClient,
+  input: { actorId: string; sourceLessonId: string; targetModuleId: string; title: string },
+): Promise<LessonCopyResult | null> {
+  return db.$transaction(async (tx) => {
+    const [source, targetModule] = await Promise.all([
+      tx.lesson.findUnique({
+        where: { id: input.sourceLessonId },
+        include: {
+          steps: { orderBy: [{ order: "asc" }, { createdAt: "asc" }] },
+          questionLinks: { orderBy: { createdAt: "asc" } },
+        },
+      }),
+      tx.module.findUnique({ where: { id: input.targetModuleId }, select: { id: true } }),
+    ]);
+    if (!source || !targetModule) return null;
+
+    const slug = await uniqueSlug(slugify(input.title), async (candidate) => {
+      return (
+        (await tx.lesson.findUnique({
+          where: { moduleId_slug: { moduleId: targetModule.id, slug: candidate } },
+          select: { id: true },
+        })) !== null
+      );
+    });
+    const last = await tx.lesson.findFirst({
+      where: { moduleId: targetModule.id },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+    const copy = await tx.lesson.create({
+      data: {
+        moduleId: targetModule.id,
+        slug,
+        title: input.title,
+        order: (last?.order ?? -1) + 1,
+        status: "draft",
+        difficulty: source.difficulty,
+        isOptional: source.isOptional,
+        contentMd: source.contentMd,
+        readingMinutes: source.readingMinutes,
+        pathPolicy: source.pathPolicy,
+        textMinutes: source.textMinutes,
+        videoMinutes: source.videoMinutes,
+        practiceMinutes: source.practiceMinutes,
+        videoUrl: source.videoUrl,
+        // The URL is copied, but its availability must be checked for the new row.
+        videoStatus: "unchecked",
+        videoCheckedAt: null,
+      },
+    });
+
+    const stepIds = new Map<string, string>();
+    for (const step of source.steps) {
+      const copiedStep = await tx.lessonStep.create({
+        data: {
+          lessonId: copy.id,
+          title: step.title,
+          order: step.order,
+          contentMd: step.contentMd,
+          readingMinutes: step.readingMinutes,
+        },
+      });
+      stepIds.set(step.id, copiedStep.id);
+    }
+
+    if (source.questionLinks.length > 0) {
+      await tx.questionLesson.createMany({
+        data: source.questionLinks.map((link) => ({
+          questionId: link.questionId,
+          lessonId: copy.id,
+          stepId: link.stepId ? (stepIds.get(link.stepId) ?? null) : null,
+          isKey: link.isKey,
+          inQuiz: link.inQuiz,
+        })),
+      });
+    }
+
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: "lesson.copied",
+      entityType: "lesson",
+      entityId: copy.id,
+      after: {
+        sourceLessonId: source.id,
+        targetModuleId: targetModule.id,
+        title: copy.title,
+        slug,
+        copiedStepCount: source.steps.length,
+        copiedQuestionCount: source.questionLinks.length,
+      },
+    });
+    return {
+      id: copy.id,
+      copiedStepCount: source.steps.length,
+      copiedQuestionCount: source.questionLinks.length,
+    };
+  });
+}
+
 export async function moveLessonToModule(
   db: PrismaClient,
   input: { actorId: string; lessonId: string; targetModuleId: string },

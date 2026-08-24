@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import {
+  copyLesson,
   createCourse,
   createLesson,
   createModule,
@@ -23,6 +24,7 @@ import {
   moveLessonToModule,
 } from "@/lib/services/content-admin";
 import {
+  copyLessonAsStep,
   createLessonStep,
   deleteLessonStep,
   moveLessonStep,
@@ -59,6 +61,18 @@ const stepMoveSchema = z.object({
   stepId: idSchema,
   targetLessonId: idSchema,
   targetIndex: z.coerce.number().int().min(0).max(500),
+});
+
+const lessonCopySchema = z.object({
+  sourceLessonId: idSchema,
+  targetModuleId: idSchema,
+  title: titleSchema,
+});
+
+const lessonAsStepSchema = z.object({
+  sourceLessonId: idSchema,
+  targetLessonId: idSchema,
+  title: titleSchema,
 });
 
 const courseUpdateSchema = z.object({
@@ -112,6 +126,7 @@ function failWith(res: { ok: false; code: string }): never {
     last_step: "В уроке должен остаться хотя бы один шаг",
     question_conflict:
       "В целевом уроке уже есть один из вопросов этого шага — сначала убери дублирующую привязку",
+    same_lesson: "Нельзя добавить урок как шаг самого в себя — выбери другой исходный урок",
   };
   throw new ActionError(res.code, messages[res.code] ?? "Не получилось выполнить действие");
 }
@@ -141,6 +156,30 @@ export async function createLessonStepAction(
     revalidateContent(undefined, parsed.lessonId);
     revalidatePath(`/admin/content/lessons/${parsed.lessonId}`);
     return result;
+  });
+}
+
+export async function copyLessonAsStepAction(input: unknown): Promise<
+  ActionResult<{
+    id: string;
+    copiedQuestionCount: number;
+    skippedQuestionCount: number;
+    recordingNotice: boolean;
+  }>
+> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(lessonAsStepSchema, input);
+    const result = await copyLessonAsStep(prisma, { actorId: auth.user.id, ...parsed });
+    if (!result.ok) failWith(result);
+    revalidateContent(undefined, parsed.targetLessonId);
+    revalidatePath(`/admin/content/lessons/${parsed.targetLessonId}`);
+    return {
+      id: result.id,
+      copiedQuestionCount: result.copiedQuestionCount,
+      skippedQuestionCount: result.skippedQuestionCount,
+      recordingNotice: result.recordingNotice,
+    };
   });
 }
 
@@ -375,6 +414,20 @@ export async function createLessonAction(
     if (!created) throw new ActionError("not_found", "Модуль не найден");
     revalidateContent();
     return created;
+  });
+}
+
+export async function copyLessonAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string; copiedStepCount: number; copiedQuestionCount: number }>> {
+  return runAction(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(lessonCopySchema, input);
+    const copied = await copyLesson(prisma, { actorId: auth.user.id, ...parsed });
+    if (!copied) throw new ActionError("not_found", "Исходный урок или целевой модуль не найден");
+    revalidateContent();
+    revalidatePath(`/admin/content/lessons/${copied.id}`);
+    return copied;
   });
 }
 
