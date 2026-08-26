@@ -1,245 +1,136 @@
 import type { Metadata } from "next";
-import { MonitorSmartphone, Trophy } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
-import { formatDateRu, formatDateTimeRu, pluralRu } from "@/lib/utils/dates";
 import { getUserAchievements } from "@/lib/services/achievements";
+import { getHeatmapData } from "@/lib/services/dashboard";
+import { getMockScoreSummary } from "@/lib/services/feedback";
+import { getMocksCompletedCount } from "@/lib/services/mocks";
 import { getNotificationMatrix } from "@/lib/services/notifications";
 import { getTelegramLinkStatus } from "@/lib/services/telegram/linking";
-import { getXpSummary } from "@/lib/services/xp";
+import { listCoursesForStudent } from "@/lib/services/content";
+import { getLaggingCategories, getTrainerStats } from "@/lib/services/srs";
+import { getStreakState, processStreakDay } from "@/lib/services/streak";
+import { getTodayXp, getXpSummary } from "@/lib/services/xp";
 import { getLevelTitles, getXpMap } from "@/lib/services/settings";
 import { titleForLevel } from "@/lib/services/level-titles";
-import { logoutAction } from "@/lib/actions/auth";
-import { EMAIL_VERIFICATION_UI_ENABLED } from "@/lib/constants";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AchievementIcon } from "@/components/features/achievement-icon";
-import { LevelBadge } from "@/components/features/level-badge";
-import { XpExplainer } from "@/components/features/xp-explainer";
-import { ChangePasswordForm } from "./change-password-form";
-import { NameForm } from "./name-form";
-import { EmailVerifyForm } from "./email-verify-form";
-import { NotificationSettings } from "./notification-settings";
-import { TelegramSection } from "@/components/features/telegram-section";
-import { RevokeOtherSessionsButton } from "./revoke-others-button";
+import { localDateStr } from "@/lib/utils/dates";
+import { ProfileTabs, resolveProfileTab } from "@/components/features/profile-tabs";
+import { OverviewTab } from "./overview-tab";
+import { ProfileHeader } from "./profile-header";
+import { SettingsTab } from "./settings-tab";
+import { XpTab } from "./xp-tab";
 
-export const metadata: Metadata = {
-  title: "Профиль",
-};
+export const metadata: Metadata = { title: "Профиль" };
 
-// Stage 1 scope: the security part of the profile (spec 17 «профиль-безопасность»).
-// Theme, timezone, study days, goal, digest and notification matrix join at
-// stages 2/5/9 per plan.
-export default async function ProfilePage() {
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { user, session } = await requireStudentZone();
-  const [devices, achievements, notificationMatrix, xp, levelTitles, telegram, xpMap] =
-    await Promise.all([
-      prisma.device.findMany({ where: { userId: user.id }, orderBy: { lastSeenAt: "desc" } }),
-      getUserAchievements(prisma, user.id),
-      getNotificationMatrix(prisma, user.id),
-      getXpSummary(prisma, user.id),
-      getLevelTitles(prisma),
-      getTelegramLinkStatus(prisma, user.id),
-      getXpMap(prisma),
-    ]);
-  // D7 (spec 13.1): level + editable title in the profile header.
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  await processStreakDay(prisma, { userId: user.id, now });
+
+  const [
+    devices,
+    achievements,
+    notificationMatrix,
+    xp,
+    todayXp,
+    levelTitles,
+    telegram,
+    xpMap,
+    streak,
+    courses,
+    trainerStats,
+    lagging,
+    heatmap,
+    mocksCompleted,
+    mockScores,
+    lessonsLastWeek,
+    params,
+  ] = await Promise.all([
+    prisma.device.findMany({ where: { userId: user.id }, orderBy: { lastSeenAt: "desc" } }),
+    getUserAchievements(prisma, user.id),
+    getNotificationMatrix(prisma, user.id),
+    getXpSummary(prisma, user.id),
+    getTodayXp(prisma, user.id, now, user.timezone),
+    getLevelTitles(prisma),
+    getTelegramLinkStatus(prisma, user.id),
+    getXpMap(prisma),
+    getStreakState(prisma, {
+      userId: user.id,
+      now,
+      timezone: user.timezone,
+      studyDays: user.studyDays,
+    }),
+    listCoursesForStudent(prisma, user.id),
+    getTrainerStats(prisma, { userId: user.id, now }),
+    getLaggingCategories(prisma, { userId: user.id, now }),
+    getHeatmapData(prisma, { userId: user.id, now, timezone: user.timezone, weeks: 14 }),
+    getMocksCompletedCount(prisma, user.id),
+    getMockScoreSummary(prisma, user.id),
+    prisma.lessonProgress.count({
+      where: { userId: user.id, status: "completed", completedAt: { gte: weekAgo } },
+    }),
+    searchParams,
+  ]);
+
   const levelTitle = titleForLevel(xp.level.level, levelTitles);
+  const nextLevelTitle = titleForLevel(xp.level.level + 1, levelTitles);
+  const dayKey = localDateStr(now, user.timezone);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3.5">
-          <div
-            className="rounded-pill flex size-[52px] shrink-0 items-center justify-center text-[19px] font-bold text-white"
-            style={{ backgroundImage: "var(--gradient-accent)" }}
-            aria-hidden="true"
-          >
-            {user.name.trim().charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-[24px] leading-[1.2] font-bold tracking-[-0.02em]">{user.name}</h1>
-            <p className="text-text-3 mt-0.5 text-[13px]">{user.email}</p>
-          </div>
-        </div>
-        <LevelBadge
-          level={xp.level.level}
-          progress={xp.level.progress}
-          toNext={xp.level.toNext}
-          title={levelTitle}
-        />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Аккаунт</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 text-[14px]">
-          <div className="flex flex-col gap-1.5">
-            <span className="text-text-2">Имя</span>
-            <NameForm initialName={user.name} />
-          </div>
-          <div className="flex flex-wrap justify-between gap-x-6 gap-y-1">
-            <span className="text-text-2">Email</span>
-            <span className="inline-flex items-center gap-2">
-              {user.email}
-              {/* D1 (spec 13.1): verification badge/form are @dormant. */}
-              {EMAIL_VERIFICATION_UI_ENABLED &&
-                (user.emailVerifiedAt ? (
-                  <Badge variant="success">подтверждён</Badge>
-                ) : (
-                  <Badge variant="warning">не подтверждён</Badge>
-                ))}
-            </span>
-          </div>
-          {EMAIL_VERIFICATION_UI_ENABLED && !user.emailVerifiedAt && (
-            <div className="border-border mt-1 border-t pt-3">
-              <p className="text-text-3 mb-2 text-[13px]">
-                Введи код из письма, чтобы подтвердить почту. Это не обязательно.
-              </p>
-              <EmailVerifyForm />
-            </div>
-          )}
-          {user.accessUntil && (
-            // Spec 7.1.2: спокойная строка, без таймеров.
-            <div className="flex flex-wrap justify-between gap-x-6 gap-y-1">
-              <span className="text-text-2">Доступ</span>
-              <span>до {formatDateRu(user.accessUntil, user.timezone)}</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Заход B.2: справка «за что XP и что засчитывает день» — сюда ведёт
-          ссылка из блока дневной цели на дашборде. */}
-      <XpExplainer xpMap={xpMap} goal={user.dailyGoalXp} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Смена пароля</CardTitle>
-          <CardDescription>После смены пароля другие сессии будут завершены.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ChangePasswordForm />
-        </CardContent>
-      </Card>
-
-      {/* Уведомления (spec 7.12/8.3): матрица тумблеров, тихие часы, дайджест. */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Уведомления</CardTitle>
-          <CardDescription>
-            Выбери, о чём напоминать и куда. Важные уведомления (фидбек, отмены, доступ) приходят
-            всегда.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <NotificationSettings
-            matrix={notificationMatrix}
-            digestTime={user.digestTime}
-            quietHoursStart={user.quietHoursStart}
-            quietHoursEnd={user.quietHoursEnd}
+    <div className="flex flex-col gap-5">
+      <ProfileHeader
+        name={user.name}
+        email={user.email}
+        since={user.createdAt}
+        accessUntil={user.accessUntil}
+        timezone={user.timezone}
+        totalXp={xp.totalXp}
+        level={xp.level}
+        levelTitle={levelTitle}
+        nextLevelTitle={nextLevelTitle}
+        accessActive={!user.accessUntil || user.accessUntil >= now}
+      />
+      <ProfileTabs
+        defaultTab={resolveProfileTab(params.tab)}
+        overview={
+          <OverviewTab
+            streak={streak}
+            courses={courses}
+            lessonsLastWeek={lessonsLastWeek}
+            cards={trainerStats}
+            mocks={{ completed: mocksCompleted, average: mockScores.average }}
+            lagging={lagging}
+            heatmap={heatmap}
+            achievements={achievements}
+          />
+        }
+        xp={
+          <XpTab
+            streak={streak}
+            xp={xp}
+            todayXp={todayXp}
+            goal={user.dailyGoalXp}
+            dayKey={dayKey}
+            xpMap={xpMap}
+            levelTitle={levelTitle}
+          />
+        }
+        settings={
+          <SettingsTab
+            user={user}
+            devices={devices}
+            currentDeviceId={session.deviceId}
+            notificationMatrix={notificationMatrix}
             telegramLinked={telegram.linked}
           />
-        </CardContent>
-      </Card>
-
-      {/* Telegram (spec 13.3): подключить/отключить внешний канал уведомлений. */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Telegram</CardTitle>
-          <CardDescription>
-            Внешний канал уведомлений: напоминания о моках, дайджест, доступ. Бот показывает
-            прогресс командами — действовать и учиться по-прежнему на платформе.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <TelegramSection linked={telegram.linked} />
-        </CardContent>
-      </Card>
-
-      {/* Достижения (spec 8.3): счётчик + список полученных; витрина — V1. */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-baseline justify-between gap-3">
-            <CardTitle>Достижения</CardTitle>
-            <span className="text-text-3 shrink-0 text-[13px]">
-              {achievements.count}{" "}
-              {pluralRu(achievements.count, "достижение", "достижения", "достижений")}
-            </span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {achievements.count === 0 ? (
-            <p className="text-text-2 flex items-center gap-2 text-[14px]">
-              <Trophy size={16} strokeWidth={1.75} className="text-text-3" aria-hidden="true" />
-              Пока нет — учись, проходи тесты и повторяй карточки.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {achievements.earned.map((achievement) => (
-                <li key={achievement.key} className="flex items-center gap-3">
-                  <AchievementIcon name={achievement.icon} />
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-medium">{achievement.title}</p>
-                    <p className="text-text-2 text-[13px]">{achievement.description}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Устройства</CardTitle>
-          <CardDescription>
-            Одновременно можно работать с одного устройства, платформа помнит два.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {devices.length === 0 ? (
-            <p className="text-text-2 text-[14px]">Пока нет запомненных устройств.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {devices.map((device) => (
-                <li
-                  key={device.id}
-                  className="rounded-control border-border flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border px-3 py-2.5"
-                >
-                  <span className="flex items-center gap-2.5 text-[14px]">
-                    <MonitorSmartphone
-                      size={16}
-                      strokeWidth={1.75}
-                      className="text-text-3 shrink-0"
-                      aria-hidden="true"
-                    />
-                    {device.label}
-                    {device.id === session.deviceId && (
-                      <Badge variant="accent">Это устройство</Badge>
-                    )}
-                  </span>
-                  <span className="text-text-3 text-[13px]">
-                    был активен {formatDateTimeRu(device.lastSeenAt, user.timezone)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div>
-            <RevokeOtherSessionsButton />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div>
-        <form action={logoutAction}>
-          <Button type="submit" variant="ghost">
-            Выйти
-          </Button>
-        </form>
-      </div>
+        }
+      />
     </div>
   );
 }

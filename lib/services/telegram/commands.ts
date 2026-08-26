@@ -44,6 +44,21 @@ export const TELEGRAM_REPLY_KEYBOARD: string[][] = [
   [TELEGRAM_TILES.streak, TELEGRAM_TILES.progress],
 ];
 
+/**
+ * Что умеет бот — один список на бота и на профиль (заход C.8 «Профиль по
+ * референсу v2»). Справка `/help` и карточка «Telegram» в профиле берут его
+ * отсюда: разойтись двум спискам больше негде.
+ */
+export const TELEGRAM_COMMANDS: Array<{ cmd: string; desc: string }> = [
+  { cmd: "/today", desc: "карточка дня" },
+  { cmd: "/queue", desc: "очередь повторений" },
+  { cmd: "/streak", desc: "серия и заморозки" },
+  { cmd: "/mock", desc: "ближайший мок" },
+  { cmd: "/progress", desc: "прогресс по курсу" },
+  { cmd: "/stop", desc: "отключить уведомления" },
+  { cmd: "/help", desc: "эта справка" },
+];
+
 /** Tile label → the command whose handler it mirrors (block 3.2). */
 const TILE_TO_COMMAND: Record<string, string> = {
   [TELEGRAM_TILES.today]: "/today",
@@ -264,13 +279,7 @@ async function buildProgress(db: PrismaClient, user: CommandUser): Promise<Outgo
 function buildHelp(): OutgoingMessage {
   return {
     text: messageBlock("Команды", [
-      "/today — карточка дня",
-      "/queue — очередь повторений",
-      "/streak — серия и заморозки",
-      "/mock — ближайший мок",
-      "/progress — прогресс по курсу",
-      "/stop — отключить уведомления",
-      "/help — эта справка",
+      ...TELEGRAM_COMMANDS.map((c) => `${c.cmd} — ${c.desc}`),
       "",
       "Действовать и учиться — на платформе.",
     ]),

@@ -449,6 +449,14 @@ export async function evaluateAchievements(
 export interface UserAchievementsSummary {
   count: number;
   earned: Array<EarnedAchievement & { earnedAt: Date }>;
+  /**
+   * Заход C.8 «Профиль по референсу v2»: витрина показывает и неполученные —
+   * иначе «3 из 6» не с чем сравнить. Скрытые (`hidden`) сюда не попадают: до
+   * получения они не светятся (spec 7.7), поэтому и в знаменателе их нет.
+   */
+  locked: AchievementDef[];
+  /** Сколько всего достижений видно ученику = earned + locked. */
+  visibleTotal: number;
 }
 
 export async function getUserAchievements(
@@ -463,5 +471,7 @@ export async function getUserAchievements(
     const def = ACHIEVEMENT_BY_KEY[row.achievementKey];
     return def ? [{ ...def, earnedAt: row.earnedAt }] : [];
   });
-  return { count: earned.length, earned };
+  const earnedKeys = new Set(earned.map((a) => a.key));
+  const locked = ACHIEVEMENTS.filter((def) => !def.hidden && !earnedKeys.has(def.key));
+  return { count: earned.length, earned, locked, visibleTotal: earned.length + locked.length };
 }

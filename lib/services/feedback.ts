@@ -315,3 +315,37 @@ export async function getPublishedFeedback(
     })),
   };
 }
+
+export interface MockScoreSummary {
+  /** Моки с опубликованным фидбеком, в котором есть хотя бы одна оценка. */
+  ratedMocks: number;
+  /** Средняя по всем критериям всех опубликованных фидбеков; null — оценок нет. */
+  average: number | null;
+}
+
+/**
+ * Средняя оценка ученика по мокам (заход C.8 «Профиль по референсу v2»).
+ *
+ * Считается ровно по тем числам, которые ученик и так видит на экране брони:
+ * критерии опубликованного фидбека, каждый 1–5 (`getPublishedFeedback`).
+ * Черновики не берём — их ученику не показывают. Новых раскрытий здесь нет.
+ */
+export async function getMockScoreSummary(db: Db, userId: string): Promise<MockScoreSummary> {
+  const rows = await db.feedback.findMany({
+    where: { status: "published", booking: { userId } },
+    select: { scores: true },
+  });
+  let sum = 0;
+  let count = 0;
+  let ratedMocks = 0;
+  for (const row of rows) {
+    const values = Object.values(scoresRecord(row.scores));
+    if (values.length === 0) continue;
+    ratedMocks += 1;
+    for (const value of values) {
+      sum += value;
+      count += 1;
+    }
+  }
+  return { ratedMocks, average: count === 0 ? null : sum / count };
+}
