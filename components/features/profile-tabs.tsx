@@ -50,7 +50,10 @@ export function ProfileTabs({
 
   return (
     <Tabs value={tab} onValueChange={change}>
-      <TabsList aria-label="Разделы профиля" className="overflow-x-auto">
+      <TabsList
+        aria-label="Разделы профиля"
+        className="[scrollbar-width:none] overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:hidden"
+      >
         <TabsTrigger value="overview">Обзор</TabsTrigger>
         <TabsTrigger value="xp">XP, цель и серия</TabsTrigger>
         <TabsTrigger value="settings">Настройки</TabsTrigger>
