@@ -38,6 +38,9 @@ function GuideLink({ item, active }: { item: GuideNavItem; active: boolean }) {
 
 export function GuidesNav({ guides }: { guides: GuideNavItem[] }) {
   const pathname = usePathname();
+  // C.7 «Справочник v2»: the hub uses category chips, so its old section
+  // sidebar would duplicate the same navigation. Reading pages keep it.
+  if (pathname === "/guides") return null;
   const groups = groupBySection(guides);
   const activeSlug = pathname.startsWith("/guides/") ? decodeURIComponent(pathname.slice(8)) : null;
 

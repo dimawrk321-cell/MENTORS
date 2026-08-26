@@ -1,82 +1,40 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  Bookmark,
-  BookMarked,
-  Briefcase,
-  ChevronRight,
-  Feather,
-  FileText,
-  ListChecks,
-  MessageCircleQuestion,
-  Search,
-  type LucideIcon,
-} from "lucide-react";
+import { Search } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
-import {
-  listBookmarkedGuides,
-  listPublishedGuides,
-  searchGuidesByContent,
-  type GuideContentHit,
-  type GuideNavItem,
-} from "@/lib/services/guides";
-import { GUIDE_HUB_SECTIONS, GUIDE_SECTION_LABEL } from "@/lib/constants";
-import { pluralRu } from "@/lib/utils/dates";
+import { searchGuidesByContent, type GuideContentHit } from "@/lib/services/guides";
+import { GUIDE_SECTION_LABEL } from "@/lib/constants";
+import { computeReadingMinutes } from "@/lib/utils/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { IconTile } from "@/components/features/icon-tile";
+import {
+  GuidesCatalog,
+  type GuideCatalogItem,
+  type GuideContinueItem,
+} from "@/components/features/guides-catalog";
 
-export const metadata: Metadata = {
-  title: "Справочник",
-};
+export const metadata: Metadata = { title: "Справочник" };
 
 interface GuidesIndexPageProps {
   searchParams: Promise<{ q?: string }>;
 }
 
-// Icons for the hub landing cards (spec 7.10 sections). tools became a course.
-const SECTION_ICON: Record<string, LucideIcon> = {
-  stages: ListChecks,
-  ask_interviewer: MessageCircleQuestion,
-  job_search: Briefcase,
-};
-
-// Per-section tint (design handoff): each hub card carries its own category colour.
-const SECTION_COLOR: Record<string, string> = {
+// DECISION (C.7 «Справочник v2»): section colours are stable product mapping,
+// not array positions. Only existing theme tokens are passed to the client.
+const GUIDE_SECTION_COLOR: Record<string, string> = {
   stages: "var(--cat-1)",
   ask_interviewer: "var(--cat-5)",
   job_search: "var(--cat-7)",
+  resume: "var(--cat-0)",
+  legend: "var(--cat-6)",
 };
 
-interface HubCard {
-  key: string;
-  label: string;
-  href: string;
-  subtitle: string;
-  icon: LucideIcon;
-  colorVar: string;
-}
+const ALWAYS_VISIBLE_SECTIONS = ["stages", "ask_interviewer", "job_search"] as const;
+const NEW_GUIDE_DAYS = 14;
 
-function GuideRow({ guide }: { guide: GuideNavItem }) {
-  return (
-    <Card interactive className="group relative">
-      <CardContent className="flex items-center gap-3 p-3.5">
-        <Link
-          href={`/guides/${guide.slug}`}
-          className="text-text-1 group-hover:text-accent text-[14px] font-medium after:absolute after:inset-0 after:content-['']"
-        >
-          {guide.title}
-        </Link>
-        <Badge className="ml-auto">{GUIDE_SECTION_LABEL[guide.section] ?? guide.section}</Badge>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Content-search hit with a highlighted snippet (spec 13.1/D6). */
 function GuideHitRow({ hit }: { hit: GuideContentHit }) {
   return (
     <Card interactive className="group relative">
@@ -93,7 +51,7 @@ function GuideHitRow({ hit }: { hit: GuideContentHit }) {
         {hit.snippet && (
           <p
             className="text-text-3 [&_mark]:bg-accent/20 [&_mark]:text-text-1 text-[13px] [&_mark]:rounded-[2px] [&_mark]:px-0.5"
-            // Snippet is HTML-escaped with only <mark> revealed (renderSnippet).
+            // renderSnippet escapes everything except its own <mark> tags.
             dangerouslySetInnerHTML={{ __html: hit.snippet }}
           />
         )}
@@ -102,45 +60,20 @@ function GuideHitRow({ hit }: { hit: GuideContentHit }) {
   );
 }
 
-/** Large entry tile for the hub landing (spec 12.2/12.1-fix). */
-function HubCardTile({ card }: { card: HubCard }) {
-  const Icon = card.icon;
-  return (
-    <Link href={card.href} className="group">
-      <Card catHover={card.colorVar}>
-        <CardContent className="flex items-center gap-3.5 p-4">
-          <IconTile icon={Icon} colorVar={card.colorVar} />
-          <div className="min-w-0 flex-1">
-            <p className="group-hover:text-accent text-[15px] font-medium">{card.label}</p>
-            <p className="text-text-3 text-[13px]">{card.subtitle}</p>
-          </div>
-          <ChevronRight
-            size={18}
-            strokeWidth={1.75}
-            className="text-text-3 group-hover:text-text-2 shrink-0"
-            aria-hidden="true"
-          />
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}
-
-/** /guides index (spec 7.10): search results, or the hub landing + bookmarks. */
 export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageProps) {
   const { user } = await requireStudentZone();
-  const { q } = await searchParams;
-  const query = q?.trim();
+  const query = (await searchParams).q?.trim();
 
+  // Preserve the existing content FTS contract for links from the reading-page
+  // sidebar and CommandPalette. The new field below filters titles client-side.
   if (query) {
-    // D6 (spec 13.1): search by content (FTS), not just the title.
     const results = await searchGuidesByContent(prisma, query, {
       resume: user.guidesResumeEnabled,
       legend: user.guidesLegendEnabled,
     });
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-[28px] leading-[1.2] font-bold tracking-[-0.02em]">Поиск: «{query}»</h1>
+        <PageHeader title={`Поиск: «${query}»`} />
         {results.length === 0 ? (
           <Card>
             <EmptyState
@@ -160,111 +93,74 @@ export default async function GuidesIndexPage({ searchParams }: GuidesIndexPageP
     );
   }
 
-  const [bookmarks, guides] = await Promise.all([
-    listBookmarkedGuides(prisma, user.id),
-    listPublishedGuides(prisma),
+  const sectionOrder = [
+    ...ALWAYS_VISIBLE_SECTIONS,
+    ...(user.guidesResumeEnabled ? (["resume"] as const) : []),
+    ...(user.guidesLegendEnabled ? (["legend"] as const) : []),
+  ];
+  const [rows, bookmarkRows, recentRows] = await Promise.all([
+    prisma.guide.findMany({
+      where: { status: "published", section: { in: sectionOrder } },
+      orderBy: [{ section: "asc" }, { order: "asc" }, { title: "asc" }],
+      select: {
+        id: true,
+        slug: true,
+        section: true,
+        title: true,
+        contentMd: true,
+        createdAt: true,
+      },
+    }),
+    prisma.bookmark.findMany({
+      where: { userId: user.id, guide: { status: "published", section: { in: sectionOrder } } },
+      select: { guideId: true },
+    }),
+    prisma.recentItem.findMany({
+      where: { userId: user.id, itemType: "guide" },
+      orderBy: { openedAt: "desc" },
+      take: 20,
+      select: { entityId: true },
+    }),
   ]);
 
-  // Hub landing cards (12.1-fix): the reference must not read as a wasteland for a
-  // newcomer with no bookmarks and resume/legend flags off. Surface the always-on
-  // hub sections that actually have guides (card → the section's first guide), plus
-  // the gated Резюме / Легенда top-level pages when the student has them.
-  const sectionCards: HubCard[] = GUIDE_HUB_SECTIONS.flatMap((section) => {
-    const items = guides.filter((g) => g.section === section);
-    if (items.length === 0) return [];
-    return [
-      {
-        key: section,
-        label: GUIDE_SECTION_LABEL[section] ?? section,
-        href: `/guides/${items[0]!.slug}`,
-        subtitle: `${items.length} ${pluralRu(items.length, "гайд", "гайда", "гайдов")}`,
-        icon: SECTION_ICON[section] ?? BookMarked,
-        colorVar: SECTION_COLOR[section] ?? "var(--cat-0)",
-      },
-    ];
-  });
-  const flagCards: HubCard[] = [
-    ...(user.guidesResumeEnabled
-      ? [
-          {
-            key: "resume",
-            label: "Резюме",
-            href: "/resume",
-            subtitle: "Как собрать сильное резюме",
-            icon: FileText,
-            colorVar: "var(--cat-0)",
-          },
-        ]
-      : []),
-    ...(user.guidesLegendEnabled
-      ? [
-          {
-            key: "legend",
-            label: "Легенда",
-            href: "/legend",
-            subtitle: "Как выстроить историю проектов",
-            icon: Feather,
-            colorVar: "var(--cat-6)",
-          },
-        ]
-      : []),
-  ];
-  const hubCards = [...sectionCards, ...flagCards];
+  const bookmarkIds = new Set(bookmarkRows.map((row) => row.guideId));
+  const newSince = new Date(Date.now() - NEW_GUIDE_DAYS * 24 * 60 * 60 * 1000);
+  const guides: GuideCatalogItem[] = rows.map((guide) => ({
+    id: guide.id,
+    slug: guide.slug,
+    section: guide.section,
+    title: guide.title,
+    minutes: computeReadingMinutes(guide.contentMd),
+    isNew: guide.createdAt >= newSince,
+    bookmarked: bookmarkIds.has(guide.id),
+  }));
 
-  const sectionsBlock =
-    hubCards.length > 0 ? (
-      <section key="sections" className="flex flex-col gap-3">
-        <h2 className="text-[18px] font-semibold">Разделы</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {hubCards.map((card) => (
-            <HubCardTile key={card.key} card={card} />
-          ))}
-        </div>
-      </section>
-    ) : (
-      // Fresh install before content import — friendly, not a blank page.
-      <Card key="sections">
-        <EmptyState
-          icon={BookMarked}
-          title="Справочник скоро наполнится"
-          description="Здесь появятся гайды по этапам собеседований, вопросам интервьюеру и поиску работы."
-        />
-      </Card>
-    );
-
-  const bookmarksBlock = (
-    <section key="bookmarks" className="flex flex-col gap-3">
-      <h2 className="flex items-center gap-2 text-[18px] font-semibold">
-        <Bookmark size={16} strokeWidth={1.75} aria-hidden="true" />
-        Закладки
-      </h2>
-      {bookmarks.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={BookMarked}
-            title="Пока нет закладок"
-            description="Открой любой гайд и нажми на иконку закладки — он появится здесь."
-          />
-        </Card>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {bookmarks.map((guide) => (
-            <GuideRow key={guide.id} guide={guide} />
-          ))}
-        </div>
-      )}
-    </section>
-  );
+  const latestId = recentRows.find((recent) =>
+    guides.some((guide) => guide.id === recent.entityId),
+  )?.entityId;
+  const latest = latestId ? guides.find((guide) => guide.id === latestId) : null;
+  let continueGuide: GuideContinueItem | null = null;
+  if (latest) {
+    const chapters = guides.filter((guide) => guide.section === latest.section);
+    continueGuide = {
+      ...latest,
+      chapter: Math.max(1, chapters.findIndex((guide) => guide.id === latest.id) + 1),
+      chapterTotal: chapters.length,
+    };
+  }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6">
       <PageHeader
         title="Справочник"
-        subtitle="Гайды по этапам собеседований, вопросам интервьюеру и поиску работы. Открывай раздел и добавляй нужное в закладки."
+        subtitle="Практические гайды по собеседованиям, резюме и поиску работы."
       />
-
-      {/* D6 (spec 13.1): bookmarks lead the hub when the student has them. */}
-      {bookmarks.length > 0 ? [bookmarksBlock, sectionsBlock] : [sectionsBlock, bookmarksBlock]}
+      <GuidesCatalog
+        guides={guides}
+        sectionOrder={sectionOrder}
+        sectionColors={GUIDE_SECTION_COLOR}
+        continueGuide={continueGuide}
+      />
     </div>
   );
 }
