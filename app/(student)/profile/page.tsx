@@ -14,7 +14,7 @@ import { getTodayXp, getXpSummary } from "@/lib/services/xp";
 import { getLevelTitles, getXpMap } from "@/lib/services/settings";
 import { titleForLevel } from "@/lib/services/level-titles";
 import { localDateStr } from "@/lib/utils/dates";
-import { ProfileTabs, resolveProfileTab } from "@/components/features/profile-tabs";
+import { ProfileTabs, type ProfileTab } from "@/components/features/profile-tabs";
 import { OverviewTab } from "./overview-tab";
 import { ProfileHeader } from "./profile-header";
 import { SettingsTab } from "./settings-tab";
@@ -81,6 +81,10 @@ export default async function ProfilePage({
   const levelTitle = titleForLevel(xp.level.level, levelTitles);
   const nextLevelTitle = titleForLevel(xp.level.level + 1, levelTitles);
   const dayKey = localDateStr(now, user.timezone);
+  // Нельзя вызывать helper из `"use client"`-модуля на сервере: Next заменяет
+  // такой импорт ссылкой на клиент и падает в runtime. Разрешаем значение здесь.
+  const defaultTab: ProfileTab =
+    params.tab === "xp" || params.tab === "settings" ? params.tab : "overview";
 
   return (
     <div className="flex flex-col gap-5">
@@ -97,7 +101,7 @@ export default async function ProfilePage({
         accessActive={!user.accessUntil || user.accessUntil >= now}
       />
       <ProfileTabs
-        defaultTab={resolveProfileTab(params.tab)}
+        defaultTab={defaultTab}
         overview={
           <OverviewTab
             streak={streak}
