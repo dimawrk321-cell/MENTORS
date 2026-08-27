@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode, type TouchEvent } from "react";
-import { BookOpen, ChevronDown, RotateCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type TouchEvent } from "react";
+import { BookOpen, Check, ChevronDown, RotateCw, Sparkles } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,6 +10,11 @@ import { CategoryChip } from "@/components/features/category-chip";
 import { useBottomDock } from "@/components/features/bottom-dock";
 import { cn } from "@/lib/utils/cn";
 import { isVerticalIntent, resolveSwipe } from "@/lib/utils/card-gesture";
+import {
+  DECK_RHYTHM_MAX_SEGMENTS,
+  rhythmSegments,
+  type SessionGrade,
+} from "@/lib/utils/session-summary";
 
 // Презентационная дека карточек (spec 7.6/13/14) — общая для дневной очереди
 // (ReviewSession) и свободной тренировки (FreeSession).
@@ -29,6 +34,13 @@ import { isVerticalIntent, resolveSwipe } from "@/lib/utils/card-gesture";
 //   • жест переключения отделён от скролла — см. lib/utils/card-gesture.ts;
 //   • при раскрытом ответе вопрос доступен целиком: компактная строка сверху,
 //     тап разворачивает её в полный текст.
+//
+// Заход C.8 «Сессия повторений v2» (по прототипу «PRIME - Сессия повторений»):
+//   • полоса прогресса → ритм по карточкам (сегмент на карточку, цвет — оценка);
+//   • мета-строка под шапкой: категория, «Новая карточка», источник карточки;
+//   • кнопки оценок 52px с цветом оценки и подсказками клавиш от 700px;
+//   • инлайн-подтверждение над панелью вместо тоста «Следующее повторение».
+// Ни один из существующих механизмов деки при этом не тронут.
 
 export interface DeckItem {
   /** Ключ перемонтирования граней: cardId в очереди, questionId в прогоне. */
@@ -41,7 +53,80 @@ export interface DeckItem {
   answerNode: ReactNode;
 }
 
-export type DeckGrade = "again" | "hard" | "good";
+export type DeckGrade = SessionGrade;
+
+/** Сколько живёт инлайн-подтверждение после оценки (заход C.8). */
+export const DECK_OUTCOME_MS = 2600;
+
+export interface DeckOutcome {
+  grade: DeckGrade;
+  /**
+   * Карточка, НА которой показывается полоса, — то есть следующая после
+   * оценённой. Видимость подтверждения — чистое правило от пропсов
+   * (`outcome.itemId === item.id`), а не эффект: так полоса не может пережить
+   * переход к следующей карточке ни на одной ветке вызывающего компонента.
+   */
+  itemId: string;
+  /** Урок ОЦЕНЁННОЙ карточки — для ссылки «Перечитать урок →»; null, если урока нет. */
+  lessonId: string | null;
+}
+
+const OUTCOME_COPY: Record<DeckGrade, { title: string; text: string; color: string }> = {
+  good: {
+    title: "Знаю.",
+    text: "Записано, карточка ушла на следующий круг",
+    color: "var(--success)",
+  },
+  hard: {
+    title: "Сомневаюсь.",
+    text: "Записано, карточка ушла на следующий круг",
+    color: "var(--warning)",
+  },
+  again: {
+    title: "Не знаю.",
+    // Дат в тексте нет осознанно: «вернётся через N дней» до выбора провоцирует
+    // занижать или завышать оценку (заход C.8).
+    text: "Эта карточка вернётся ещё раз — перечитай урок, когда будет время",
+    color: "var(--danger)",
+  },
+};
+
+/**
+ * Таймер инлайн-подтверждения: живёт у вызывающего компонента, снимается в
+ * cleanup и при каждой следующей оценке. Дека остаётся презентационной — она
+ * только рисует то, что пришло пропом.
+ */
+export function useGradeOutcome(): {
+  outcome: DeckOutcome | null;
+  showOutcome: (next: DeckOutcome) => void;
+  clearOutcome: () => void;
+} {
+  const [outcome, setOutcome] = useState<DeckOutcome | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stop = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+
+  const clearOutcome = useCallback(() => {
+    stop();
+    setOutcome(null);
+  }, [stop]);
+
+  const showOutcome = useCallback(
+    (next: DeckOutcome) => {
+      stop();
+      setOutcome(next);
+      timer.current = setTimeout(() => setOutcome(null), DECK_OUTCOME_MS);
+    },
+    [stop],
+  );
+
+  useEffect(() => stop, [stop]);
+
+  return { outcome, showOutcome, clearOutcome };
+}
 
 interface Gesture {
   x: number;
@@ -86,10 +171,20 @@ function scrollerFor(target: EventTarget | null, root: HTMLElement): HTMLElement
   return null;
 }
 
+/** Цвет сегмента ритма — по фактической оценке (spec 5.1: только токены темы). */
+const GRADE_COLOR: Record<DeckGrade, string> = {
+  good: "var(--success)",
+  hard: "var(--warning)",
+  again: "var(--danger)",
+};
+
 export function SessionCardDeck({
   item,
   index,
   total,
+  grades,
+  step,
+  sourceLabel,
   flipped,
   pending,
   active,
@@ -97,12 +192,19 @@ export function SessionCardDeck({
   exitLabel,
   exitConfirm,
   note,
+  outcome,
   onFlip,
   onGrade,
 }: {
   item: DeckItem;
   index: number;
   total: number;
+  /** Оценки текущей порции по порядку — ритм. Копит вызывающий компонент. */
+  grades: DeckGrade[];
+  /** Ступень карточки: рисуется только «Новая карточка» при 0. В прогоне ступени нет. */
+  step?: number;
+  /** Источник карточки человеческой формулировкой (lib/services/srs.ts). */
+  sourceLabel?: string;
   flipped: boolean;
   pending: boolean;
   /** Дека принимает ввод только пока идёт показ карточек (не на break/done). */
@@ -112,6 +214,14 @@ export function SessionCardDeck({
   exitConfirm: string;
   /** Строка режима под счётчиком (заход B.2): чем этот прогон отличается. */
   note?: string;
+  /**
+   * Инлайн-подтверждение после оценки. Сам факт передачи пропа (пусть и `null`)
+   * резервирует под полосу постоянное место: высота слота входит в
+   * `--deck-chrome`, поэтому появление и исчезновение полосы не двигают
+   * карточку. Режим, который ничего не записывает по ходу (свободная
+   * тренировка), проп не передаёт вовсе — там и обещать «записано» нечего.
+   */
+  outcome?: DeckOutcome | null;
   onFlip: (next: boolean) => void;
   onGrade: (grade: DeckGrade) => void;
 }) {
@@ -223,14 +333,21 @@ export function SessionCardDeck({
   const bodyClass = "min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 md:p-6";
   const captionClass = "text-text-3 mb-3 text-[12px] font-medium tracking-wide uppercase";
 
+  const progressNow = Math.round(((index + 1) / total) * 100);
+  const rhythm = total <= DECK_RHYTHM_MAX_SEGMENTS;
+  const shownOutcome = outcome && outcome.itemId === item.id ? outcome : null;
+  const outcomeCopy = shownOutcome ? OUTCOME_COPY[shownOutcome.grade] : null;
+
   return (
     <div
       // Высота грани ограничена вьюпортом: карточка скроллится внутри себя, а
       // шапка сессии и панель оценок остаются на экране при любой длине эталона
       // (spec 13). Вычет (--deck-chrome) и пол высоты живут в globals.css —
       // на альбомной ориентации телефона вычет должен быть меньше, а инлайновый
-      // стиль медиазапроса не держит.
-      className="session-deck mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4"
+      // стиль медиазапроса не держит. `data-outcome` включает в тот же вычет
+      // постоянное место под инлайн-подтверждение (заход C.8).
+      className="session-deck mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3.5"
+      data-outcome={outcome !== undefined ? "" : undefined}
     >
       {/* Шапка сессии липнет к верху: на низком вьюпорте (альбомная ориентация)
           страница всё-таки скроллится, и счётчик с выходом уезжали бы за экран —
@@ -265,31 +382,73 @@ export function SessionCardDeck({
           />
         </div>
 
+        {/* Ритм по карточкам (заход C.8): сегмент на карточку, цвет — фактическая
+            оценка. Скринридеру цвет не читается, поэтому контейнер остаётся
+            progressbar с процентом и подписью «Карточка N из M», а сегменты
+            выведены из дерева доступности. Выше порога сегменты тоньше волоса —
+            там рисуется прежняя сплошная полоса. */}
         <div
-          className="rounded-pill bg-border h-1 w-full overflow-hidden"
+          className={cn(
+            rhythm ? "flex gap-[3px]" : "rounded-pill bg-border h-1 w-full overflow-hidden",
+          )}
           role="progressbar"
-          aria-valuenow={Math.round(((index + 1) / total) * 100)}
+          aria-valuenow={progressNow}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label="Прогресс сессии"
+          aria-label={`Карточка ${index + 1} из ${total}`}
         >
-          <div
-            className="ease-app h-full rounded-full transition-[width] duration-300"
-            style={{
-              // index нулевой, а счётчик на экране человеческий: первая
-              // карточка из 15 — это уже 1/15, не 0%. На скриншоте рядом с
-              // «1 / 15» полоса поэтому выглядела полностью пустой.
-              width: `${Math.round(((index + 1) / total) * 100)}%`,
-              backgroundImage: "var(--gradient-accent)",
-            }}
-          />
+          {rhythm ? (
+            rhythmSegments(grades, total, index, active).map((segment, position) => (
+              <span
+                // Ключ по позиции: сегменты — это и есть позиции в порции,
+                // другого тождества у них нет.
+                key={position}
+                aria-hidden="true"
+                className="rounded-pill block h-1.5 flex-1"
+                style={
+                  segment.kind === "graded"
+                    ? { background: GRADE_COLOR[segment.grade] }
+                    : segment.kind === "current"
+                      ? {
+                          backgroundImage: "var(--gradient-accent)",
+                          boxShadow: "0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent)",
+                        }
+                      : { background: "var(--heat-empty)" }
+                }
+              />
+            ))
+          ) : (
+            <div
+              className="ease-app h-full rounded-full transition-[width] duration-300"
+              style={{
+                // index нулевой, а счётчик на экране человеческий: первая
+                // карточка из 15 — это уже 1/15, не 0%.
+                width: `${progressNow}%`,
+                backgroundImage: "var(--gradient-accent)",
+              }}
+            />
+          )}
         </div>
       </div>
 
-      <div className="flex">
+      {/* Мета-строка карточки (заход C.8): откуда она и новая ли она. Сроков и
+          интервалов здесь нет и быть не должно. */}
+      <div className="flex flex-wrap items-center gap-2">
         {/* wrap: имя категории показывается целиком (B.4/2.1) — строка её, делить
             ширину не с кем. Самое длинное имя в банке — 48 символов. */}
         <CategoryChip title={item.category.title} colorIndex={item.category.colorIndex} wrap />
+        {step === 0 && (
+          <span className="rounded-pill border-border text-text-2 inline-flex items-center gap-1.5 border px-2.5 py-[3px] text-[12px]">
+            <Sparkles size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+            Новая карточка
+          </span>
+        )}
+        {sourceLabel && (
+          <span className="text-text-3 inline-flex min-w-0 items-center gap-1.5 text-[12px]">
+            <BookOpen size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+            <span className="min-w-0">{sourceLabel}</span>
+          </span>
+        )}
       </div>
 
       {/* Флип-карточка: горизонтальные свайпы по открытому ответу = оценки
@@ -416,45 +575,123 @@ export function SessionCardDeck({
         data-bottom-dock
         // mt-auto прижимает действие к низу на короткой карточке; sticky
         // сохраняет его на экране, когда длинный вопрос всё же требует скролла.
-        className="bg-bg sticky bottom-0 z-10 mt-auto flex flex-col gap-2 py-2"
+        className="bg-bg sticky bottom-0 z-10 mt-auto flex flex-col gap-2 pt-3.5 pb-2"
       >
+        {outcome !== undefined && (
+          // Постоянное место под подтверждение: высота слота фиксирована и
+          // входит в --deck-chrome, поэтому появление и исчезновение полосы
+          // сдвигают тело карточки ровно на ноль пикселей. aria-live висит на
+          // слоте, а не на полосе, — контейнер должен существовать до того, как
+          // в него приедет текст.
+          <div className="h-[var(--deck-outcome-h)] shrink-0" aria-live="polite">
+            {shownOutcome && outcomeCopy && (
+              <div
+                className="deck-outcome flex h-full items-center gap-2.5 overflow-hidden border px-3.5 motion-safe:animate-[deck-outcome_180ms_ease-out]"
+                style={{
+                  borderColor: `color-mix(in srgb, ${outcomeCopy.color} 32%, transparent)`,
+                  background: `color-mix(in srgb, ${outcomeCopy.color} 8%, transparent)`,
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex size-[22px] shrink-0 items-center justify-center rounded-full text-white"
+                  style={{ background: outcomeCopy.color }}
+                >
+                  {shownOutcome.grade === "again" ? (
+                    <RotateCw size={13} strokeWidth={2.25} />
+                  ) : (
+                    <Check size={13} strokeWidth={2.5} />
+                  )}
+                </span>
+                <p className="text-text-1 min-w-0 flex-1 text-[13px] leading-snug">
+                  <span className="font-semibold">{outcomeCopy.title}</span>{" "}
+                  <span className="text-text-2">{outcomeCopy.text}</span>
+                  {shownOutcome.grade === "again" && shownOutcome.lessonId && (
+                    <>
+                      {" "}
+                      {/* Ссылка внутри абзаца, а не отдельным флекс-элементом:
+                          так она переносится вместе с текстом и полоса
+                          укладывается в свою постоянную высоту на 390px. */}
+                      <Link
+                        href={`/lessons/${shownOutcome.lessonId}`}
+                        className="text-accent hover:text-accent-hover font-medium whitespace-nowrap"
+                      >
+                        Перечитать урок →
+                      </Link>
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {flipped ? (
-          <div className="grid grid-cols-3 gap-2" role="group" aria-label="Оценка карточки">
-            <Button
-              variant="secondary"
-              disabled={pending}
-              onClick={() => grade("again")}
-              className={cn("text-danger min-h-11")}
-            >
-              Не знаю
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={pending}
-              onClick={() => grade("hard")}
-              className={cn("text-warning min-h-11")}
-            >
-              Сомневаюсь
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={pending}
-              onClick={() => grade("good")}
-              className={cn("text-success min-h-11")}
-            >
-              Знаю
-            </Button>
+          <div
+            className="grid grid-cols-3 gap-2 max-[699px]:grid-cols-1"
+            role="group"
+            aria-label="Оценка карточки"
+          >
+            <GradeButton grade="again" label="Не знаю" hint="1" pending={pending} onClick={grade} />
+            <GradeButton
+              grade="hard"
+              label="Сомневаюсь"
+              hint="2"
+              pending={pending}
+              onClick={grade}
+            />
+            <GradeButton grade="good" label="Знаю" hint="3" pending={pending} onClick={grade} />
           </div>
         ) : (
-          <Button variant="secondary" className="min-h-11" onClick={() => onFlip(true)}>
-            <RotateCw size={15} strokeWidth={1.75} aria-hidden="true" />
+          <Button
+            variant="secondary"
+            className="deck-flip bg-surface-1 border-border-strong hover:border-accent min-h-[50px] text-[15px] max-md:min-h-[50px]"
+            onClick={() => onFlip(true)}
+          >
+            <RotateCw size={16} strokeWidth={1.75} aria-hidden="true" />
             Показать ответ
           </Button>
         )}
-        <p className="text-text-3 hidden text-center text-[12px] md:block">
+        <p className="text-text-3 hidden text-center text-[12px] min-[700px]:block">
           Space — ответ · 1 / 2 / 3 — оценки · свайпы влево/вправо на мобильном
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Кнопка оценки (заход C.8): цвет текста — по оценке, на ховере тонкая рамка и
+ * подложка того же цвета. Тинт живёт классом `.deck-grade` в globals.css:
+ * `color-mix` от переменной оценки утилитой не выражается, а неслоёное правило
+ * перебивает ховер варианта `secondary` (тот же приём, что у
+ * `.guides-section-nav[data-reading]`).
+ */
+function GradeButton({
+  grade,
+  label,
+  hint,
+  pending,
+  onClick,
+}: {
+  grade: DeckGrade;
+  label: string;
+  hint: string;
+  pending: boolean;
+  onClick: (grade: DeckGrade) => void;
+}) {
+  return (
+    <Button
+      variant="secondary"
+      disabled={pending}
+      onClick={() => onClick(grade)}
+      style={{ ["--deck-grade" as string]: GRADE_COLOR[grade] }}
+      className="deck-grade bg-surface-1 min-h-[52px] text-[15px] font-semibold max-md:min-h-[52px]"
+    >
+      <span style={{ color: GRADE_COLOR[grade] }}>{label}</span>
+      <kbd className="border-border text-text-3 rounded-[4px] border px-1 font-sans text-[10.5px] font-normal max-[699px]:hidden">
+        {hint}
+      </kbd>
+    </Button>
   );
 }

@@ -3,7 +3,13 @@ import Link from "next/link";
 import { Layers } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
-import { getNextReviewDate, getSessionCards, SRS_SOURCE_LABEL } from "@/lib/services/srs";
+import {
+  getNextReviewDate,
+  getSessionCards,
+  srsSourceLabel,
+  SRS_SESSION_SIZE,
+} from "@/lib/services/srs";
+import { sessionPortionNote } from "@/lib/utils/session-summary";
 import { formatDateOnlyRu } from "@/lib/utils/dates";
 import { stripMarkdown } from "@/lib/utils/text";
 import { LessonRenderer } from "@/components/blocks/lesson-renderer";
@@ -23,7 +29,7 @@ export const metadata: Metadata = {
  */
 export default async function TrainerSessionPage() {
   const { user } = await requireStudentZone();
-  const { cards, queueTotal } = await getSessionCards(prisma, { userId: user.id });
+  const { cards, queueTotal, answeredToday } = await getSessionCards(prisma, { userId: user.id });
 
   if (cards.length === 0) {
     const nextReview = await getNextReviewDate(prisma, { userId: user.id });
@@ -49,7 +55,10 @@ export default async function TrainerSessionPage() {
 
   const items: SessionItem[] = cards.map((card) => ({
     cardId: card.cardId,
-    sourceLabel: SRS_SOURCE_LABEL[card.addedFrom],
+    // Человеческая подпись источника (заход C.8) — формулировки живут в сервисе,
+    // а не в разметке.
+    sourceLabel: srsSourceLabel(card.addedFrom, card.lesson?.title),
+    step: card.step,
     category: card.category,
     lesson: card.lesson,
     // Компактная строка вопроса над раскрытым ответом — тот же strip, что у
@@ -60,5 +69,16 @@ export default async function TrainerSessionPage() {
   }));
 
   // key: после «Продолжить» (router.refresh) новая порция перемонтирует сессию.
-  return <ReviewSession key={cards[0]!.cardId} items={items} queueTotal={queueTotal} />;
+  return (
+    <ReviewSession
+      key={cards[0]!.cardId}
+      items={items}
+      queueTotal={queueTotal}
+      portionNote={sessionPortionNote({
+        answeredToday,
+        queueTotal,
+        portionSize: SRS_SESSION_SIZE,
+      })}
+    />
+  );
 }

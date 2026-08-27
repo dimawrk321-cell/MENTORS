@@ -49,8 +49,25 @@ export const SRS_SOURCE_LABEL: Record<SrsAddedFrom, string> = {
   quiz_fail: "Вернулся после ошибки в квизе",
   test_fail: "Вернулся после ошибки в тесте",
   mock: "Добавлен по результатам мок-интервью",
-  manual: "Добавлен вручную",
+  manual: "Добавлено вручную из каталога",
 };
+
+/**
+ * Человеческая подпись источника карточки для мета-строки сессии (заход C.8).
+ *
+ * Формулировка живёт здесь, а не в JSX: «Из урока «…»» когда у карточки есть
+ * привязанный урок, иначе подпись источника из `SRS_SOURCE_LABEL`.
+ *
+ * DECISION: `manual` проверяется ПЕРВЫМ. Вручную добавленный вопрос тоже бывает
+ * привязан к уроку, но провенанс «добавил сам из каталога» важнее места, откуда
+ * вопрос родом, — иначе ручное добавление выглядело бы как ключевой вопрос
+ * пройденного урока.
+ */
+export function srsSourceLabel(addedFrom: SrsAddedFrom, lessonTitle?: string | null): string {
+  if (addedFrom === "manual") return SRS_SOURCE_LABEL.manual;
+  if (lessonTitle) return `Из урока «${lessonTitle}»`;
+  return SRS_SOURCE_LABEL[addedFrom];
+}
 
 export function estimateQueueMinutes(count: number): number {
   return Math.ceil((count * SRS_SECONDS_PER_CARD) / 60);
@@ -520,6 +537,13 @@ export async function reviewSrsCard(
 export interface SessionCard {
   cardId: string;
   addedFrom: SrsAddedFrom;
+  /**
+   * Ступень карточки 0..5 (spec 7.6). На экране показывается только `step === 0`
+   * («Новая карточка»): номер ступени подсказывал бы «правильную» оценку так же,
+   * как это делала бы дата следующего показа. Поле протянуто из БД, потому что
+   * оно понадобится дальше.
+   */
+  step: number;
   question: Question;
   category: { title: string; colorIndex: number };
   /** Привязанный урок для ссылки «Открыть урок» (is_key-привязка приоритетна). */
@@ -530,10 +554,12 @@ export interface SessionCard {
 export async function getSessionCards(
   db: Db,
   input: { userId: string; now?: Date },
-): Promise<{ cards: SessionCard[]; queueTotal: number }> {
+): Promise<{ cards: SessionCard[]; queueTotal: number; answeredToday: number }> {
   const queue = await getSrsQueue(db, input);
   const portion = queue.cards.slice(0, SRS_SESSION_SIZE);
-  if (portion.length === 0) return { cards: [], queueTotal: 0 };
+  if (portion.length === 0) {
+    return { cards: [], queueTotal: 0, answeredToday: queue.answeredToday };
+  }
 
   const questionIds = portion.map((card) => card.questionId);
   const [questions, links] = await Promise.all([
@@ -563,6 +589,7 @@ export async function getSessionCards(
         {
           cardId: card.id,
           addedFrom: card.addedFrom,
+          step: card.step,
           question,
           category: {
             title: question.category.title,
@@ -573,6 +600,7 @@ export async function getSessionCards(
       ];
     }),
     queueTotal: queue.total,
+    answeredToday: queue.answeredToday,
   };
 }
 

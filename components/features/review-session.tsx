@@ -5,12 +5,18 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { Check, Eye, Flame, Layers, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { toast } from "@/components/ui/toast";
-import { formatDateOnlyRu, pluralRu } from "@/lib/utils/dates";
+import { pluralRu } from "@/lib/utils/dates";
 import { reviewCardAction } from "@/lib/actions/srs";
 import { celebrateGamification } from "@/components/features/gamification-celebrate";
-import { SessionCardDeck, type DeckGrade } from "@/components/features/session-card-deck";
+import {
+  SessionCardDeck,
+  useGradeOutcome,
+  type DeckGrade,
+} from "@/components/features/session-card-deck";
 import { useViewOnly } from "@/components/features/view-only";
+import { gradeSharePercent, summarizeGrades } from "@/lib/utils/session-summary";
 
 // Сессия SRS (spec 7.6/13/14): полноэкранная карточка — категория, вопрос →
 // «Показать ответ» (флип 250мс; reduced-motion — мгновенная смена) → эталон →
@@ -21,12 +27,14 @@ import { useViewOnly } from "@/components/features/view-only";
 //
 // Сама карточка живёт в общей деке `SessionCardDeck` (её же использует
 // свободная тренировка). Здесь остаётся то, что специфично для дневной
-// очереди: грейд через reviewCardAction, экран «Порция закрыта» и «Готово» с
-// пилюлями наград.
+// очереди: грейд через reviewCardAction, ритм оценок, инлайн-подтверждение и
+// экраны «Порция закрыта» / «Очередь закрыта» с итогами и пилюлями наград.
 
 export interface SessionItem {
   cardId: string;
   sourceLabel: string;
+  /** Ступень 0..5: на экране рисуется только «Новая карточка» при 0 (заход C.8). */
+  step: number;
   category: { title: string; colorIndex: number };
   lesson: { id: string; title: string } | null;
   /** Вопрос простым текстом — компактная строка над раскрытым ответом. */
@@ -38,7 +46,16 @@ export interface SessionItem {
 type Grade = DeckGrade;
 type Phase = "cards" | "break" | "done";
 
-export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; queueTotal: number }) {
+export function ReviewSession({
+  items,
+  queueTotal,
+  portionNote,
+}: {
+  items: SessionItem[];
+  queueTotal: number;
+  /** «Порция N из M · дневная очередь» — считает lib/utils/session-summary.ts. */
+  portionNote: string;
+}) {
   const router = useRouter();
   // «Глазами ученика»: карточки листаются, но ни один грейд не уходит на сервер
   // (spec 7.2). Ритуал показывается целиком — иначе ментор упирался бы в отказ
@@ -50,6 +67,12 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
   const [remaining, setRemaining] = useState(queueTotal - items.length);
   const [pending, startTransition] = useTransition();
   const [refreshing, startRefresh] = useTransition();
+  // Ритм и итоги считаются из ОДНОГО массива оценок (заход C.8): дека рисует
+  // его сегментами, финальные экраны — числами, второго счёта нет.
+  const [grades, setGrades] = useState<Grade[]>([]);
+  // Инлайн-подтверждение вместо тоста «Следующее повторение — {дата}»: таймер
+  // и его снятие живут в хуке, дека только рисует пришедшее.
+  const { outcome, showOutcome, clearOutcome } = useGradeOutcome();
   // Награды для done-экрана — из результата грейда (без новых запросов): XP за
   // закрытие очереди и продление серии. Серию засчитывает событие queue.completed
   // (закрывающий грейд), поэтому streakCounted приходит именно с него.
@@ -58,6 +81,7 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
   const [streakCurrent, setStreakCurrent] = useState(0);
 
   const item = items[index];
+  const summary = summarizeGrades(grades);
 
   function advance(remainingAfter: number): void {
     if (index + 1 < items.length) {
@@ -71,6 +95,11 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
   function grade(value: Grade): void {
     if (!item || !flipped || pending || phase !== "cards") return;
     if (viewOnly) {
+      // Ритм копится и в режиме просмотра, чтобы ритуал был виден целиком.
+      // DECISION: инлайн-подтверждение при этом НЕ показывается — «Записано»
+      // было бы неправдой там, где на сервер не уходит ничего; про режим
+      // говорят подтверждение выхода и финальный экран.
+      setGrades((current) => [...current, value]);
       advance(remaining);
       return;
     }
@@ -79,6 +108,9 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
       if (!result.ok) {
         if (result.error.code === "not_due") {
           // Карточка уже учтена (двойной сабмит/устаревшая вкладка) — дальше.
+          // Записи не было, поэтому и подтверждать нечего: полосу снимаем, иначе
+          // она пережила бы переход к следующей карточке.
+          clearOutcome();
           advance(remaining);
           return;
         }
@@ -86,10 +118,19 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
         return;
       }
       setRemaining(result.data.remaining);
-      toast({
-        title: "Следующее повторение",
-        description: formatDateOnlyRu(new Date(result.data.nextReviewAt)),
-      });
+      setGrades((current) => [...current, value]);
+      // Полоса показывается на СЛЕДУЮЩЕЙ карточке; на последней её место
+      // занимает экран итогов, поэтому и показывать нечего.
+      const next = items[index + 1];
+      if (next) {
+        showOutcome({
+          grade: value,
+          itemId: next.cardId,
+          lessonId: item.lesson?.id ?? null,
+        });
+      } else {
+        clearOutcome();
+      }
       // Серия продлевается на первом качественном событии дня — копим флаг за сессию.
       if (result.data.streakCounted) {
         setStreakAdvanced(true);
@@ -134,6 +175,7 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
             продолжить?
           </p>
         </div>
+        <GradeChips summary={summary} />
         <div className="flex gap-2">
           <Button loading={refreshing} onClick={() => startRefresh(() => router.refresh())}>
             Продолжить
@@ -142,12 +184,21 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
             <Link href="/trainer">Закончить</Link>
           </Button>
         </div>
+        {/* Правда, а не утешение: каждый грейд — отдельный action, отвеченное
+            уже в базе. В режиме просмотра на сервер не ушло ничего. */}
+        {viewOnly ? (
+          <ViewOnlyNote />
+        ) : (
+          <p className="text-text-3 text-[12.5px]">
+            Отвеченное уже сохранено — можно выйти и вернуться позже.
+          </p>
+        )}
       </div>
     );
   }
 
   if (phase === "done") {
-    // Сдержанный экран «Готово» (spec 7.6): +30 XP и день в серию начислены
+    // Экран «Очередь закрыта» (spec 7.6): +30 XP и день в серию начислены
     // диспетчером; достижения/уровень уже показаны тостами.
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-4 py-10 text-center">
@@ -161,19 +212,15 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
           <Check size={30} strokeWidth={2.25} className="text-white" aria-hidden="true" />
         </div>
         <div>
-          <p className="text-[20px] font-bold tracking-[-0.01em]">Готово!</p>
+          <p className="text-[20px] font-bold tracking-[-0.01em]">Очередь закрыта</p>
           <p className="text-text-2 mt-1.5 text-[14px]">
             {viewOnly
               ? "Так ученик увидит закрытую очередь."
-              : "Очередь на сегодня закрыта. Следующие карточки придут по расписанию."}
+              : "Сегодня всё повторено. Следующие карточки придут по расписанию."}
           </p>
         </div>
-        {viewOnly && (
-          <p className="text-text-3 flex items-start gap-1.5 text-[13px]">
-            <Eye size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
-            <span>Режим просмотра: ответы не записаны, расписание не изменилось.</span>
-          </p>
-        )}
+        {viewOnly && <ViewOnlyNote />}
+        <SessionSummaryCard summary={summary} />
         {/* Пилюли наград (design handoff): XP за закрытие очереди + продление серии,
             если день ещё не был засчитан. Значения — из результата грейда. */}
         {(doneXp > 0 || streakAdvanced) && (
@@ -191,9 +238,14 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
             )}
           </div>
         )}
-        <Button asChild variant="secondary">
-          <Link href="/trainer">В тренажёр</Link>
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button asChild variant="gradient">
+            <Link href="/trainer">В тренажёр</Link>
+          </Button>
+          <Button asChild variant="secondary">
+            <Link href="/trainer/free">Свободная тренировка</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -212,12 +264,16 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
       }}
       index={index}
       total={items.length}
+      grades={grades}
+      step={item.step}
+      sourceLabel={item.sourceLabel}
       flipped={flipped}
       pending={pending}
       active={phase === "cards"}
       exitHref="/trainer"
       exitLabel="Закончить"
-      note={item.sourceLabel}
+      note={portionNote}
+      outcome={outcome}
       // Отвеченные карточки уже сохранены (каждый грейд — свой action), теряется
       // только неотвеченный остаток (spec 12.1/C7). В режиме просмотра не
       // сохраняется ничего, и обещать сохранность нельзя.
@@ -229,5 +285,85 @@ export function ReviewSession({ items, queueTotal }: { items: SessionItem[]; que
       onFlip={setFlipped}
       onGrade={grade}
     />
+  );
+}
+
+function ViewOnlyNote() {
+  return (
+    <p className="text-text-3 flex items-start gap-1.5 text-[13px]">
+      <Eye size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" aria-hidden="true" />
+      <span>Режим просмотра: ответы не записаны, расписание не изменилось.</span>
+    </p>
+  );
+}
+
+const TONES = [
+  { key: "good", label: "Знаю", color: "var(--success)" },
+  { key: "hard", label: "Сомневаюсь", color: "var(--warning)" },
+  { key: "again", label: "Не знаю", color: "var(--danger)" },
+] as const;
+
+/** Итоги порции чипами (заход C.8): те же оценки, что рисуют ритм. */
+function GradeChips({ summary }: { summary: ReturnType<typeof summarizeGrades> }) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      {TONES.map((tone) => (
+        <span
+          key={tone.key}
+          className="rounded-pill border-border bg-surface-1 text-text-2 inline-flex items-center gap-[7px] border px-3 py-1 text-[12.5px]"
+        >
+          <span
+            aria-hidden="true"
+            className="size-[7px] rounded-full"
+            style={{ background: tone.color }}
+          />
+          {tone.label} · <span className="tabular-nums">{summary[tone.key]}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** «Как прошла сессия» (заход C.8): доля «Знаю», полоса, легенда и вывод. Без дат. */
+function SessionSummaryCard({ summary }: { summary: ReturnType<typeof summarizeGrades> }) {
+  if (summary.answered === 0) return null;
+  const share = (count: number) => `${gradeSharePercent(count, summary.answered)}%`;
+
+  return (
+    <Card className="w-full max-w-[460px] rounded-[16px] px-5 py-4.5 text-left">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-text-3 text-[13px]">Как прошла сессия</p>
+        <p className="text-text-3 text-[13px] tabular-nums">{share(summary.good)} «Знаю»</p>
+      </div>
+      <div
+        className="rounded-pill mt-3 flex h-2 overflow-hidden"
+        style={{ background: "var(--heat-empty)" }}
+        aria-hidden="true"
+      >
+        {TONES.map((tone) => (
+          <span
+            key={tone.key}
+            style={{ width: share(summary[tone.key]), background: tone.color }}
+          />
+        ))}
+      </div>
+      <div className="text-text-2 mt-2.5 flex flex-wrap gap-3 text-[12.5px]">
+        {TONES.map((tone) => (
+          <span key={tone.key} className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="size-2 rounded-[2px]"
+              style={{ background: tone.color }}
+            />
+            {tone.label} <span className="tabular-nums">{summary[tone.key]}</span>
+          </span>
+        ))}
+      </div>
+      <p className="border-border text-text-2 mt-3.5 border-t pt-3 text-[13px]">
+        {summary.again > 0
+          ? "Карточки с «Не знаю» вернутся ещё раз — они же подсветятся в западающих темах."
+          : "Ни одного «Не знаю» — колода двигается дальше по интервалам."}
+      </p>
+    </Card>
   );
 }

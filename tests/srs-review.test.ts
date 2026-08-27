@@ -7,6 +7,7 @@ import {
   reviewSrsCard,
   SRS_STUCK_LAPSES,
   SRS_SOURCE_LABEL,
+  srsSourceLabel,
   SRS_LEARNED_INTERVAL_DAYS,
 } from "@/lib/services/srs";
 import { countStreakDay } from "@/lib/services/streak";
@@ -523,8 +524,24 @@ describe("статистика и агрегаторы", () => {
       quiz_fail: "Вернулся после ошибки в квизе",
       test_fail: "Вернулся после ошибки в тесте",
       mock: "Добавлен по результатам мок-интервью",
-      manual: "Добавлен вручную",
+      manual: "Добавлено вручную из каталога",
     });
+  });
+
+  it("подпись источника в мета-строке сессии: урок называется, ручное добавление — нет", () => {
+    // Заход C.8: формулировка живёт в сервисе, а не в JSX.
+    expect(srsSourceLabel("lesson_key", "Функции и их особенности в Python")).toBe(
+      "Из урока «Функции и их особенности в Python»",
+    );
+    expect(srsSourceLabel("quiz_fail", "Метрики классификации")).toBe(
+      "Из урока «Метрики классификации»",
+    );
+    // manual проверяется ПЕРВЫМ: вручную добавленный вопрос тоже бывает
+    // привязан к уроку, но провенанс «добавил сам» важнее.
+    expect(srsSourceLabel("manual", "Механизм внимания")).toBe("Добавлено вручную из каталога");
+    // Без урока остаётся прежняя подпись источника.
+    expect(srsSourceLabel("test_fail", null)).toBe("Вернулся после ошибки в тесте");
+    expect(srsSourceLabel("mock")).toBe("Добавлен по результатам мок-интервью");
   });
 
   it("«мои западающие»: lapses ≥ 1 или карточка из ошибок", async () => {

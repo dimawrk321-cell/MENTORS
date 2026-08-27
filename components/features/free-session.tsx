@@ -48,6 +48,9 @@ export function FreeSession({
   const [pending, startTransition] = useTransition();
 
   const item = items[index];
+  // Ритм по карточкам (заход C.8): дека рисует накопленные оценки сегментами и
+  // сама ничего не считает — оценки копит вызывающий, как и в дневной очереди.
+  const grades = answers.map((entry) => entry.grade);
 
   function finishLocally(answered: { questionId: string; grade: DeckGrade }[]): void {
     // «Глазами ученика»: итог считаем тем же кодом, что и сервер, но ничего не
@@ -109,6 +112,7 @@ export function FreeSession({
       }}
       index={index}
       total={items.length}
+      grades={grades}
       flipped={flipped}
       pending={pending}
       active={!result}
