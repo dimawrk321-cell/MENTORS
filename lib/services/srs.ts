@@ -1,6 +1,12 @@
 import type { PrismaClient, Question, SrsAddedFrom, SrsCard, SrsGrade } from "@prisma/client";
 import type { Db } from "@/lib/db";
-import { addDays, dateOnlyUtc, localDateStr, zonedDayUtcRange } from "@/lib/utils/dates";
+import {
+  addDays,
+  dateOnlyUtc,
+  isoWeekday,
+  localDateStr,
+  zonedDayUtcRange,
+} from "@/lib/utils/dates";
 import { emitEvent, mergeEmitResults, type EarnedAchievement } from "@/lib/services/events";
 import { getNumericSetting, OPS_NEW_CARDS_PER_DAY_KEY } from "@/lib/services/settings";
 import {
@@ -31,6 +37,12 @@ export const SRS_SECONDS_PER_CARD = 25;
 export const LAGGING_MIN_ANSWERS = 20;
 /** Одна случайная ошибка не делает категорию слабой. */
 export const LAGGING_CATEGORY_MIN_ANSWERS = 5;
+/** Карточка с тремя и более провалами считается «застрявшей». */
+export const SRS_STUCK_LAPSES = 3;
+/** График точности показывает текущую и пять предыдущих недель. */
+export const TRAINER_ACCURACY_WEEKS = 6;
+/** Горизонт плановой нагрузки на главной тренажёра. */
+export const TRAINER_LOAD_DAYS = 14;
 
 export const SRS_SOURCE_LABEL: Record<SrsAddedFrom, string> = {
   lesson_key: "Ключевой вопрос пройденного урока",
@@ -238,6 +250,15 @@ export interface SrsQueue {
   cards: SrsCard[];
   total: number;
   estimateMinutes: number;
+  /** Уникальные карточки, уже отвеченные в текущий календарный день. */
+  answeredToday: number;
+  /** Фактический дневной лимит новых из ops-настроек. */
+  newPerDay: number;
+  breakdown: {
+    overdue: number;
+    review: number;
+    fresh: number;
+  };
 }
 
 /**
@@ -245,19 +266,19 @@ export interface SrsQueue {
  * дневной лимит 20 — иначе закрытие первой порции открывало бы следующую
  * пачку новых и «не более 20 новых в день» не выполнялось бы.
  */
-async function countNewCardsReviewedToday(
+async function getTodayReviewCounts(
   db: Db,
   userId: string,
   todayStr: string,
   timezone: string,
-): Promise<number> {
+): Promise<{ answered: number; fresh: number }> {
   const { start, end } = zonedDayUtcRange(todayStr, timezone);
   const reviewedToday = await db.srsReview.findMany({
     where: { card: { userId }, reviewedAt: { gte: start, lt: end } },
     select: { cardId: true },
     distinct: ["cardId"],
   });
-  if (reviewedToday.length === 0) return 0;
+  if (reviewedToday.length === 0) return { answered: 0, fresh: 0 };
 
   const reviewedBefore = await db.srsReview.findMany({
     where: { cardId: { in: reviewedToday.map((row) => row.cardId) }, reviewedAt: { lt: start } },
@@ -265,7 +286,10 @@ async function countNewCardsReviewedToday(
     distinct: ["cardId"],
   });
   const seenBefore = new Set(reviewedBefore.map((row) => row.cardId));
-  return reviewedToday.filter((row) => !seenBefore.has(row.cardId)).length;
+  return {
+    answered: reviewedToday.length,
+    fresh: reviewedToday.filter((row) => !seenBefore.has(row.cardId)).length,
+  };
 }
 
 /**
@@ -303,8 +327,8 @@ export async function getSrsQueue(
     min: 1,
     max: 500,
   });
-  let newAllowance =
-    newPerDay - (await countNewCardsReviewedToday(db, input.userId, todayStr, timezone));
+  const reviewedToday = await getTodayReviewCounts(db, input.userId, todayStr, timezone);
+  let newAllowance = newPerDay - reviewedToday.fresh;
   const cards = due.filter((card) => {
     // Второй рубеж по эталону: SQL-фильтр не умеет trim, а «эталон из пробелов»
     // — такая же карточка без обратной стороны (заход «Доступ к вопросам»).
@@ -315,7 +339,21 @@ export async function getSrsQueue(
     return true;
   });
 
-  return { cards, total: cards.length, estimateMinutes: estimateQueueMinutes(cards.length) };
+  const breakdown = { overdue: 0, review: 0, fresh: 0 };
+  for (const card of cards) {
+    if (card.reviewsCount === 0) breakdown.fresh += 1;
+    else if (card.nextReviewAt < today) breakdown.overdue += 1;
+    else breakdown.review += 1;
+  }
+
+  return {
+    cards,
+    total: cards.length,
+    estimateMinutes: estimateQueueMinutes(cards.length),
+    answeredToday: reviewedToday.answered,
+    newPerDay,
+    breakdown,
+  };
 }
 
 /**
@@ -353,7 +391,7 @@ export async function getNextReviewDate(
     max: 500,
   });
   const allowanceLeft =
-    newPerDay - (await countNewCardsReviewedToday(db, input.userId, todayStr, timezone));
+    newPerDay - (await getTodayReviewCounts(db, input.userId, todayStr, timezone)).fresh;
   const dueNew = await db.srsCard.count({
     where: { ...baseWhere, reviewsCount: 0, nextReviewAt: { lte: today } },
   });
@@ -545,6 +583,19 @@ export interface TrainerStats {
   learnedCount: number;
   /** Доля good среди ответов за 30 дней; null, если ответов не было. */
   accuracy30: number | null;
+  totalCount: number;
+  workingCount: number;
+  stuckCount: number;
+  stepDistribution: {
+    fresh: number;
+    steps: number[];
+    learned: number;
+  };
+  accuracyByWeek: {
+    /** Понедельник календарной недели пользователя, в формате date-only UTC. */
+    weekStart: Date;
+    accuracy: number | null;
+  }[];
 }
 
 export async function getTrainerStats(
@@ -561,26 +612,147 @@ export async function getTrainerStats(
   // определения видимости не заводим.
   // «Отвечено всего» и точность 30 дней остаются без фильтра осознанно: это
   // история ответов, и она не меняется от того, что вопрос позже спрятали.
-  const access = await getQuestionAccess(db, input.userId);
-  const [answeredTotal, learnedCount, reviews30, good30] = await Promise.all([
+  const [{ timezone, todayStr, today }, access] = await Promise.all([
+    getUserToday(db, input.userId, now),
+    getQuestionAccess(db, input.userId),
+  ]);
+  const currentWeekStart = addDays(today, 1 - isoWeekday(todayStr));
+  const firstWeekStart = addDays(currentWeekStart, -(TRAINER_ACCURACY_WEEKS - 1) * 7);
+  const firstWeekStr = localDateStr(firstWeekStart, "UTC");
+  const weeklyStartUtc = zonedDayUtcRange(firstWeekStr, timezone).start;
+  const recentStart = weeklyStartUtc < since ? weeklyStartUtc : since;
+
+  const [answeredTotal, rawCards, recentReviews] = await Promise.all([
     db.srsReview.count({ where: { card: { userId: input.userId } } }),
-    db.srsCard.count({
+    db.srsCard.findMany({
       where: {
         userId: input.userId,
-        step: SRS_LEARNED_STEP,
+        suspended: false,
         question: { status: "published", ...visibleQuestionWhere(access) },
       },
+      select: {
+        step: true,
+        lapses: true,
+        reviewsCount: true,
+        question: { select: { type: true, answerMd: true } },
+      },
     }),
-    db.srsReview.count({ where: { card: { userId: input.userId }, reviewedAt: { gte: since } } }),
-    db.srsReview.count({
-      where: { card: { userId: input.userId }, grade: "good", reviewedAt: { gte: since } },
+    db.srsReview.findMany({
+      where: { card: { userId: input.userId }, reviewedAt: { gte: recentStart } },
+      select: { grade: true, reviewedAt: true },
     }),
   ]);
+
+  const cards = rawCards.filter((card) => hasReferenceAnswer(card.question));
+  const learnedCount = cards.filter((card) => card.step >= SRS_LEARNED_STEP).length;
+  const stuckCount = cards.filter(
+    (card) => card.step < SRS_LEARNED_STEP && card.lapses >= SRS_STUCK_LAPSES,
+  ).length;
+  const workingCount = cards.length - learnedCount - stuckCount;
+
+  const stepDistribution = {
+    fresh: 0,
+    steps: Array.from({ length: SRS_STEPS.length }, () => 0),
+    learned: 0,
+  };
+  for (const card of cards) {
+    if (card.step >= SRS_LEARNED_STEP) stepDistribution.learned += 1;
+    else if (card.reviewsCount === 0) stepDistribution.fresh += 1;
+    else stepDistribution.steps[card.step] = (stepDistribution.steps[card.step] ?? 0) + 1;
+  }
+
+  const reviews30 = recentReviews.filter((review) => review.reviewedAt >= since);
+  const good30 = reviews30.filter((review) => review.grade === "good").length;
+  const weekly = new Map<string, { total: number; good: number }>();
+  for (const review of recentReviews) {
+    const localReviewDate = localDateStr(review.reviewedAt, timezone);
+    const monday = addDays(dateOnlyUtc(localReviewDate), 1 - isoWeekday(localReviewDate));
+    const key = localDateStr(monday, "UTC");
+    if (monday < firstWeekStart || monday > currentWeekStart) continue;
+    const bucket = weekly.get(key) ?? { total: 0, good: 0 };
+    bucket.total += 1;
+    if (review.grade === "good") bucket.good += 1;
+    weekly.set(key, bucket);
+  }
+
   return {
     answeredTotal,
     learnedCount,
-    accuracy30: reviews30 === 0 ? null : good30 / reviews30,
+    accuracy30: reviews30.length === 0 ? null : good30 / reviews30.length,
+    totalCount: cards.length,
+    workingCount,
+    stuckCount,
+    stepDistribution,
+    accuracyByWeek: Array.from({ length: TRAINER_ACCURACY_WEEKS }, (_, index) => {
+      const weekStart = addDays(firstWeekStart, index * 7);
+      const bucket = weekly.get(localDateStr(weekStart, "UTC"));
+      return {
+        weekStart,
+        accuracy: !bucket || bucket.total === 0 ? null : bucket.good / bucket.total,
+      };
+    }),
   };
+}
+
+export interface UpcomingLoadDay {
+  /** Календарная дата пользователя в формате date-only UTC. */
+  date: Date;
+  count: number;
+}
+
+/**
+ * Нагрузка по фактическому `next_review_at` на ближайшие календарные дни.
+ * Новые карточки ограничены действующим дневным лимитом; остаток без записанного
+ * будущего срока не изображается как обещанный план.
+ */
+export async function getUpcomingLoad(
+  db: Db,
+  input: { userId: string; days?: number; now?: Date },
+): Promise<UpcomingLoadDay[]> {
+  const now = input.now ?? new Date();
+  const days = Math.max(0, Math.floor(input.days ?? TRAINER_LOAD_DAYS));
+  if (days === 0) return [];
+
+  const [{ timezone, todayStr, today }, access, newPerDay] = await Promise.all([
+    getUserToday(db, input.userId, now),
+    getQuestionAccess(db, input.userId),
+    getNumericSetting(db, OPS_NEW_CARDS_PER_DAY_KEY, SRS_NEW_PER_DAY, {
+      min: 1,
+      max: 500,
+    }),
+  ]);
+  const end = addDays(today, days);
+  const rawCards = await db.srsCard.findMany({
+    where: {
+      userId: input.userId,
+      suspended: false,
+      nextReviewAt: { gte: today, lt: end },
+      question: { status: "published", ...visibleQuestionWhere(access) },
+    },
+    select: {
+      nextReviewAt: true,
+      reviewsCount: true,
+      question: { select: { type: true, answerMd: true } },
+    },
+  });
+
+  const byDate = new Map<string, { review: number; fresh: number }>();
+  for (const card of rawCards) {
+    if (!hasReferenceAnswer(card.question)) continue;
+    const key = localDateStr(card.nextReviewAt, "UTC");
+    const bucket = byDate.get(key) ?? { review: 0, fresh: 0 };
+    if (card.reviewsCount === 0) bucket.fresh += 1;
+    else bucket.review += 1;
+    byDate.set(key, bucket);
+  }
+
+  const reviewedToday = await getTodayReviewCounts(db, input.userId, todayStr, timezone);
+  return Array.from({ length: days }, (_, index) => {
+    const date = addDays(today, index);
+    const bucket = byDate.get(localDateStr(date, "UTC")) ?? { review: 0, fresh: 0 };
+    const freshAllowance = index === 0 ? Math.max(0, newPerDay - reviewedToday.fresh) : newPerDay;
+    return { date, count: bucket.review + Math.min(bucket.fresh, freshAllowance) };
+  });
 }
 
 export interface LaggingCategory {

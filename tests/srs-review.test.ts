@@ -5,6 +5,7 @@ import {
   getNextReviewDate,
   getTrainerStats,
   reviewSrsCard,
+  SRS_STUCK_LAPSES,
   SRS_SOURCE_LABEL,
   SRS_LEARNED_INTERVAL_DAYS,
 } from "@/lib/services/srs";
@@ -22,8 +23,8 @@ beforeEach(async () => {
   await resetDb();
 });
 
-async function makeStudent(email = "student@test.local") {
-  return createTestUser({ email, passwordHash: "unused" });
+async function makeStudent(email = "student@test.local", timezone = "Europe/Moscow") {
+  return createTestUser({ email, passwordHash: "unused", timezone });
 }
 
 interface CategorySpec {
@@ -324,13 +325,100 @@ describe("статистика и агрегаторы", () => {
     expect(stats.answeredTotal).toBe(3);
     expect(stats.learnedCount).toBe(1);
     expect(stats.accuracy30).toBeCloseTo(0.5);
+    expect(stats.totalCount).toBe(2);
+    expect(stats.workingCount).toBe(1);
+    expect(stats.stuckCount).toBe(0);
+    expect(stats.stepDistribution).toEqual({
+      fresh: 1,
+      steps: [0, 0, 0, 0, 0],
+      learned: 1,
+    });
+    expect(stats.accuracyByWeek).toHaveLength(6);
+    expect(stats.accuracyByWeek.at(-1)).toEqual({
+      weekStart: dateOnlyUtc("2026-07-06"),
+      accuracy: 0.5,
+    });
 
     const empty = await makeStudent("empty@test.local");
     expect(await getTrainerStats(testDb, { userId: empty.id, now: NOW })).toEqual({
       answeredTotal: 0,
       learnedCount: 0,
       accuracy30: null,
+      totalCount: 0,
+      workingCount: 0,
+      stuckCount: 0,
+      stepDistribution: { fresh: 0, steps: [0, 0, 0, 0, 0], learned: 0 },
+      accuracyByWeek: [
+        { weekStart: dateOnlyUtc("2026-06-01"), accuracy: null },
+        { weekStart: dateOnlyUtc("2026-06-08"), accuracy: null },
+        { weekStart: dateOnlyUtc("2026-06-15"), accuracy: null },
+        { weekStart: dateOnlyUtc("2026-06-22"), accuracy: null },
+        { weekStart: dateOnlyUtc("2026-06-29"), accuracy: null },
+        { weekStart: dateOnlyUtc("2026-07-06"), accuracy: null },
+      ],
     });
+  });
+
+  it("getTrainerStats: сегменты колоды взаимоисключающие, а step 0 после again не новый", async () => {
+    const user = await makeStudent();
+    const category = await makeCategory({ slug: "segments", title: "Segments" });
+    await makeCard(user.id, category.id); // новая
+    await makeCard(user.id, category.id, {
+      step: 0,
+      lapses: SRS_STUCK_LAPSES,
+      reviewsCount: 4,
+    }); // застряла после again
+    await makeCard(user.id, category.id, { step: 2, reviewsCount: 2 }); // в работе
+    await makeCard(user.id, category.id, {
+      step: 4,
+      lapses: SRS_STUCK_LAPSES + 1,
+      reviewsCount: 5,
+    }); // застряла
+    await makeCard(user.id, category.id, {
+      step: 5,
+      lapses: SRS_STUCK_LAPSES + 5,
+      reviewsCount: 6,
+    }); // выучена, не «застряла»
+
+    const stats = await getTrainerStats(testDb, { userId: user.id, now: NOW });
+    expect(stats).toMatchObject({
+      totalCount: 5,
+      learnedCount: 1,
+      workingCount: 2,
+      stuckCount: 2,
+      stepDistribution: { fresh: 1, steps: [1, 0, 1, 0, 1], learned: 1 },
+    });
+  });
+
+  it("getTrainerStats: недели начинаются в понедельник таймзоны ученика", async () => {
+    const now = new Date("2026-07-06T01:00:00.000Z"); // Москва: понедельник, 04:00
+    const user = await makeStudent("weeks@test.local", "Europe/Moscow");
+    const category = await makeCategory({ slug: "weeks", title: "Weeks" });
+    const card = await makeCard(user.id, category.id, { reviewsCount: 2 });
+    await testDb.srsReview.createMany({
+      data: [
+        {
+          cardId: card.id,
+          grade: "again",
+          reviewedAt: new Date("2026-07-05T20:30:00.000Z"), // воскресенье 23:30
+          prevStep: 1,
+          newStep: 0,
+        },
+        {
+          cardId: card.id,
+          grade: "good",
+          reviewedAt: new Date("2026-07-05T21:30:00.000Z"), // понедельник 00:30
+          prevStep: 0,
+          newStep: 1,
+        },
+      ],
+    });
+
+    const weeks = (await getTrainerStats(testDb, { userId: user.id, now })).accuracyByWeek;
+    expect(weeks.slice(-2)).toEqual([
+      { weekStart: dateOnlyUtc("2026-06-29"), accuracy: 0 },
+      { weekStart: dateOnlyUtc("2026-07-06"), accuracy: 1 },
+    ]);
   });
 
   // Заход B.2, хвост 4.4: «выучено» — про текущую колоду, а не про историю.

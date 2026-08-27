@@ -3,6 +3,7 @@ import {
   addSrsCardManually,
   getNextReviewDate,
   getSrsQueue,
+  getUpcomingLoad,
   reviewSrsCard,
   SRS_NEW_PER_DAY,
 } from "@/lib/services/srs";
@@ -87,6 +88,9 @@ describe("выборка дня (spec 7.6)", () => {
     const queue = await getSrsQueue(testDb, { userId: user.id, now: NOW });
     expect(queue.cards.map((card) => card.id)).toEqual([overdue5.id, overdue7.id, today.id]);
     expect(queue.total).toBe(3);
+    expect(queue.breakdown).toEqual({ overdue: 2, review: 1, fresh: 0 });
+    expect(queue.answeredToday).toBe(0);
+    expect(queue.newPerDay).toBe(SRS_NEW_PER_DAY);
   });
 
   it("новых в выборке не больше 20; уже отвеченные карточки лимиту не подчиняются", async () => {
@@ -134,6 +138,8 @@ describe("выборка дня (spec 7.6)", () => {
     // Лимит дня: 20 − 3 отвеченных = 17, а не свежие 20 из оставшихся 22 новых.
     const second = await getSrsQueue(testDb, { userId: user.id, now: NOW });
     expect(second.total).toBe(SRS_NEW_PER_DAY - 3);
+    expect(second.answeredToday).toBe(3);
+    expect(second.breakdown).toEqual({ overdue: 0, review: 0, fresh: SRS_NEW_PER_DAY - 3 });
   });
 
   it("оценка времени: count × 25 сек, округление вверх до минут", async () => {
@@ -226,5 +232,41 @@ describe("границы суток в таймзоне пользователя
       where: { userId_questionId: { userId: auckland.id, questionId: questionId! } },
     });
     expect(card.nextReviewAt).toEqual(dateOnlyUtc("2026-07-09"));
+  });
+});
+
+describe("нагрузка на ближайшие дни (заход C.9)", () => {
+  it("считает фактические сроки и ограничивает новые дневным лимитом", async () => {
+    const user = await makeStudent();
+    const questionIds = await makeQuestions(55);
+
+    // Сегодня: 25 новых + 3 повторных → 20 + 3.
+    for (const [index, questionId] of questionIds.slice(0, 28).entries()) {
+      await makeCard(user.id, questionId, { reviewsCount: index < 25 ? 0 : 1 });
+    }
+    // Завтра: 25 новых + 2 повторных → 20 + 2.
+    for (const [index, questionId] of questionIds.slice(28).entries()) {
+      await makeCard(user.id, questionId, {
+        nextReviewAt: addDays(TODAY, 1),
+        reviewsCount: index < 25 ? 0 : 1,
+      });
+    }
+
+    const load = await getUpcomingLoad(testDb, { userId: user.id, days: 3, now: NOW });
+    expect(load).toEqual([
+      { date: TODAY, count: 23 },
+      { date: addDays(TODAY, 1), count: 22 },
+      { date: addDays(TODAY, 2), count: 0 },
+    ]);
+  });
+
+  it("начинает окно с календарного сегодня пользователя", async () => {
+    const auckland = await makeStudent("load-akl@test.local", "Pacific/Auckland");
+    const evening = new Date("2026-07-08T20:00:00.000Z");
+    const load = await getUpcomingLoad(testDb, { userId: auckland.id, days: 2, now: evening });
+    expect(load.map((day) => day.date)).toEqual([
+      dateOnlyUtc("2026-07-09"),
+      dateOnlyUtc("2026-07-10"),
+    ]);
   });
 });

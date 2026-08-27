@@ -7,29 +7,33 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function TrainerLoading() {
   return (
     <div className="flex flex-col gap-5">
-      <Skeleton className="h-7 w-40" />
-
-      <div className="rounded-card flex flex-wrap items-center gap-4 border p-5">
-        <Skeleton className="rounded-pill size-10" />
-        <div className="min-w-0 flex-1 flex-col gap-2">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="mt-2 h-5 w-48" />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Skeleton className="h-[34px] w-40" />
+          <Skeleton className="mt-2 h-4 w-[min(420px,80vw)]" />
         </div>
-        <Skeleton className="rounded-pill h-9 w-24" />
+        <Skeleton className="h-8 w-32 rounded-full" />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Skeleton className="rounded-card h-20 w-full" />
-        <Skeleton className="rounded-card h-20 w-full" />
-        <Skeleton className="rounded-card h-20 w-full" />
+      <div className="grid grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-4 max-[1080px]:grid-cols-1">
+        <Skeleton className="rounded-card h-[266px] w-full" />
+        <div className="flex flex-col gap-4">
+          <Skeleton className="rounded-card h-[126px] w-full" />
+          <Skeleton className="rounded-card h-[124px] w-full" />
+        </div>
       </div>
 
-      <section className="flex flex-col gap-3">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="rounded-card h-32 w-full" />
-      </section>
+      <div className="grid grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-4 max-[1080px]:grid-cols-1">
+        <Skeleton className="rounded-card h-[238px] w-full" />
+        <Skeleton className="rounded-card h-[238px] w-full" />
+      </div>
 
-      <Skeleton className="rounded-card h-24 w-full" />
+      <Skeleton className="rounded-card h-[210px] w-full" />
+
+      <div className="grid grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-4 max-[1080px]:grid-cols-1">
+        <Skeleton className="rounded-card h-[78px] w-full" />
+        <Skeleton className="rounded-card h-[78px] w-full" />
+      </div>
     </div>
   );
 }
