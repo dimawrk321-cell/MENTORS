@@ -9,5 +9,5 @@ export const metadata: Metadata = { title: "Резюме" };
 export default async function ResumePage() {
   const { user } = await requireStudentZone();
   if (!user.guidesResumeEnabled) notFound();
-  return <GuideSectionView section="resume" />;
+  return <GuideSectionView section="resume" userId={user.id} />;
 }

@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { searchGuidesByContent, type GuideContentHit } from "@/lib/services/guides";
-import { GUIDE_SECTION_LABEL } from "@/lib/constants";
+import { GUIDE_SECTION_COLOR, GUIDE_SECTION_LABEL, NEW_GUIDE_DAYS } from "@/lib/constants";
 import { computeReadingMinutes } from "@/lib/utils/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,18 +22,7 @@ interface GuidesIndexPageProps {
   searchParams: Promise<{ q?: string }>;
 }
 
-// DECISION (C.7 «Справочник v2»): section colours are stable product mapping,
-// not array positions. Only existing theme tokens are passed to the client.
-const GUIDE_SECTION_COLOR: Record<string, string> = {
-  stages: "var(--cat-1)",
-  ask_interviewer: "var(--cat-5)",
-  job_search: "var(--cat-7)",
-  resume: "var(--cat-0)",
-  legend: "var(--cat-6)",
-};
-
 const ALWAYS_VISIBLE_SECTIONS = ["stages", "ask_interviewer", "job_search"] as const;
-const NEW_GUIDE_DAYS = 14;
 
 function GuideHitRow({ hit }: { hit: GuideContentHit }) {
   return (

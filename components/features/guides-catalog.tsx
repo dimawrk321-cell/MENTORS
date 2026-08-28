@@ -13,6 +13,13 @@ import { Bookmark, BookmarkCheck, BookOpen, ChevronRight, Search, X } from "luci
 import { toggleBookmarkAction } from "@/lib/actions/guides";
 import { GUIDE_SECTION_LABEL } from "@/lib/constants";
 import { pluralRu } from "@/lib/utils/dates";
+import {
+  ALL_SECTIONS,
+  countBySection,
+  filterGuides,
+  groupGuides,
+  isFilterActive,
+} from "@/lib/utils/guides-catalog-filter";
 import { cn } from "@/lib/utils/cn";
 import { toast } from "@/components/ui/toast";
 import { useViewOnly, VIEW_ONLY_TITLE } from "@/components/features/view-only";
@@ -52,7 +59,7 @@ export function GuidesCatalog({
 }: GuidesCatalogProps) {
   const viewOnly = useViewOnly();
   const [query, setQuery] = useState("");
-  const [section, setSection] = useState("all");
+  const [section, setSection] = useState<string>(ALL_SECTIONS);
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
   const [bookmarks, setBookmarks] = useState(
     () => new Set(initialGuides.filter((guide) => guide.bookmarked).map((guide) => guide.id)),
@@ -60,32 +67,22 @@ export function GuidesCatalog({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  const normalizedQuery = query.trim().toLocaleLowerCase("ru");
+  // Правило фильтрации — чистая функция под тестами
+  // (lib/utils/guides-catalog-filter), как программа курса в заходе B.5.
+  const filter = { query, section, bookmarksOnly };
   const guides = initialGuides.map((guide) => ({ ...guide, bookmarked: bookmarks.has(guide.id) }));
-  const visible = guides.filter((guide) => {
-    if (section !== "all" && guide.section !== section) return false;
-    if (bookmarksOnly && !guide.bookmarked) return false;
-    return !normalizedQuery || guide.title.toLocaleLowerCase("ru").includes(normalizedQuery);
-  });
-  const groups = sectionOrder
-    .map((key) => ({ key, guides: visible.filter((guide) => guide.section === key) }))
-    .filter((group) => group.guides.length > 0);
+  const visible = filterGuides(guides, filter);
+  const groups = groupGuides(visible, sectionOrder);
   const sectionCounts = useMemo(
-    () =>
-      new Map(
-        sectionOrder.map((key) => [
-          key,
-          initialGuides.filter((guide) => guide.section === key).length,
-        ]),
-      ),
+    () => countBySection(initialGuides, sectionOrder),
     [initialGuides, sectionOrder],
   );
-  const hasFilters = normalizedQuery.length > 0 || section !== "all" || bookmarksOnly;
+  const hasFilters = isFilterActive(filter);
   const showContinue = !hasFilters && initialContinueGuide !== null;
 
   function resetFilters(): void {
     setQuery("");
-    setSection("all");
+    setSection(ALL_SECTIONS);
     setBookmarksOnly(false);
   }
 
@@ -151,7 +148,7 @@ export function GuidesCatalog({
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Разделы">
-        <FilterChip active={section === "all"} onClick={() => setSection("all")}>
+        <FilterChip active={section === ALL_SECTIONS} onClick={() => setSection(ALL_SECTIONS)}>
           Все разделы <ChipCount>{initialGuides.length}</ChipCount>
         </FilterChip>
         {sectionOrder.map((key) => {
@@ -161,7 +158,7 @@ export function GuidesCatalog({
             <FilterChip
               key={key}
               active={active}
-              onClick={() => setSection(active ? "all" : key)}
+              onClick={() => setSection(active ? ALL_SECTIONS : key)}
               style={color ? ({ "--guide-cat": color } as GuideStyle) : undefined}
               colored={Boolean(color)}
             >
@@ -218,11 +215,11 @@ export function GuidesCatalog({
           <div className="flex flex-col gap-[22px]">
             {groups.map((group) => (
               <GuideGroup
-                key={group.key}
-                section={group.key}
-                color={sectionColors[group.key] ?? "var(--text-3)"}
+                key={group.section}
+                section={group.section}
+                color={sectionColors[group.section] ?? "var(--text-3)"}
                 guides={group.guides}
-                total={sectionCounts.get(group.key) ?? group.guides.length}
+                total={sectionCounts.get(group.section) ?? group.guides.length}
                 pendingId={pendingId}
                 viewOnly={viewOnly}
                 onToggleBookmark={toggleBookmark}

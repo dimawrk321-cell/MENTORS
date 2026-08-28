@@ -9,5 +9,5 @@ export const metadata: Metadata = { title: "Легенда" };
 export default async function LegendPage() {
   const { user } = await requireStudentZone();
   if (!user.guidesLegendEnabled) notFound();
-  return <GuideSectionView section="legend" />;
+  return <GuideSectionView section="legend" userId={user.id} />;
 }

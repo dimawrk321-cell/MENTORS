@@ -382,6 +382,26 @@ export const GUIDE_SECTION_LABEL: Record<string, string> = {
   job_search: "Поиск работы",
 };
 
+/** Stable section accents shared by the guide hub and promoted landings. */
+export const GUIDE_SECTION_COLOR: Record<string, string> = {
+  stages: "var(--cat-1)",
+  ask_interviewer: "var(--cat-5)",
+  job_search: "var(--cat-7)",
+  resume: "var(--cat-0)",
+  legend: "var(--cat-6)",
+};
+
+/** Static product copy: it must not depend on the changing number of chapters. */
+export const GUIDE_SECTION_DESCRIPTION: Record<string, string> = {
+  resume:
+    "Собери резюме, которое ясно показывает твой опыт, сильные стороны и ценность для команды.",
+  legend:
+    "Выстрой цельную профессиональную историю и подготовься уверенно рассказывать о своём опыте.",
+};
+
+/** A guide is marked as new by its creation date, never by inferred reading state. */
+export const NEW_GUIDE_DAYS = 14;
+
 export const GUIDE_SECTIONS = [
   "resume",
   "legend",
