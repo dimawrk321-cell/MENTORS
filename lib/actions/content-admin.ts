@@ -31,6 +31,7 @@ import {
   moveLessonStep,
   renameLessonStep,
   saveLessonStep,
+  setLessonStepStatus,
   splitLessonIntoSteps,
 } from "@/lib/services/lesson-steps";
 import {
@@ -141,6 +142,8 @@ function failWith(res: { ok: false; code: string }): never {
       "В целевом уроке уже есть один из вопросов этого шага — сначала убери дублирующую привязку",
     same_lesson: "Нельзя добавить урок как шаг самого в себя — выбери другой исходный урок",
     duplicate_source: "Один исходный урок выбран несколько раз",
+    empty_content: "Нельзя опубликовать пустой шаг — сначала добавь материал",
+    last_published_step: "В опубликованном уроке должен остаться хотя бы один опубликованный шаг",
   };
   throw new ActionError(res.code, messages[res.code] ?? "Не получилось выполнить действие");
 }
@@ -255,6 +258,17 @@ export async function renameLessonStepAction(input: unknown): Promise<ActionResu
   });
 }
 
+export async function setLessonStepStatusAction(input: unknown): Promise<ActionResult<undefined>> {
+  return runAction<undefined>(async () => {
+    const auth = await requireActionPermission("content.manage");
+    const parsed = parseInput(z.object({ stepId: idSchema, status: statusSchema }), input);
+    const result = await setLessonStepStatus(prisma, { actorId: auth.user.id, ...parsed });
+    if (!result.ok) failWith(result);
+    revalidateContent(undefined, result.lessonId);
+    revalidatePath(`/admin/content/lessons/${result.lessonId}`);
+  });
+}
+
 export async function moveLessonStepAction(input: unknown): Promise<ActionResult<undefined>> {
   return runAction<undefined>(async () => {
     const auth = await requireActionPermission("content.manage");
@@ -264,6 +278,8 @@ export async function moveLessonStepAction(input: unknown): Promise<ActionResult
     } catch (error) {
       if (error instanceof Error && error.message === "last_step")
         failWith({ ok: false, code: "last_step" });
+      if (error instanceof Error && error.message === "last_published_step")
+        failWith({ ok: false, code: "last_published_step" });
       if (error instanceof Error && error.message === "question_conflict") {
         failWith({ ok: false, code: "question_conflict" });
       }

@@ -565,6 +565,7 @@ model LessonStep {
   lesson         Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   title          String
   order          Int                  @default(0)
+  status         ContentStatus        @default(draft)
   contentMd      String               @default("") @map("content_md")
   readingMinutes Int                  @default(1) @map("reading_minutes")
   createdAt      DateTime             @default(now()) @map("created_at")

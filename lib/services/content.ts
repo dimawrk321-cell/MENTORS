@@ -227,7 +227,10 @@ export async function getLessonView(
     where: { id: lessonId },
     include: {
       module: { include: { course: true } },
-      steps: { orderBy: [{ order: "asc" }, { createdAt: "asc" }] },
+      steps: {
+        where: { status: "published" },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      },
     },
   });
   if (

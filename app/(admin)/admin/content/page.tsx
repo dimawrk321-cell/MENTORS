@@ -56,6 +56,13 @@ export default async function ContentPage() {
         status: lesson.status,
         isOptional: lesson.isOptional,
         readingMinutes: lesson.readingMinutes,
+        steps: lesson.steps.map((step) => ({
+          id: step.id,
+          title: step.title,
+          status: step.status,
+          readingMinutes: step.readingMinutes,
+          order: step.order,
+        })),
       })),
     })),
   }));

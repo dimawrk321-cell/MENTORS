@@ -20,6 +20,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
   BookCheck,
   BookX,
   ClipboardCheck,
@@ -70,8 +72,11 @@ import {
   reorderContentAction,
   setCourseStatusAction,
   setModuleStatusAction,
+  setLessonStepStatusAction,
   unpublishLessonsAction,
   updateCourseAction,
+  deleteLessonStepAction,
+  moveLessonStepAction,
 } from "@/lib/actions/content-admin";
 import { upsertModuleTestAction } from "@/lib/actions/questions-admin";
 import {
@@ -86,6 +91,15 @@ export interface TreeLesson {
   status: "draft" | "published";
   isOptional: boolean;
   readingMinutes: number;
+  steps: TreeLessonStep[];
+}
+
+export interface TreeLessonStep {
+  id: string;
+  title: string;
+  status: "draft" | "published";
+  readingMinutes: number;
+  order: number;
 }
 
 export interface TreeModuleTest {
@@ -282,7 +296,7 @@ function IconAction({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="text-text-3 ease-app hover:bg-surface-2 hover:text-text-1 flex size-7 shrink-0 items-center justify-center rounded-[6px] transition-colors duration-150"
+      className="text-text-3 ease-app hover:bg-surface-2 hover:text-text-1 flex size-11 shrink-0 items-center justify-center rounded-[6px] transition-colors duration-150 md:size-7"
     >
       {children}
     </button>
@@ -1091,29 +1105,154 @@ function ModuleBlock({ module }: { module: TreeModule }) {
   );
 }
 
+function LessonStepRow({
+  lesson,
+  step,
+  index,
+}: {
+  lesson: TreeLesson;
+  step: TreeLessonStep;
+  index: number;
+}) {
+  const { pending, act } = useAct();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const published = step.status === "published";
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1 py-0.5 pl-1 md:flex-nowrap">
+      <span className="text-text-3 w-4 shrink-0 text-center text-[11px] tabular-nums">
+        {index + 1}
+      </span>
+      <Link
+        href={`/admin/content/lessons/${lesson.id}?step=${step.id}`}
+        className="rounded-control ease-app hover:bg-surface-2 flex min-h-11 w-[calc(100%-1.25rem)] min-w-0 flex-none items-center gap-2 px-1.5 py-1 text-[13px] transition-colors duration-150 md:min-h-7 md:w-auto md:flex-1"
+      >
+        <StatusDot status={step.status} />
+        <span className="text-text-1 min-w-0 truncate">{step.title}</span>
+        {step.status === "draft" && <Badge variant="warning">черновик</Badge>}
+        <span className="text-text-3 ml-auto shrink-0 text-[12px]">{step.readingMinutes} мин</span>
+      </Link>
+      <div className="ml-5 flex shrink-0 items-center md:ml-0">
+        <Link
+          href={`/admin/content/lessons/${lesson.id}?step=${step.id}`}
+          title="Редактировать шаг"
+          aria-label="Редактировать шаг"
+          className="text-text-3 ease-app hover:bg-surface-2 hover:text-text-1 flex size-11 shrink-0 items-center justify-center rounded-[6px] transition-colors duration-150 md:size-7"
+        >
+          <Pencil size={13} strokeWidth={1.75} />
+        </Link>
+        <IconAction
+          label={published ? "Вернуть шаг в черновик" : "Опубликовать шаг"}
+          onClick={() =>
+            act(
+              () =>
+                setLessonStepStatusAction({
+                  stepId: step.id,
+                  status: published ? "draft" : "published",
+                }),
+              () =>
+                toast({
+                  title: published ? "Шаг возвращён в черновик" : "Шаг опубликован",
+                  variant: "success",
+                }),
+            )
+          }
+        >
+          {published ? (
+            <EyeOff size={13} strokeWidth={1.75} />
+          ) : (
+            <Eye size={13} strokeWidth={1.75} />
+          )}
+        </IconAction>
+        {index > 0 && (
+          <IconAction
+            label="Поднять шаг"
+            onClick={() =>
+              act(() =>
+                moveLessonStepAction({
+                  stepId: step.id,
+                  targetLessonId: lesson.id,
+                  targetIndex: index - 1,
+                }),
+              )
+            }
+          >
+            <ArrowUp size={13} strokeWidth={1.75} />
+          </IconAction>
+        )}
+        {index < lesson.steps.length - 1 && (
+          <IconAction
+            label="Опустить шаг"
+            onClick={() =>
+              act(() =>
+                moveLessonStepAction({
+                  stepId: step.id,
+                  targetLessonId: lesson.id,
+                  targetIndex: index + 1,
+                }),
+              )
+            }
+          >
+            <ArrowDown size={13} strokeWidth={1.75} />
+          </IconAction>
+        )}
+        {lesson.steps.length > 1 && (
+          <IconAction label="Удалить шаг" onClick={() => setDeleteOpen(true)}>
+            <Trash2 size={13} strokeWidth={1.75} className="text-danger" />
+          </IconAction>
+        )}
+      </div>
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={`Удалить шаг «${step.title}»?`}
+        description="Шаг и прогресс учеников по нему будут удалены. Действие необратимо."
+        actionLabel="Удалить"
+        pending={pending}
+        onConfirm={() =>
+          act(
+            () => deleteLessonStepAction(step.id),
+            () => setDeleteOpen(false),
+          )
+        }
+      />
+    </div>
+  );
+}
+
 function LessonRow({ lesson }: { lesson: TreeLesson }) {
   const { pending, act } = useAct();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   return (
-    <SortableRow id={lesson.id} className="flex items-center gap-1.5 py-0.5">
-      <Link
-        href={`/admin/content/lessons/${lesson.id}`}
-        className="rounded-control ease-app hover:bg-surface-2 flex min-w-0 flex-1 items-center gap-2 px-1.5 py-1 text-[13px] transition-colors duration-150"
-      >
-        <StatusDot status={lesson.status} />
-        <span className="text-text-1 min-w-0 truncate">{lesson.title}</span>
-        {lesson.status === "draft" && <Badge variant="warning">черновик</Badge>}
-        {lesson.isOptional && <Badge>необязательный</Badge>}
-        <span className="text-text-3 ml-auto shrink-0 text-[12px]">
-          {lesson.readingMinutes} мин
-        </span>
-      </Link>
-      {lesson.status === "draft" && (
-        <IconAction label="Удалить урок" onClick={() => setDeleteOpen(true)}>
-          <Trash2 size={13} strokeWidth={1.75} className="text-danger" />
-        </IconAction>
-      )}
+    <SortableRow id={lesson.id} className="flex items-start gap-1.5 py-0.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Link
+            href={`/admin/content/lessons/${lesson.id}`}
+            className="rounded-control ease-app hover:bg-surface-2 flex min-w-0 flex-1 items-center gap-2 px-1.5 py-1 text-[13px] transition-colors duration-150"
+          >
+            <StatusDot status={lesson.status} />
+            <span className="text-text-1 min-w-0 truncate">{lesson.title}</span>
+            {lesson.status === "draft" && <Badge variant="warning">черновик</Badge>}
+            {lesson.isOptional && <Badge>необязательный</Badge>}
+            <span className="text-text-3 ml-auto shrink-0 text-[12px]">
+              {lesson.readingMinutes} мин
+            </span>
+          </Link>
+          {lesson.status === "draft" && (
+            <IconAction label="Удалить урок" onClick={() => setDeleteOpen(true)}>
+              <Trash2 size={13} strokeWidth={1.75} className="text-danger" />
+            </IconAction>
+          )}
+        </div>
+        {lesson.steps.length > 0 && (
+          <div className="border-border mt-0.5 ml-3 flex flex-col border-l pl-2">
+            {lesson.steps.map((step, index) => (
+              <LessonStepRow key={step.id} lesson={lesson} step={step} index={index} />
+            ))}
+          </div>
+        )}
+      </div>
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}

@@ -72,6 +72,16 @@ export async function getContentTree(db: Db) {
               status: true,
               isOptional: true,
               readingMinutes: true,
+              steps: {
+                orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  readingMinutes: true,
+                  order: true,
+                },
+              },
             },
           },
         },

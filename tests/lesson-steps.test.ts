@@ -5,6 +5,7 @@ import {
   createLessonStep,
   deleteLessonStep,
   moveLessonStep,
+  setLessonStepStatus,
   splitLessonIntoSteps,
 } from "@/lib/services/lesson-steps";
 import { getLessonView } from "@/lib/services/content";
@@ -72,6 +73,12 @@ describe("шаги урока", () => {
       actorId: mentor.id,
       lessonId: lesson.id,
       title: "Практика",
+    });
+    await testDb.lessonStep.update({ where: { id: second.id }, data: { contentMd: "# Практика" } });
+    await setLessonStepStatus(testDb, {
+      actorId: mentor.id,
+      stepId: second.id,
+      status: "published",
     });
 
     await expect(getLessonView(testDb, lesson.id, student.id)).resolves.toMatchObject({
@@ -146,10 +153,19 @@ describe("шаги урока", () => {
       },
     });
     await splitLessonIntoSteps(testDb, { actorId: mentor.id, lessonId: lesson.id });
-    await createLessonStep(testDb, {
+    const second = await createLessonStep(testDb, {
       actorId: mentor.id,
       lessonId: lesson.id,
       title: "Добавленный позже шаг",
+    });
+    await testDb.lessonStep.update({
+      where: { id: second.id },
+      data: { contentMd: "# Новый шаг" },
+    });
+    await setLessonStepStatus(testDb, {
+      actorId: mentor.id,
+      stepId: second.id,
+      status: "published",
     });
 
     const view = await getLessonView(testDb, lesson.id, student.id);
@@ -157,6 +173,43 @@ describe("шаги урока", () => {
     expect(view?.lessonSteps.every((step) => step.completedAt !== null && step.unlocked)).toBe(
       true,
     );
+  });
+
+  it("скрывает черновики от ученика и защищает последний опубликованный шаг", async () => {
+    const { mentor, student, lesson } = await fixture();
+    const first = await splitLessonIntoSteps(testDb, { actorId: mentor.id, lessonId: lesson.id });
+    const draft = await createLessonStep(testDb, {
+      actorId: mentor.id,
+      lessonId: lesson.id,
+      title: "Новый черновик",
+    });
+
+    await expect(testDb.lessonStep.findUnique({ where: { id: draft.id } })).resolves.toMatchObject({
+      status: "draft",
+    });
+    await expect(getLessonView(testDb, lesson.id, student.id)).resolves.toMatchObject({
+      lessonSteps: [{ id: first.id }],
+    });
+    await expect(
+      setLessonStepStatus(testDb, { actorId: mentor.id, stepId: first.id, status: "draft" }),
+    ).resolves.toEqual({ ok: false, code: "last_published_step" });
+    await expect(
+      deleteLessonStep(testDb, { actorId: mentor.id, stepId: first.id }),
+    ).resolves.toEqual({ ok: false, code: "last_published_step" });
+    await expect(
+      setLessonStepStatus(testDb, { actorId: mentor.id, stepId: draft.id, status: "published" }),
+    ).resolves.toEqual({ ok: false, code: "empty_content" });
+
+    await testDb.lessonStep.update({ where: { id: draft.id }, data: { contentMd: "# Материал" } });
+    await expect(
+      setLessonStepStatus(testDb, { actorId: mentor.id, stepId: draft.id, status: "published" }),
+    ).resolves.toEqual({ ok: true, lessonId: lesson.id });
+    await expect(getLessonView(testDb, lesson.id, student.id)).resolves.toMatchObject({
+      lessonSteps: [{ id: first.id }, { id: draft.id }],
+    });
+    await expect(
+      testDb.auditLog.findFirst({ where: { action: "lesson_step.published", entityId: draft.id } }),
+    ).resolves.toMatchObject({ actorId: mentor.id });
   });
 
   it("не позволяет вынести из урока последний шаг", async () => {

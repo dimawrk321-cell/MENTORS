@@ -16,11 +16,10 @@ async function parkStepOrders(tx: Tx, ids: string[]): Promise<void> {
 
 async function syncLessonAggregate(tx: Tx, lessonId: string): Promise<void> {
   const steps = await tx.lessonStep.findMany({
-    where: { lessonId },
+    where: { lessonId, status: "published" },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     select: { title: true, contentMd: true },
   });
-  if (steps.length === 0) return;
   const contentMd = steps
     .map((step) => `## ${step.title}\n\n${step.contentMd.trim()}`.trim())
     .join("\n\n");
@@ -64,6 +63,7 @@ export async function splitLessonIntoSteps(
         order: 0,
         contentMd: lesson.contentMd,
         readingMinutes: computeReadingMinutes(lesson.contentMd),
+        status: lesson.status,
       },
     });
     await writeAudit(tx, {
@@ -95,6 +95,7 @@ export async function createLessonStep(
           order: 0,
           contentMd: lesson.contentMd,
           readingMinutes: computeReadingMinutes(lesson.contentMd),
+          status: lesson.status,
         },
       });
       await writeAudit(tx, {
@@ -107,7 +108,7 @@ export async function createLessonStep(
     }
     const order = lesson.steps.length === 0 ? 1 : lesson.steps.length;
     const step = await tx.lessonStep.create({
-      data: { lessonId: lesson.id, title: input.title, order },
+      data: { lessonId: lesson.id, title: input.title, order, status: "draft" },
     });
     await syncLessonAggregate(tx, lesson.id);
     await writeAudit(tx, {
@@ -187,6 +188,7 @@ export async function copyLessonAsStep(
           order: 0,
           contentMd: target.contentMd,
           readingMinutes: computeReadingMinutes(target.contentMd),
+          status: target.status,
         },
       });
       enabledSteps = true;
@@ -198,6 +200,7 @@ export async function copyLessonAsStep(
         order: target.steps.length === 0 ? 1 : target.steps.length,
         contentMd,
         readingMinutes: computeReadingMinutes(contentMd),
+        status: "draft",
       },
     });
 
@@ -338,6 +341,7 @@ export async function copyLessonsAsSteps(
           order: 0,
           contentMd: target.contentMd,
           readingMinutes: computeReadingMinutes(target.contentMd),
+          status: target.status,
         },
       });
       enabledSteps = true;
@@ -356,6 +360,7 @@ export async function copyLessonsAsSteps(
           order: firstOrder + index,
           contentMd: item.contentMd,
           readingMinutes: computeReadingMinutes(item.contentMd),
+          status: "draft",
         },
       });
       stepIds.push(step.id);
@@ -432,7 +437,7 @@ export async function saveLessonStep(
     if (!step) return { ok: false, code: "not_found" } as const;
     const contentMd = input.contentMd ?? step.contentMd;
     const recordingNotice = hasUnsafeRecordingReference(contentMd);
-    if (step.lesson.status === "published" && recordingNotice) {
+    if (step.lesson.status === "published" && step.status === "published" && recordingNotice) {
       return { ok: false, code: "unsafe_recording_reference" } as const;
     }
     const contentChanged = input.contentMd !== undefined && input.contentMd !== step.contentMd;
@@ -476,6 +481,50 @@ export async function renameLessonStep(
   });
 }
 
+export async function setLessonStepStatus(
+  db: PrismaClient,
+  input: { actorId: string; stepId: string; status: "draft" | "published" },
+): Promise<
+  | { ok: true; lessonId: string }
+  | {
+      ok: false;
+      code: "not_found" | "empty_content" | "last_published_step" | "unsafe_recording_reference";
+    }
+> {
+  const result = await db.$transaction(async (tx) => {
+    const step = await tx.lessonStep.findUnique({
+      where: { id: input.stepId },
+      include: { lesson: { select: { id: true, status: true } } },
+    });
+    if (!step) return { ok: false, code: "not_found" } as const;
+    if (step.status === input.status) return { ok: true, lessonId: step.lessonId } as const;
+    if (input.status === "published") {
+      if (!step.contentMd.trim()) return { ok: false, code: "empty_content" } as const;
+      if (step.lesson.status === "published" && hasUnsafeRecordingReference(step.contentMd)) {
+        return { ok: false, code: "unsafe_recording_reference" } as const;
+      }
+    } else if (step.lesson.status === "published") {
+      const publishedCount = await tx.lessonStep.count({
+        where: { lessonId: step.lessonId, status: "published" },
+      });
+      if (publishedCount <= 1) return { ok: false, code: "last_published_step" } as const;
+    }
+    await tx.lessonStep.update({ where: { id: step.id }, data: { status: input.status } });
+    await syncLessonAggregate(tx, step.lessonId);
+    await writeAudit(tx, {
+      actorId: input.actorId,
+      action: input.status === "published" ? "lesson_step.published" : "lesson_step.unpublished",
+      entityType: "lesson_step",
+      entityId: step.id,
+      before: { status: step.status },
+      after: { status: input.status },
+    });
+    return { ok: true, lessonId: step.lessonId } as const;
+  });
+  if (result.ok) await notifyLessonUpdated(db, result.lessonId);
+  return result;
+}
+
 export async function moveLessonStep(
   db: PrismaClient,
   input: { actorId: string; stepId: string; targetLessonId: string; targetIndex: number },
@@ -483,11 +532,14 @@ export async function moveLessonStep(
   await db.$transaction(async (tx) => {
     const step = await tx.lessonStep.findUnique({
       where: { id: input.stepId },
-      include: { questionLinks: { select: { questionId: true } } },
+      include: {
+        lesson: { select: { status: true } },
+        questionLinks: { select: { questionId: true } },
+      },
     });
     const target = await tx.lesson.findUnique({
       where: { id: input.targetLessonId },
-      select: { id: true, contentMd: true, _count: { select: { steps: true } } },
+      select: { id: true, status: true, contentMd: true, _count: { select: { steps: true } } },
     });
     if (!step || !target) throw new Error("not_found");
     const sourceLessonId = step.lessonId;
@@ -497,6 +549,16 @@ export async function moveLessonStep(
       select: { id: true },
     });
     if (sourceLessonId !== target.id && source.length === 0) throw new Error("last_step");
+    if (
+      sourceLessonId !== target.id &&
+      step.status === "published" &&
+      step.lesson.status === "published" &&
+      (await tx.lessonStep.count({
+        where: { lessonId: sourceLessonId, status: "published" },
+      })) <= 1
+    ) {
+      throw new Error("last_published_step");
+    }
     if (sourceLessonId !== target.id && step.questionLinks.length > 0) {
       const conflict = await tx.questionLesson.findFirst({
         where: {
@@ -515,6 +577,7 @@ export async function moveLessonStep(
           order: 0,
           contentMd: target.contentMd,
           readingMinutes: computeReadingMinutes(target.contentMd),
+          status: target.status,
         },
       });
       await writeAudit(tx, {
@@ -573,16 +636,28 @@ export async function deleteLessonStep(
       deletedProgressCount: number;
       detachedQuestionCount: number;
     }
-  | { ok: false; code: "not_found" | "last_step" }
+  | { ok: false; code: "not_found" | "last_step" | "last_published_step" }
 > {
   return db.$transaction(async (tx) => {
     const step = await tx.lessonStep.findUnique({
       where: { id: input.stepId },
-      include: { _count: { select: { progress: true, questionLinks: true } } },
+      include: {
+        lesson: { select: { status: true } },
+        _count: { select: { progress: true, questionLinks: true } },
+      },
     });
     if (!step) return { ok: false, code: "not_found" } as const;
     const count = await tx.lessonStep.count({ where: { lessonId: step.lessonId } });
     if (count <= 1) return { ok: false, code: "last_step" } as const;
+    if (
+      step.status === "published" &&
+      step.lesson.status === "published" &&
+      (await tx.lessonStep.count({
+        where: { lessonId: step.lessonId, status: "published" },
+      })) <= 1
+    ) {
+      return { ok: false, code: "last_published_step" } as const;
+    }
     const deletedProgressCount = step._count.progress;
     const detachedQuestionCount = step._count.questionLinks;
     await tx.lessonStep.delete({ where: { id: step.id } });
@@ -633,7 +708,7 @@ export async function completeLessonStep(
   if (!view) return { ok: false, code: "not_found" };
   if (!view.unlocked) return { ok: false, code: "locked" };
   const steps = await db.lessonStep.findMany({
-    where: { lessonId: input.lessonId },
+    where: { lessonId: input.lessonId, status: "published" },
     orderBy: { order: "asc" },
     select: { id: true },
   });
