@@ -74,6 +74,9 @@ interface QuestionEditorProps {
    * при публикации (заход C.2). Пустой массив — предупреждать не о чем.
    */
   liveTestModules: string[];
+  /** Контекстный возврат из урока; сервер передаёт только проверенный маршрут. */
+  backHref?: string;
+  backLabel?: string;
 }
 
 let optionCounter = 0;
@@ -84,6 +87,8 @@ export function QuestionEditor({
   lessons,
   links,
   liveTestModules,
+  backHref = "/admin/questions",
+  backLabel = "Вопросы",
 }: QuestionEditorProps) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -225,7 +230,7 @@ export function QuestionEditor({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <BackButton href="/admin/questions" label="Вопросы" className="w-auto" />
+        <BackButton href={backHref} label={backLabel} className="w-auto" />
         <Badge>{QUESTION_TYPE_LABEL[question.type]}</Badge>
         <Badge>{question.source === "import" ? "импорт" : "создан вручную"}</Badge>
         {/* The question text is the page title; visually it stays the 13px
@@ -586,7 +591,7 @@ export function QuestionEditor({
                   const result = await deleteQuestionAction(question.id);
                   if (!result) return;
                   if (result.ok) {
-                    router.push("/admin/questions");
+                    router.push(backHref);
                   } else {
                     toast({ title: result.error.message, variant: "danger" });
                   }

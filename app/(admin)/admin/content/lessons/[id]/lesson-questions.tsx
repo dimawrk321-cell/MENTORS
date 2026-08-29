@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   AlertTriangle,
   CheckSquare,
   Link2,
+  Pencil,
   Plus,
   Search,
   Square,
@@ -122,6 +124,9 @@ export function LessonQuestions({
   // and gate BOTH the list and the fallback on the filtered set — otherwise the
   // panel renders an empty <ul> and suppresses the explanation.
   const available = results.filter((row) => !linkedIds.has(row.id));
+  const questionReturnContext = `fromLesson=${encodeURIComponent(lessonId)}${
+    activeStepId ? `&fromStep=${encodeURIComponent(activeStepId)}` : ""
+  }`;
 
   useEffect(() => {
     // A category alone is a valid filter — browsing without typing is the point.
@@ -536,19 +541,29 @@ export function LessonQuestions({
                     </SelectContent>
                   </Select>
                 )}
-                <button
-                  type="button"
-                  aria-label="Отвязать вопрос"
-                  onClick={() =>
-                    run(
-                      () => removeQuestionLinkAction({ questionId: link.questionId, lessonId }),
-                      "Отвязано",
-                    )
-                  }
-                  className="rounded-control text-text-3 hover:text-danger flex size-7 items-center justify-center"
-                >
-                  <Trash2 size={13} strokeWidth={1.75} />
-                </button>
+                <div className="flex shrink-0 items-center">
+                  <Link
+                    href={`/admin/questions/${link.questionId}?${questionReturnContext}`}
+                    aria-label={`Редактировать вопрос: ${link.teaser}`}
+                    title="Редактировать вопрос"
+                    className="rounded-control text-text-3 hover:bg-surface-2 hover:text-text-1 ease-app flex size-11 shrink-0 items-center justify-center transition-colors duration-150 md:size-7"
+                  >
+                    <Pencil size={13} strokeWidth={1.75} aria-hidden="true" />
+                  </Link>
+                  <button
+                    type="button"
+                    aria-label="Отвязать вопрос"
+                    onClick={() =>
+                      run(
+                        () => removeQuestionLinkAction({ questionId: link.questionId, lessonId }),
+                        "Отвязано",
+                      )
+                    }
+                    className="rounded-control text-text-3 hover:text-danger flex size-11 shrink-0 items-center justify-center md:size-7"
+                  >
+                    <Trash2 size={13} strokeWidth={1.75} />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

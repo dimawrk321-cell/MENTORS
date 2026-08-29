@@ -12,12 +12,17 @@ export const metadata: Metadata = {
 
 interface QuestionEditorPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ fromLesson?: string; fromStep?: string }>;
 }
 
 /** Редактор вопроса (spec 8.5): тип-специфичные поля + KaTeX-превью + привязки. */
-export default async function QuestionEditorPage({ params }: QuestionEditorPageProps) {
+export default async function QuestionEditorPage({
+  params,
+  searchParams,
+}: QuestionEditorPageProps) {
   await requirePermission("content.manage");
   const { id } = await params;
+  const { fromLesson, fromStep } = await searchParams;
   const question = await prisma.question.findUnique({
     where: { id },
     include: {
@@ -27,6 +32,7 @@ export default async function QuestionEditorPage({ params }: QuestionEditorPageP
             select: {
               id: true,
               title: true,
+              steps: { select: { id: true } },
               // Заход C.2: чтобы сказать ментору, уводит ли публикация вопрос в
               // боевые попытки, нужны статус урока и включённость теста модуля.
               status: true,
@@ -45,6 +51,16 @@ export default async function QuestionEditorPage({ params }: QuestionEditorPageP
     },
   });
   if (!question) notFound();
+
+  // Контекст возврата не является произвольным URL: доверяем только уроку,
+  // к которому этот вопрос действительно привязан, и только его настоящему шагу.
+  const sourceLink = question.lessonLinks.find((link) => link.lessonId === fromLesson);
+  const sourceStepId = sourceLink?.lesson.steps.some((step) => step.id === fromStep)
+    ? fromStep
+    : null;
+  const backHref = sourceLink
+    ? `/admin/content/lessons/${sourceLink.lessonId}${sourceStepId ? `?step=${sourceStepId}` : ""}#lesson-questions`
+    : "/admin/questions";
 
   const [categoriesTree, lessons] = await Promise.all([
     listCategoriesTree(prisma),
@@ -91,6 +107,8 @@ export default async function QuestionEditorPage({ params }: QuestionEditorPageP
             .map((link) => `${link.lesson.module.course.title} · ${link.lesson.module.title}`),
         ),
       ]}
+      backHref={backHref}
+      backLabel={sourceLink ? "К вопросам урока" : "Вопросы"}
       links={question.lessonLinks.map((link) => ({
         lessonId: link.lessonId,
         label: `${link.lesson.module.course.title} · ${link.lesson.module.title} · ${link.lesson.title}`,

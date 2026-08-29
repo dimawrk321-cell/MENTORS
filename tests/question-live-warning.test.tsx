@@ -79,6 +79,37 @@ describe("предупреждение о боевом пуле в редакт�
 });
 
 describe("секция «Вопросы урока» — счётчик теста не поехал (регресс C.1)", () => {
+  it("ведёт из строки сразу в редактор вопроса и сохраняет контекст урока и шага", () => {
+    const html = renderToStaticMarkup(
+      <LessonQuestions
+        lessonId="l1"
+        categories={[{ id: "c1", label: "Classic ML" }]}
+        defaultCategoryId="c1"
+        defaultCategoryScope="lesson"
+        lessonStatus="published"
+        moduleTestEnabled
+        activeStepId="s1"
+        steps={[{ id: "s1", title: "Шаг 1" }]}
+        links={[
+          {
+            questionId: "q1",
+            teaser: "Что такое Transformer?",
+            category: "Classic ML",
+            status: "published",
+            type: "single",
+            hasAnswer: true,
+            isKey: false,
+            inQuiz: true,
+            stepId: "s1",
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('href="/admin/questions/q1?fromLesson=l1&amp;fromStep=s1"');
+    expect(html).toContain('aria-label="Редактировать вопрос: Что такое Transformer?"');
+  });
+
   it("считает только закрытые опубликованные на опубликованном уроке", () => {
     const html = renderToStaticMarkup(
       <LessonQuestions
@@ -141,5 +172,24 @@ describe("секция «Вопросы урока» — счётчик тест
       />,
     );
     expect(html).toContain("урок в черновике");
+  });
+});
+
+describe("контекстный возврат из редактора вопроса", () => {
+  it("возвращает к блоку вопросов урока вместо общего банка", () => {
+    const html = renderToStaticMarkup(
+      <QuestionEditor
+        question={QUESTION}
+        categories={[{ id: "c1", label: "Classic ML" }]}
+        lessons={[{ id: "l1", label: "Деревья решений" }]}
+        links={[]}
+        liveTestModules={[]}
+        backHref="/admin/content/lessons/l1?step=s1#lesson-questions"
+        backLabel="К вопросам урока"
+      />,
+    );
+
+    expect(html).toContain('href="/admin/content/lessons/l1?step=s1#lesson-questions"');
+    expect(html).toContain("К вопросам урока");
   });
 });
