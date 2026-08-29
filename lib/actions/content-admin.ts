@@ -227,7 +227,13 @@ export async function copyLessonsAsStepsAction(input: unknown): Promise<
 export async function saveLessonStepContentAction(
   stepId: string,
   contentMd: string,
-): Promise<ActionResult<{ readingMinutes: number; recordingNotice: boolean }>> {
+): Promise<
+  ActionResult<{
+    readingMinutes: number;
+    lessonReadingMinutes: number;
+    recordingNotice: boolean;
+  }>
+> {
   return runAction(async () => {
     await requireActionPermission("content.manage");
     const markdown = parseInput(z.string().max(300_000, "Слишком большой документ"), contentMd);
@@ -238,10 +244,8 @@ export async function saveLessonStepContentAction(
     if (!result.ok) failWith(result);
     revalidatePath(`/lessons/${result.lessonId}`);
     return {
-      readingMinutes: Math.max(
-        1,
-        Math.ceil(markdown.trim().split(/\s+/).filter(Boolean).length / 200),
-      ),
+      readingMinutes: result.readingMinutes,
+      lessonReadingMinutes: result.lessonReadingMinutes,
       recordingNotice: result.recordingNotice,
     };
   });
@@ -489,7 +493,13 @@ export async function copyLessonAction(
 export async function saveLessonContentAction(
   lessonId: string,
   contentMd: string,
-): Promise<ActionResult<{ readingMinutes: number; recordingNotice: boolean }>> {
+): Promise<
+  ActionResult<{
+    readingMinutes: number;
+    lessonReadingMinutes: number;
+    recordingNotice: boolean;
+  }>
+> {
   return runAction(async () => {
     await requireActionPermission("content.manage");
     const res = await saveLessonContent(prisma, {
@@ -501,6 +511,7 @@ export async function saveLessonContentAction(
     // врезку про Библиотеку вместо ссылки (заход C.4).
     return {
       readingMinutes: res.readingMinutes ?? 1,
+      lessonReadingMinutes: res.readingMinutes ?? 1,
       recordingNotice: res.recordingNotice ?? false,
     };
   });

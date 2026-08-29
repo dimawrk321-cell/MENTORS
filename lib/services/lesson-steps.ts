@@ -14,7 +14,7 @@ async function parkStepOrders(tx: Tx, ids: string[]): Promise<void> {
   }
 }
 
-async function syncLessonAggregate(tx: Tx, lessonId: string): Promise<void> {
+async function syncLessonAggregate(tx: Tx, lessonId: string): Promise<number> {
   const steps = await tx.lessonStep.findMany({
     where: { lessonId, status: "published" },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -23,14 +23,16 @@ async function syncLessonAggregate(tx: Tx, lessonId: string): Promise<void> {
   const contentMd = steps
     .map((step) => `## ${step.title}\n\n${step.contentMd.trim()}`.trim())
     .join("\n\n");
+  const readingMinutes = computeReadingMinutes(contentMd);
   await tx.lesson.update({
     where: { id: lessonId },
     data: {
       contentMd,
-      readingMinutes: computeReadingMinutes(contentMd),
+      readingMinutes,
       contentUpdatedAt: new Date(),
     },
   });
+  return readingMinutes;
 }
 
 function lessonMarkdownForStep(source: {
@@ -426,7 +428,13 @@ export async function saveLessonStep(
   db: PrismaClient,
   input: { stepId: string; title?: string; contentMd?: string },
 ): Promise<
-  | { ok: true; lessonId: string; recordingNotice: boolean }
+  | {
+      ok: true;
+      lessonId: string;
+      readingMinutes: number;
+      lessonReadingMinutes: number;
+      recordingNotice: boolean;
+    }
   | { ok: false; code: "not_found" | "unsafe_recording_reference" }
 > {
   const result = await db.$transaction(async (tx) => {
@@ -441,21 +449,34 @@ export async function saveLessonStep(
       return { ok: false, code: "unsafe_recording_reference" } as const;
     }
     const contentChanged = input.contentMd !== undefined && input.contentMd !== step.contentMd;
+    const readingMinutes =
+      input.contentMd !== undefined ? computeReadingMinutes(contentMd) : step.readingMinutes;
     await tx.lessonStep.update({
       where: { id: step.id },
       data: {
         ...(input.title !== undefined ? { title: input.title } : {}),
-        ...(input.contentMd !== undefined
-          ? { contentMd, readingMinutes: computeReadingMinutes(contentMd) }
-          : {}),
+        ...(input.contentMd !== undefined ? { contentMd, readingMinutes } : {}),
       },
     });
-    await syncLessonAggregate(tx, step.lessonId);
-    return { ok: true, lessonId: step.lessonId, recordingNotice, contentChanged } as const;
+    const lessonReadingMinutes = await syncLessonAggregate(tx, step.lessonId);
+    return {
+      ok: true,
+      lessonId: step.lessonId,
+      readingMinutes,
+      lessonReadingMinutes,
+      recordingNotice,
+      contentChanged,
+    } as const;
   });
   if (result.ok && result.contentChanged) await notifyLessonUpdated(db, result.lessonId);
   return result.ok
-    ? { ok: true, lessonId: result.lessonId, recordingNotice: result.recordingNotice }
+    ? {
+        ok: true,
+        lessonId: result.lessonId,
+        readingMinutes: result.readingMinutes,
+        lessonReadingMinutes: result.lessonReadingMinutes,
+        recordingNotice: result.recordingNotice,
+      }
     : result;
 }
 

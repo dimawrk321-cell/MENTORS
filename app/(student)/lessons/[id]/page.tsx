@@ -144,7 +144,10 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
     },
   });
   const durationLabel = lessonDurationLabel({
-    readingMinutes: activeStep?.readingMinutes ?? view.lesson.readingMinutes,
+    // Duration metadata belongs to the whole lesson. The active step already
+    // has its own progress marker; using its reading time here made the same
+    // lesson promise a different total on every step (заход C.12).
+    readingMinutes: view.lesson.readingMinutes,
     textMinutes: view.lesson.textMinutes,
     videoMinutes: view.lesson.videoMinutes,
     practiceMinutes: view.lesson.practiceMinutes,

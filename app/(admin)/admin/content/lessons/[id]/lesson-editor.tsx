@@ -10,8 +10,10 @@ import {
   EyeOff,
   Maximize2,
   Minimize2,
+  RotateCcw,
   Save,
   ShieldAlert,
+  Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +29,7 @@ import { toast } from "@/components/ui/toast";
 import { BackButton } from "@/components/ui/back-button";
 import { cn } from "@/lib/utils/cn";
 import { RECORDING_NOTICE_TEXT, RECORDING_NOTICE_TITLE } from "@/lib/constants";
-import { lessonDurationLabel } from "@/lib/utils/lesson-path";
+import { lessonDurationLabel, lessonTotalMinutes } from "@/lib/utils/lesson-path";
 import { isPlayableVideoUrl, videoLinkHost } from "@/lib/utils/youtube";
 import { applySnippet } from "@/lib/utils/editor-insert";
 import { snippetsFor, type SnippetDef } from "@/lib/content/editor-snippets";
@@ -61,6 +63,19 @@ interface EditorStep {
   title: string;
   contentMd: string;
   readingMinutes: number;
+  status: "draft" | "published";
+}
+
+interface EditorMeta {
+  title: string;
+  slug: string;
+  videoUrl: string;
+  difficulty: EditorLesson["difficulty"];
+  isOptional: boolean;
+  pathPolicy: EditorLesson["pathPolicy"];
+  textMinutes: number | "";
+  videoMinutes: number | "";
+  practiceMinutes: number | "";
 }
 
 const DIFFICULTY_OPTIONS = [
@@ -74,12 +89,6 @@ const PATH_POLICY_OPTIONS = [
   { value: "choose_one", label: "Видео или текст на выбор" },
   { value: "video_only", label: "Только видео" },
   { value: "text_only", label: "Только текст" },
-] as const;
-
-const DURATION_FIELDS = [
-  { key: "textMinutes", label: "Текст, мин", placeholder: "Автооценка" },
-  { key: "videoMinutes", label: "Видео, мин", placeholder: "Не указано" },
-  { key: "practiceMinutes", label: "Практика, мин", placeholder: "Не указано" },
 ] as const;
 
 // Directive insert panel (spec 8.5 / 12.1-C10): grouped, human names + hints.
@@ -122,9 +131,10 @@ export function LessonEditor({
   const [saveState, setSaveState] = useState<"saved" | "dirty" | "saving">("saved");
   const [previewVersion, setPreviewVersion] = useState(0);
   const [livePreviewHtml, setLivePreviewHtml] = useState<string | null>(null);
-  const [readingMinutes, setReadingMinutes] = useState(
+  const [currentReadingMinutes, setCurrentReadingMinutes] = useState(
     activeStep?.readingMinutes ?? lesson.readingMinutes,
   );
+  const [lessonReadingMinutes, setLessonReadingMinutes] = useState(lesson.readingMinutes);
   const [fullscreen, setFullscreen] = useState(false);
   const [pickingQuestion, setPickingQuestion] = useState(false);
   // Walk 13.6 rail 1: the block editor is offered ONLY when segmentation is
@@ -132,13 +142,13 @@ export function LessonEditor({
   // markdown; a document that fails opens in plain text mode instead of having
   // its bytes silently rewritten.
   const [mode, setMode] = useState<"blocks" | "text">("blocks");
-  const [meta, setMeta] = useState({
+  const [meta, setMeta] = useState<EditorMeta>({
     title: lesson.title,
     slug: lesson.slug,
     videoUrl: lesson.videoUrl,
-    difficulty: lesson.difficulty as string,
+    difficulty: lesson.difficulty,
     isOptional: lesson.isOptional,
-    pathPolicy: lesson.pathPolicy as string,
+    pathPolicy: lesson.pathPolicy,
     textMinutes: lesson.textMinutes ?? "",
     videoMinutes: lesson.videoMinutes ?? "",
     practiceMinutes: lesson.practiceMinutes ?? "",
@@ -164,19 +174,18 @@ export function LessonEditor({
 
   // Ровно та строка, что стоит чипом на странице урока, — считается тем же
   // `lessonDurationLabel`, второй формулы длительности нет (заход B.2, 3.2).
-  const durationPreview = useMemo(
-    () =>
-      lessonDurationLabel({
-        readingMinutes,
-        textMinutes: meta.textMinutes === "" ? null : Number(meta.textMinutes),
-        videoMinutes: meta.videoMinutes === "" ? null : Number(meta.videoMinutes),
-        practiceMinutes: meta.practiceMinutes === "" ? null : Number(meta.practiceMinutes),
-        pathPolicy: meta.pathPolicy as EditorLesson["pathPolicy"],
-        hasVideo: meta.videoUrl.trim().length > 0,
-        videoPlayable: isPlayableVideoUrl(meta.videoUrl.trim()),
-      }),
+  const durationInput = useMemo(
+    () => ({
+      readingMinutes: lessonReadingMinutes,
+      textMinutes: meta.textMinutes === "" ? null : Number(meta.textMinutes),
+      videoMinutes: meta.videoMinutes === "" ? null : Number(meta.videoMinutes),
+      practiceMinutes: meta.practiceMinutes === "" ? null : Number(meta.practiceMinutes),
+      pathPolicy: meta.pathPolicy as EditorLesson["pathPolicy"],
+      hasVideo: meta.videoUrl.trim().length > 0,
+      videoPlayable: isPlayableVideoUrl(meta.videoUrl.trim()),
+    }),
     [
-      readingMinutes,
+      lessonReadingMinutes,
       meta.textMinutes,
       meta.videoMinutes,
       meta.practiceMinutes,
@@ -184,6 +193,8 @@ export function LessonEditor({
       meta.videoUrl,
     ],
   );
+  const durationPreview = useMemo(() => lessonDurationLabel(durationInput), [durationInput]);
+  const durationTotal = useMemo(() => lessonTotalMinutes(durationInput), [durationInput]);
 
   const returnToSavedPreview = useCallback(() => {
     if (previewClearTimer.current) clearTimeout(previewClearTimer.current);
@@ -199,7 +210,8 @@ export function LessonEditor({
       : saveLessonContentAction(lesson.id, savingContent);
     return save.then((result) => {
       if (result?.ok) {
-        setReadingMinutes(result.data.readingMinutes);
+        setCurrentReadingMinutes(result.data.readingMinutes);
+        setLessonReadingMinutes(result.data.lessonReadingMinutes);
         lastSavedContent.current = savingContent;
         const isLatest = latestContent.current === savingContent;
         setSaveState(isLatest ? "saved" : "dirty");
@@ -526,7 +538,9 @@ export function LessonEditor({
       {/* Второстепенное: просмотр, ссылка, полный экран. */}
       <div className="text-text-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
         <span className="tabular-nums">
-          {readingMinutes} мин · {wordCount} сл.
+          {activeStep ? "Текущий шаг" : "Текст урока"}: {currentReadingMinutes} мин · {wordCount}{" "}
+          сл. <span aria-hidden="true">·</span>{" "}
+          <span className="text-text-2">весь урок: ~{durationTotal} мин</span>
         </span>
         {/* DECISION: студенческая зона закрыта для mentor+, поэтому «Открыть как
             ученика» открывает полностраничный превью-рендер (тот же LessonRenderer). */}
@@ -614,7 +628,9 @@ export function LessonEditor({
               <span className="text-text-2 text-[13px]">Сложность</span>
               <Select
                 value={meta.difficulty}
-                onValueChange={(difficulty) => setMeta({ ...meta, difficulty })}
+                onValueChange={(difficulty) =>
+                  setMeta({ ...meta, difficulty: difficulty as EditorMeta["difficulty"] })
+                }
               >
                 <SelectTrigger aria-label="Сложность">
                   <SelectValue />
@@ -640,7 +656,9 @@ export function LessonEditor({
             <span className="text-text-2 text-[13px]">Путь прохождения</span>
             <Select
               value={meta.pathPolicy}
-              onValueChange={(pathPolicy) => setMeta({ ...meta, pathPolicy })}
+              onValueChange={(pathPolicy) =>
+                setMeta({ ...meta, pathPolicy: pathPolicy as EditorMeta["pathPolicy"] })
+              }
             >
               <SelectTrigger aria-label="Путь прохождения">
                 <SelectValue />
@@ -657,39 +675,111 @@ export function LessonEditor({
               «На выбор» сохраняет выбранный учеником путь; квиз и завершение остаются общими.
             </p>
           </div>
-          {/* Время урока (заход B.2, блок 3.2). Механизм переопределения уже был
-              (поля text/video/practice_minutes, коммит e2d7f7e) — не хватало
-              главного: ментор не видел, ЧТО показывается ученику сейчас и что
-              автооценку можно перебить. Автоматическое значение стоит подсказкой
-              прямо в поле; пустое поле = автооценка, заполненное = ручное. */}
-          {DURATION_FIELDS.map(({ key, label, placeholder }) => (
-            <div key={key} className="flex flex-col gap-1.5">
-              <label htmlFor={`lesson-${key}`} className="text-text-2 text-[13px]">
-                {label}
-              </label>
-              <Input
-                id={`lesson-${key}`}
-                type="number"
-                min={1}
-                max={1440}
-                value={meta[key]}
-                onChange={(event) =>
-                  setMeta({
-                    ...meta,
-                    [key]: event.target.value === "" ? "" : Number(event.target.value),
-                  })
+          {/* Заход C.12: это один редактор времени ВСЕГО урока. Статистика
+              открытого шага живёт отдельно над формой и больше не подменяет
+              агрегат опубликованных шагов в автооценке текста. */}
+          <section
+            aria-labelledby="lesson-duration-title"
+            className="rounded-card border-border bg-bg grid gap-4 border p-4 md:col-span-2 lg:col-span-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2
+                  id="lesson-duration-title"
+                  className="text-text-1 flex items-center gap-2 text-[15px] font-semibold"
+                >
+                  <Timer size={17} strokeWidth={1.75} aria-hidden="true" />
+                  Время урока
+                </h2>
+                <p className="text-text-3 mt-1 text-[12px]">
+                  Настрой один раз — это время увидят ученики и программа курса.
+                </p>
+              </div>
+              <div className="border-border bg-surface-2 min-w-[150px] rounded-[12px] border px-3 py-2 text-right">
+                <span className="text-text-3 block text-[11px]">Расчётный итог</span>
+                <strong
+                  className="text-text-1 block text-[20px] leading-6 font-semibold tabular-nums"
+                  aria-live="polite"
+                >
+                  ~{durationTotal} мин
+                </strong>
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-3">
+              <DurationField
+                id="lesson-textMinutes"
+                label="Текст"
+                value={meta.textMinutes}
+                placeholder={`${lessonReadingMinutes}`}
+                badge={meta.textMinutes === "" ? "авто" : "вручную"}
+                hint={
+                  meta.textMinutes === ""
+                    ? `По объёму всего урока: ${lessonReadingMinutes} мин`
+                    : `Автооценка по объёму: ${lessonReadingMinutes} мин`
                 }
-                placeholder={
-                  key === "textMinutes" ? `Автоматически: ${readingMinutes}` : placeholder
+                onChange={(textMinutes) => setMeta({ ...meta, textMinutes })}
+                onReset={
+                  meta.textMinutes === "" ? undefined : () => setMeta({ ...meta, textMinutes: "" })
+                }
+              />
+              <DurationField
+                id="lesson-videoMinutes"
+                label="Видео"
+                value={meta.videoMinutes}
+                placeholder="Не указано"
+                badge={meta.videoMinutes === "" ? "не указано" : "вручную"}
+                hint={
+                  !meta.videoUrl.trim()
+                    ? "Не входит в итог: у урока нет видео"
+                    : meta.videoMinutes === ""
+                      ? "Укажи длительность — сейчас видео не входит в число"
+                      : "Входит в итог по выбранному пути прохождения"
+                }
+                onChange={(videoMinutes) => setMeta({ ...meta, videoMinutes })}
+                onReset={
+                  meta.videoMinutes === ""
+                    ? undefined
+                    : () => setMeta({ ...meta, videoMinutes: "" })
+                }
+              />
+              <DurationField
+                id="lesson-practiceMinutes"
+                label="Практика"
+                value={meta.practiceMinutes}
+                placeholder="Не указано"
+                badge={meta.practiceMinutes === "" ? "не указано" : "вручную"}
+                hint={
+                  meta.practiceMinutes === ""
+                    ? "Не входит в итог, пока поле пустое"
+                    : "Всегда прибавляется к выбранному пути"
+                }
+                onChange={(practiceMinutes) => setMeta({ ...meta, practiceMinutes })}
+                onReset={
+                  meta.practiceMinutes === ""
+                    ? undefined
+                    : () => setMeta({ ...meta, practiceMinutes: "" })
                 }
               />
             </div>
-          ))}
-          <div className="text-text-3 text-[12px] md:col-span-2 lg:col-span-4">
-            Ученик увидит: <span className="text-text-2">{durationPreview}</span>. Пусто — время
-            текста считается автоматически по объёму ({readingMinutes} мин); впиши своё число, если
-            автооценка врёт.
-          </div>
+
+            <div className="border-border grid gap-1 border-t pt-3 text-[12px]">
+              <p className="text-text-3">
+                Ученик увидит: <span className="text-text-2">{durationPreview}</span>
+              </p>
+              {activeStep?.status === "draft" ? (
+                <p className="text-warning">
+                  Открытый шаг — черновик: его текст не входит во время урока до публикации.
+                </p>
+              ) : null}
+              {meta.videoUrl.trim() && meta.videoMinutes === "" ? (
+                <p className="text-warning">
+                  Длительность видео неизвестна, поэтому общий итог пока учитывает только известные
+                  части урока.
+                </p>
+              ) : null}
+            </div>
+          </section>
           <div className="md:col-span-2 lg:col-span-4">
             <Button variant="secondary" size="sm" loading={pending} onClick={saveMeta}>
               Сохранить метаданные
@@ -837,6 +927,62 @@ export function LessonEditor({
         onOpenChange={setPickingQuestion}
         onPick={(row) => insertQuestion(row.id)}
       />
+    </div>
+  );
+}
+
+function DurationField({
+  id,
+  label,
+  value,
+  placeholder,
+  badge,
+  hint,
+  onChange,
+  onReset,
+}: {
+  id: string;
+  label: string;
+  value: number | "";
+  placeholder: string;
+  badge: string;
+  hint: string;
+  onChange: (value: number | "") => void;
+  onReset?: () => void;
+}) {
+  return (
+    <div className="border-border bg-surface-1 flex min-w-0 flex-col gap-2 rounded-[12px] border p-3">
+      <div className="flex min-h-6 items-center justify-between gap-2">
+        <label htmlFor={id} className="text-text-1 text-[13px] font-medium">
+          {label}, мин
+        </label>
+        <span className="rounded-pill bg-surface-2 text-text-3 px-2 py-0.5 text-[10px] font-medium">
+          {badge}
+        </span>
+      </div>
+      <Input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={1440}
+        value={value}
+        onChange={(event) => onChange(event.target.value === "" ? "" : Number(event.target.value))}
+        placeholder={placeholder}
+      />
+      <p className="text-text-3 min-h-9 text-[11px] leading-[1.45]">{hint}</p>
+      {onReset ? (
+        <button
+          type="button"
+          onClick={onReset}
+          className="text-text-2 hover:text-text-1 ease-app -mx-1 -mb-1 inline-flex min-h-11 items-center gap-1.5 self-start rounded-[8px] px-1 text-[12px] transition-colors duration-150"
+        >
+          <RotateCcw size={13} strokeWidth={1.75} aria-hidden="true" />
+          {label === "Текст" ? "Вернуть автооценку" : "Не учитывать"}
+        </button>
+      ) : (
+        <span aria-hidden="true" className="min-h-11" />
+      )}
     </div>
   );
 }

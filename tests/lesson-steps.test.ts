@@ -5,6 +5,7 @@ import {
   createLessonStep,
   deleteLessonStep,
   moveLessonStep,
+  saveLessonStep,
   setLessonStepStatus,
   splitLessonIntoSteps,
 } from "@/lib/services/lesson-steps";
@@ -210,6 +211,50 @@ describe("шаги урока", () => {
     await expect(
       testDb.auditLog.findFirst({ where: { action: "lesson_step.published", entityId: draft.id } }),
     ).resolves.toMatchObject({ actorId: mentor.id });
+  });
+
+  it("после автосохранения возвращает минуты шага и актуальный агрегат урока", async () => {
+    const { mentor, lesson } = await fixture();
+    const first = await splitLessonIntoSteps(testDb, { actorId: mentor.id, lessonId: lesson.id });
+    const second = await createLessonStep(testDb, {
+      actorId: mentor.id,
+      lessonId: lesson.id,
+      title: "Вторая часть",
+    });
+    await saveLessonStep(testDb, { stepId: second.id, contentMd: "слово ".repeat(450) });
+
+    const draftSave = await saveLessonStep(testDb, {
+      stepId: first.id,
+      contentMd: "слово ".repeat(220),
+    });
+    const aggregateBeforePublish = await testDb.lesson.findUniqueOrThrow({
+      where: { id: lesson.id },
+      select: { readingMinutes: true },
+    });
+    expect(draftSave).toMatchObject({
+      ok: true,
+      readingMinutes: 2,
+      lessonReadingMinutes: aggregateBeforePublish.readingMinutes,
+    });
+
+    await setLessonStepStatus(testDb, {
+      actorId: mentor.id,
+      stepId: second.id,
+      status: "published",
+    });
+    const publishedSave = await saveLessonStep(testDb, {
+      stepId: second.id,
+      contentMd: "слово ".repeat(610),
+    });
+    const aggregateAfterSave = await testDb.lesson.findUniqueOrThrow({
+      where: { id: lesson.id },
+      select: { readingMinutes: true },
+    });
+    expect(publishedSave).toMatchObject({
+      ok: true,
+      readingMinutes: 4,
+      lessonReadingMinutes: aggregateAfterSave.readingMinutes,
+    });
   });
 
   it("не позволяет вынести из урока последний шаг", async () => {
