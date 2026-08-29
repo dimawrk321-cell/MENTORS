@@ -3,6 +3,7 @@ import type { Db } from "@/lib/db";
 import { writeAudit } from "@/lib/services/audit";
 import { completeLesson, getLessonView } from "@/lib/services/content";
 import { computeReadingMinutes } from "@/lib/utils/markdown";
+import { buildLessonAggregate } from "@/lib/utils/lesson-aggregate";
 import { hasUnsafeRecordingReference } from "@/lib/utils/content-safety";
 import { notifyLessonUpdated } from "@/lib/services/content-admin";
 
@@ -14,15 +15,41 @@ async function parkStepOrders(tx: Tx, ids: string[]): Promise<void> {
   }
 }
 
+/**
+ * Пересобирает производную проекцию `lessons.content_md` по видимым шагам.
+ *
+ * Два правила, которых у прежней сборки не было (заход C.10):
+ *
+ * 1. **Проекция не выдумывает текст.** Названия шагов больше не подставляются
+ *    заголовками — см. `buildLessonAggregate`. Прежний `## {title}` попадал в
+ *    колонку, которую индексирует FTS и рендерит предпросмотр, а исправить его
+ *    в тексте урока было нельзя: это не поле содержимого, а навигационная подпись.
+ * 2. **Пустая проекция не затирает авторский текст.** Пока ни один шаг не
+ *    опубликован (а первый «Материал» наследует статус урока, то есть у черновика
+ *    он черновик), собирать нечего — но «нечего показать» это не факт «урок пуст».
+ *    Прежняя сборка писала в колонку пустую строку, и вместе с ней ломались все
+ *    её читатели: гейт массовой публикации (`isLessonPublishable`), серверная
+ *    авторизация ответа на встроенный `:::question`, автозакрытие мок-урока по
+ *    `:::mock` и запасной текст читалки.
+ *
+ * `contentUpdatedAt` двигается только при фактическом изменении проекции: иначе
+ * переименование шага рассылало бы «урок обновлён» всем прошедшим ученикам.
+ */
 async function syncLessonAggregate(tx: Tx, lessonId: string): Promise<number> {
-  const steps = await tx.lessonStep.findMany({
-    where: { lessonId, status: "published" },
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: { title: true, contentMd: true },
-  });
-  const contentMd = steps
-    .map((step) => `## ${step.title}\n\n${step.contentMd.trim()}`.trim())
-    .join("\n\n");
+  const [lesson, steps] = await Promise.all([
+    tx.lesson.findUnique({
+      where: { id: lessonId },
+      select: { contentMd: true, readingMinutes: true },
+    }),
+    tx.lessonStep.findMany({
+      where: { lessonId, status: "published" },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: { contentMd: true },
+    }),
+  ]);
+  if (!lesson) return 0;
+  const contentMd = buildLessonAggregate(steps);
+  if (!contentMd || contentMd === lesson.contentMd) return lesson.readingMinutes;
   const readingMinutes = computeReadingMinutes(contentMd);
   await tx.lesson.update({
     where: { id: lessonId },

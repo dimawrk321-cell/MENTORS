@@ -51,6 +51,42 @@ interface StepItem {
   title: string;
 }
 
+export interface StepSourceLesson {
+  id: string;
+  title: string;
+  label: string;
+  scope: "module" | "course";
+}
+
+/**
+ * Заход C.10. Главное непонимание механизма — «шаг ссылается на урок». Он его
+ * КОПИРУЕТ, и дальше копия живёт своей жизнью. Формулировка живёт константой,
+ * а не в JSX: её же охраняет тест (содержимое диалога Radix в статическую
+ * разметку не попадает, пока диалог закрыт).
+ */
+export const STEP_COPY_NOTICE = {
+  title: "Шаг — это копия, а не ссылка.",
+  body:
+    "Материал переносится снимком: правки исходного урока в шаг больше не приходят, " +
+    "и наоборот. Сам исходный урок останется отдельной строкой в программе курса — " +
+    "если он опубликован, ученик увидит материал дважды, пока урок не снят с публикации.",
+} as const;
+
+/**
+ * Область поиска источников. По умолчанию — модуль: собирать шагами уроки
+ * соседнего модуля почти всегда значит подменять шагами группировку, ради
+ * которой модуль и существует. Расширение до курса — явное действие.
+ */
+export function stepSourceScopeOptions(
+  sources: readonly StepSourceLesson[],
+): ReadonlyArray<{ value: "module" | "course"; label: string }> {
+  const inModule = sources.filter((item) => item.scope === "module").length;
+  return [
+    { value: "module", label: `Этот модуль · ${inModule}` },
+    { value: "course", label: `Весь курс · ${sources.length}` },
+  ];
+}
+
 export function LessonSteps({
   lessonId,
   lessonTitle,
@@ -72,7 +108,7 @@ export function LessonSteps({
   modules: Array<{ id: string; title: string }>;
   lessons: Array<{ id: string; title: string }>;
   copyTargets: Array<{ id: string; title: string }>;
-  lessonSources: Array<{ id: string; title: string; label: string }>;
+  lessonSources: StepSourceLesson[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -86,6 +122,7 @@ export function LessonSteps({
   const [copyTargetModuleId, setCopyTargetModuleId] = useState(moduleId);
   const [importOpen, setImportOpen] = useState(false);
   const [sourceQuery, setSourceQuery] = useState("");
+  const [sourceScope, setSourceScope] = useState<"module" | "course">("module");
   const [sourceLessonIds, setSourceLessonIds] = useState<string[]>([]);
   const [importTitle, setImportTitle] = useState("");
 
@@ -104,25 +141,31 @@ export function LessonSteps({
     });
   }
 
-  const availableSources = lessonSources.filter((item) => item.id !== lessonId);
+  const scopeOptions = stepSourceScopeOptions(lessonSources);
+  const availableSources =
+    sourceScope === "module"
+      ? lessonSources.filter((item) => item.scope === "module")
+      : lessonSources;
   const normalizedQuery = sourceQuery.trim().toLocaleLowerCase("ru");
   const filteredSources = normalizedQuery
     ? availableSources.filter((item) =>
         item.label.toLocaleLowerCase("ru").includes(normalizedQuery),
       )
     : availableSources;
+  // Выбор считается по полному списку курса, а не по видимой области: сужение
+  // обратно до модуля не должно молча выбрасывать уже отмеченный урок.
   const selectedSources = sourceLessonIds.flatMap((id) => {
-    const source = availableSources.find((item) => item.id === id);
+    const source = lessonSources.find((item) => item.id === id);
     return source ? [source] : [];
   });
 
-  function toggleSource(source: (typeof availableSources)[number]) {
+  function toggleSource(source: (typeof lessonSources)[number]) {
     const nextIds = sourceLessonIds.includes(source.id)
       ? sourceLessonIds.filter((id) => id !== source.id)
       : [...sourceLessonIds, source.id];
     setSourceLessonIds(nextIds);
     if (nextIds.length === 1) {
-      setImportTitle(availableSources.find((item) => item.id === nextIds[0])?.title ?? "");
+      setImportTitle(lessonSources.find((item) => item.id === nextIds[0])?.title ?? "");
     } else {
       setImportTitle("");
     }
@@ -243,6 +286,10 @@ export function LessonSteps({
               вместе с материалом, видео и вопросами; источники останутся без изменений.
             </DialogDescription>
           </DialogHeader>
+          <p className="rounded-control border-border bg-surface-2 text-text-2 border px-3 py-2 text-sm">
+            <strong className="text-text-1 font-medium">{STEP_COPY_NOTICE.title}</strong>{" "}
+            {STEP_COPY_NOTICE.body}
+          </p>
           {lessonStatus === "published" && (
             <p className="rounded-control border-warning/35 bg-warning/6 text-text-2 border px-3 py-2 text-sm">
               Текущий урок опубликован: новый шаг сразу увидят ученики. У уже завершивших урок
@@ -250,10 +297,36 @@ export function LessonSteps({
             </p>
           )}
           <div className="flex flex-col gap-4">
+            {/* Область по умолчанию — модуль: собирать шагами уроки соседнего
+                модуля почти всегда значит подменять шагами группировку, для
+                которой модуль и существует. Расширение до курса — явное. */}
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-text-2">Откуда брать:</span>
+              <div className="border-border rounded-control inline-flex overflow-hidden border">
+                {scopeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={sourceScope === option.value}
+                    onClick={() => setSourceScope(option.value)}
+                    className={cn(
+                      "ease-app px-3 py-1.5 text-[13px] transition-colors duration-150",
+                      sourceScope === option.value
+                        ? "bg-accent/12 text-accent"
+                        : "text-text-2 hover:bg-surface-2 hover:text-text-1",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <Input
               value={sourceQuery}
               onChange={(event) => setSourceQuery(event.target.value)}
-              placeholder="Найти по курсу, модулю или названию урока"
+              placeholder={
+                sourceScope === "module" ? "Найти урок в этом модуле" : "Найти урок в этом курсе"
+              }
               aria-label="Поиск исходного урока"
               autoFocus
             />
@@ -288,7 +361,20 @@ export function LessonSteps({
                   );
                 })
               ) : (
-                <p className="text-text-3 px-3 py-6 text-center text-sm">Ничего не найдено</p>
+                <p className="text-text-3 px-3 py-6 text-center text-sm">
+                  {sourceScope === "module" && !normalizedQuery
+                    ? "В этом модуле больше нет уроков."
+                    : "Ничего не найдено."}{" "}
+                  {sourceScope === "module" && (
+                    <button
+                      type="button"
+                      onClick={() => setSourceScope("course")}
+                      className="text-accent hover:text-accent-hover ease-app transition-colors duration-150"
+                    >
+                      Искать по всему курсу
+                    </button>
+                  )}
+                </p>
               )}
             </div>
             {selectedSources.length === 1 && (

@@ -32,7 +32,15 @@ export default async function ContentPreviewPage({ params, searchParams }: Previ
   const lesson = await getLessonForEditor(prisma, id);
   if (!lesson) notFound();
   const { step: stepId } = await searchParams;
-  const step = lesson.steps.find((item) => item.id === stepId) ?? null;
+  // Заход C.10: без `?step=` предпросмотр урока с шагами показывал `content_md` —
+  // машинную проекцию, которую ученик не видит НИКОГДА (читалка отдаёт ему шаг).
+  // Точка входа ученика — первый опубликованный шаг, её же берёт и предпросмотр,
+  // иначе «предпросмотр идентичен виду ученика» (spec 8.5) не выполняется.
+  const step =
+    lesson.steps.find((item) => item.id === stepId) ??
+    lesson.steps.find((item) => item.status === "published") ??
+    lesson.steps[0] ??
+    null;
   const markdown = step ? lessonStepMarkdownForDisplay(step.contentMd) : lesson.contentMd;
   const stepIndex = step ? lesson.steps.findIndex((item) => item.id === step.id) : -1;
 

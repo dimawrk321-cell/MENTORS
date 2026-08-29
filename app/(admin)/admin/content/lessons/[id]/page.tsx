@@ -10,9 +10,11 @@ import {
 } from "@/lib/services/questions";
 import { hasReferenceAnswer } from "@/lib/services/question-access";
 import { stripMarkdown } from "@/lib/utils/text";
+import { findStepDuplicates } from "@/lib/services/lesson-step-duplicates";
 import { LessonEditor } from "./lesson-editor";
 import { LessonQuestions } from "./lesson-questions";
 import { LessonSteps } from "./lesson-steps";
+import { StepDuplicateNotice } from "./step-duplicate-notice";
 
 export const metadata: Metadata = {
   title: "Редактор урока",
@@ -46,6 +48,7 @@ export default async function LessonEditorPage({ params, searchParams }: EditorP
     // привязкам урока/модуля/курса (связи «курс ↔ категории банка» пусты).
     suggestQuestionCategory(prisma, lesson.id),
   ]);
+  const stepDuplicates = await findStepDuplicates(prisma, [lesson.module.course.id]);
   const [courseModules, allCourseContent] = await Promise.all([
     prisma.module.findMany({
       where: { courseId: lesson.module.course.id },
@@ -84,6 +87,7 @@ export default async function LessonEditorPage({ params, searchParams }: EditorP
 
   return (
     <div className="flex flex-col gap-4">
+      <StepDuplicateNotice lessonId={lesson.id} duplicates={stepDuplicates} />
       <LessonSteps
         lessonId={lesson.id}
         lessonTitle={lesson.title}
@@ -101,14 +105,19 @@ export default async function LessonEditorPage({ params, searchParams }: EditorP
             title: `${course.title} · ${module.title}`,
           })),
         )}
-        lessonSources={allCourseContent.flatMap((course) =>
-          course.modules.flatMap((module) =>
-            module.lessons.map((item) => ({
+        // Заход C.10: источники шага ограничены КУРСОМ, а по умолчанию — модулем.
+        // Прежний список был «все уроки платформы» (148 строк на стенде), и это
+        // приглашало собирать шагами то, для чего есть модуль: шаги не видны в
+        // программе курса, не участвуют в «Урок N из M» и не двигают цепь.
+        lessonSources={courseModules.flatMap((module) =>
+          module.lessons
+            .filter((item) => item.id !== lesson.id)
+            .map((item) => ({
               id: item.id,
               title: item.title,
-              label: `${course.title} · ${module.title} · ${item.title}`,
+              label: `${module.title} · ${item.title}`,
+              scope: module.id === lesson.moduleId ? ("module" as const) : ("course" as const),
             })),
-          ),
         )}
       />
       <LessonEditor

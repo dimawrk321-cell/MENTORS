@@ -92,6 +92,8 @@ export interface TreeLesson {
   isOptional: boolean;
   readingMinutes: number;
   steps: TreeLessonStep[];
+  /** Заход C.10: этот урок повторён копией-шагом в другом уроке курса. */
+  duplicate: { hostTitle: string; reason: "content" | "title"; visibleTwice: boolean } | null;
 }
 
 export interface TreeLessonStep {
@@ -1235,6 +1237,20 @@ function LessonRow({ lesson }: { lesson: TreeLesson }) {
             <span className="text-text-1 min-w-0 truncate">{lesson.title}</span>
             {lesson.status === "draft" && <Badge variant="warning">черновик</Badge>}
             {lesson.isOptional && <Badge>необязательный</Badge>}
+            {lesson.duplicate && (
+              <Badge
+                variant="warning"
+                title={
+                  lesson.duplicate.reason === "content"
+                    ? lesson.duplicate.visibleTwice
+                      ? `Ученик видит материал дважды: содержимое этого урока лежит копией-шагом в уроке «${lesson.duplicate.hostTitle}». Сними урок с публикации или удали шаг.`
+                      : `Содержимое этого урока лежит копией-шагом в уроке «${lesson.duplicate.hostTitle}» — шаг пока не виден ученику.`
+                    : `Шаг в уроке «${lesson.duplicate.hostTitle}» называется так же, как этот урок. Обычно так остаётся копия, у которой название взяли от источника.`
+                }
+              >
+                {lesson.duplicate.reason === "content" ? "дубль в шаге" : "название в шаге"}
+              </Badge>
+            )}
             <span className="text-text-3 ml-auto shrink-0 text-[12px]">
               {lesson.readingMinutes} мин
             </span>

@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { LessonSteps } from "@/app/(admin)/admin/content/lessons/[id]/lesson-steps";
+import {
+  LessonSteps,
+  STEP_COPY_NOTICE,
+  stepSourceScopeOptions,
+} from "@/app/(admin)/admin/content/lessons/[id]/lesson-steps";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
@@ -33,9 +37,21 @@ const COMMON = {
     { id: "module-1", title: "Курс 1 · Модуль 1" },
     { id: "module-2", title: "Курс 2 · Модуль 2" },
   ],
+  // Заход C.10: источники ограничены курсом, текущий урок отсеян на сервере,
+  // а область по умолчанию — модуль урока.
   lessonSources: [
-    { id: "lesson-1", title: "Целевой урок", label: "Курс 1 · Модуль 1 · Целевой урок" },
-    { id: "lesson-2", title: "Источник", label: "Курс 2 · Модуль 2 · Источник" },
+    {
+      id: "lesson-2",
+      title: "Сосед по модулю",
+      label: "Модуль 1 · Сосед по модулю",
+      scope: "module" as const,
+    },
+    {
+      id: "lesson-3",
+      title: "Урок из другого модуля",
+      label: "Модуль 2 · Урок из другого модуля",
+      scope: "course" as const,
+    },
   ],
 };
 
@@ -58,5 +74,21 @@ describe("повторное использование уроков в реда
     expect(html).toContain("Копировать урок");
     expect(html).toContain("Добавить урок как шаг");
     expect(html).toContain("1. Материал");
+  });
+
+  // Содержимое диалога Radix в статическую разметку не попадает, пока он
+  // закрыт, поэтому тексты и счётчики областей проверяются в своих константах,
+  // а не в HTML. Что они действительно отрисованы — проверка глазами на 1280/390.
+  it("называет шаг копией и предупреждает про оставшийся исходный урок", () => {
+    expect(STEP_COPY_NOTICE.title).toBe("Шаг — это копия, а не ссылка.");
+    expect(STEP_COPY_NOTICE.body).toContain("правки исходного урока в шаг больше не приходят");
+    expect(STEP_COPY_NOTICE.body).toContain("ученик увидит материал дважды");
+  });
+
+  it("по умолчанию считает уроки своего модуля, расширение до курса — отдельная область", () => {
+    expect(stepSourceScopeOptions(COMMON.lessonSources)).toEqual([
+      { value: "module", label: "Этот модуль · 1" },
+      { value: "course", label: "Весь курс · 2" },
+    ]);
   });
 });

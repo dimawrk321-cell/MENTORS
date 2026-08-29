@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/guards";
 import { getContentTree, listCategoryOptions } from "@/lib/services/content-admin";
 import { getModulePoolCounts } from "@/lib/services/tests";
+import { findStepDuplicates } from "@/lib/services/lesson-step-duplicates";
 import { ContentStudioTabs } from "@/components/features/content-studio-tabs";
 import { ContentTree, type TreeCourse } from "./content-tree";
 
@@ -26,6 +27,35 @@ export default async function ContentPage() {
     prisma,
     courses.flatMap((course) => course.modules.map((module) => module.id)),
   );
+
+  // Заход C.10: шаг — независимая копия урока, и исходный урок остаётся в
+  // программе. Автоматически его не прячем (это решение ментора), но дубль
+  // называем прямо в дереве — там, где урок можно снять с публикации.
+  const duplicates = await findStepDuplicates(
+    prisma,
+    courses.map((course) => course.id),
+  );
+  const duplicateByLesson = new Map<
+    string,
+    { hostTitle: string; reason: "content" | "title"; visibleTwice: boolean }
+  >();
+  for (const item of duplicates) {
+    const known = duplicateByLesson.get(item.lessonId);
+    // Совпадение по содержимому весомее совпадения по названию: первое значит,
+    // что ученик читает одно и то же, второе — что у копии осталось чужое имя.
+    if (known && (known.reason === "content" || item.reason === "title")) {
+      duplicateByLesson.set(item.lessonId, {
+        ...known,
+        visibleTwice: known.visibleTwice || item.visibleTwice,
+      });
+      continue;
+    }
+    duplicateByLesson.set(item.lessonId, {
+      hostTitle: item.stepLessonTitle,
+      reason: item.reason,
+      visibleTwice: (known?.visibleTwice ?? false) || item.visibleTwice,
+    });
+  }
 
   const tree: TreeCourse[] = courses.map((course) => ({
     id: course.id,
@@ -56,6 +86,7 @@ export default async function ContentPage() {
         status: lesson.status,
         isOptional: lesson.isOptional,
         readingMinutes: lesson.readingMinutes,
+        duplicate: duplicateByLesson.get(lesson.id) ?? null,
         steps: lesson.steps.map((step) => ({
           id: step.id,
           title: step.title,
