@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
+import { env } from "@/lib/env";
 import { cn } from "@/lib/utils/cn";
 import { requireStudentZone } from "@/lib/auth/guards";
 import { getActivityBarData, getContinueTarget } from "@/lib/services/dashboard";
@@ -118,6 +119,7 @@ export default async function DashboardPage() {
   const showLagging = lagging !== null && lagging.length > 0;
   const todayPlan = buildTodayPlan({
     nowMs: now.getTime(),
+    brandName: env.brandName,
     mock: activeMock
       ? {
           bookingId: activeMock.bookingId,

@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { env } from "@/lib/env";
 import { MOCK_TYPE_LABEL, isRoomUrlReady } from "@/lib/constants";
 import { formatDateTimeRu, formatDateOnlyRu, pluralRu } from "@/lib/utils/dates";
 import { processStreakDay, getStreakState } from "@/lib/services/streak";
@@ -180,7 +181,7 @@ export async function buildTodayCard(
   } else if (cont) {
     button = { text: "Начать", url: platformUrl(`/lessons/${cont.lessonId}`) };
   } else {
-    button = { text: "Открыть PRIME", url: platformUrl("/") };
+    button = { text: `Открыть ${env.brandName}`, url: platformUrl("/") };
   }
   // [Начать] + [🔄 Обновить] (walk 13.5 block 3.3): 2 max in a row.
   return {
@@ -283,13 +284,13 @@ function buildHelp(): OutgoingMessage {
       "",
       "Действовать и учиться — на платформе.",
     ]),
-    buttons: [{ text: "Открыть PRIME", url: platformUrl("/") }],
+    buttons: [{ text: `Открыть ${env.brandName}`, url: platformUrl("/") }],
   };
 }
 
 function connectPrompt(): OutgoingMessage {
   return {
-    text: messageBlock("PRIME", [
+    text: messageBlock(env.brandName, [
       "Подключи бота в профиле на платформе — тогда я смогу показывать прогресс и присылать уведомления.",
     ]),
     buttons: [{ text: "Открыть профиль", url: platformUrl("/profile") }],

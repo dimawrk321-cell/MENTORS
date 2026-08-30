@@ -15,6 +15,12 @@ export interface TodayPlan {
 
 export function buildTodayPlan(input: {
   nowMs: number;
+  /**
+   * Название бренда (BRAND_NAME). Приходит параметром, а не из `@/lib/env`:
+   * lib/utils остаётся чистым и клиент-безопасным слоем — сюда не тянут
+   * process.env, иначе утилиту нельзя будет позвать из теста без окружения.
+   */
+  brandName: string;
   mock?: { bookingId: string; startsAtMs: number; endsAtMs: number; whenLabel: string } | null;
   queue?: { total: number; estimateMinutes: number } | null;
   lesson?: { id: string; title: string; mode: "continue" | "start" } | null;
@@ -61,7 +67,7 @@ export function buildTodayPlan(input: {
   candidates.push({
     kind: "courses",
     title: "Выбери следующий урок",
-    description: "Продолжи обучение по программе PRIME",
+    description: `Продолжи обучение по программе ${input.brandName}`,
     href: "/courses",
     actionLabel: "Открыть курсы",
   });

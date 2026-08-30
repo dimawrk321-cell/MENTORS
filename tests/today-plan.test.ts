@@ -6,6 +6,7 @@ const NOW = new Date("2026-08-23T09:00:00.000Z").getTime();
 describe("«Что делать сегодня»", () => {
   const base = {
     nowMs: NOW,
+    brandName: "PRIME",
     queue: { total: 12, estimateMinutes: 5 },
     lesson: { id: "lesson-1", title: "Метрики", mode: "continue" as const },
     weak: { categoryId: "cat-1", title: "Classic ML", againShare: 0.42 },
@@ -51,8 +52,13 @@ describe("«Что делать сегодня»", () => {
   });
 
   it("при отсутствии учебных сигналов ведёт в каталог курсов", () => {
-    const plan = buildTodayPlan({ nowMs: NOW });
+    const plan = buildTodayPlan({ nowMs: NOW, brandName: "PRIME" });
     expect(plan.primary).toMatchObject({ kind: "courses", href: "/courses" });
     expect(plan.secondary).toEqual([]);
+  });
+
+  it("подставляет название бренда из окружения, а не зашитую строку", () => {
+    const plan = buildTodayPlan({ nowMs: NOW, brandName: "MENTORS" });
+    expect(plan.primary.description).toBe("Продолжи обучение по программе MENTORS");
   });
 });
