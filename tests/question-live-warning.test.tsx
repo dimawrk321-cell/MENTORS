@@ -79,6 +79,43 @@ describe("предупреждение о боевом пуле в редакт�
 });
 
 describe("секция «Вопросы урока» — счётчик теста не поехал (регресс C.1)", () => {
+  it("держит длинный шаг и публикацию черновика отдельными несжимаемыми контролами", () => {
+    const longestStep = "Создание модели нейронной сети. Sequential, ModuleList, ModuleDict";
+    const html = renderToStaticMarkup(
+      <LessonQuestions
+        lessonId="l1"
+        categories={[{ id: "c1", label: "Classic ML" }]}
+        defaultCategoryId="c1"
+        defaultCategoryScope="lesson"
+        lessonStatus="published"
+        moduleTestEnabled
+        steps={[{ id: "s1", title: longestStep }]}
+        links={[
+          {
+            questionId: "q1",
+            teaser: "Что такое Transformer?",
+            category: "Classic ML",
+            status: "draft",
+            type: "single",
+            hasAnswer: true,
+            isKey: false,
+            inQuiz: true,
+            stepId: "s1",
+          },
+        ]}
+      />,
+    );
+
+    expect(longestStep).toHaveLength(66);
+    expect(html).toMatch(
+      /class="[^"]*h-8[^"]*w-44[^"]*shrink-0[^"]*"[^>]*aria-label="Шаг вопроса"/,
+    );
+    expect(html).toMatch(/class="[^"]*shrink-0[^"]*"[^>]*>Опубликовать<\/button>/);
+    expect(html).toContain("[&amp;&gt;span]:truncate");
+    expect(html).toContain("Привязано черновиков");
+    expect(html).toContain("в модульном тесте");
+  });
+
   it("ведёт из строки сразу в редактор вопроса и сохраняет контекст урока и шага", () => {
     const html = renderToStaticMarkup(
       <LessonQuestions

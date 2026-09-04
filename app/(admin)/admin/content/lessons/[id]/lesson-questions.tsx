@@ -488,6 +488,7 @@ export function LessonQuestions({
                   <Button
                     variant="secondary"
                     size="sm"
+                    className="shrink-0"
                     disabled={pending}
                     onClick={() => publishLink(link)}
                   >
@@ -496,6 +497,7 @@ export function LessonQuestions({
                 )}
                 {/* Changelog этапа 3: роль одна — ключевой ИЛИ в квизе. */}
                 <QuestionRoleSelect
+                  className="h-8 w-44 shrink-0 text-[13px]"
                   value={roleFromFlags(link.isKey, link.inQuiz)}
                   onChange={(role) => {
                     if (role === "key") warnUnreachableKey([link]);
@@ -528,7 +530,10 @@ export function LessonQuestions({
                       )
                     }
                   >
-                    <SelectTrigger className="w-44" aria-label="Шаг вопроса">
+                    <SelectTrigger
+                      className="h-8 w-44 shrink-0 text-[13px]"
+                      aria-label="Шаг вопроса"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
