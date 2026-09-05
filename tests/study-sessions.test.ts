@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   createStudySession,
+  getStudySessionDashboard,
   getStudyMentorFlags,
   StudySessionError,
   updateStudySession,
@@ -79,6 +80,59 @@ describe("study session lifecycle", () => {
     expect(
       (await testDb.studySession.findUniqueOrThrow({ where: { id: created.id } })).fields,
     ).toMatchObject({ topic: "Первая вкладка" });
+  });
+
+  it("returns a bounded dashboard overview with the active session and current week", async () => {
+    const user = await createTestUser({ email: "dashboard-study@example.com" });
+    const fields = {
+      ...newStudyFields("Attention", "2026-09-01T19:00"),
+      startedOnTime: true,
+      completedBlocks: 1,
+      distractions: 0,
+      explain: "yes" as const,
+      thoughts: ["Q", "K", "V"] as [string, string, string],
+    };
+    for (let day = 1; day <= 4; day += 1) {
+      const endedAt = new Date(`2026-09-0${day}T17:30:00Z`);
+      await testDb.studySession.create({
+        data: {
+          userId: user.id,
+          timezone: user.timezone,
+          status: "completed",
+          fields,
+          plannedAt: new Date(`2026-09-0${day}T17:00:00Z`),
+          startedAt: new Date(endedAt.getTime() - 30 * 60_000),
+          endedAt,
+          completedAt: endedAt,
+          createdAt: endedAt,
+        },
+      });
+    }
+    const active = await testDb.studySession.create({
+      data: {
+        userId: user.id,
+        activeUserId: user.id,
+        timezone: user.timezone,
+        status: "draft",
+        fields: newStudyFields("Новая тема", "2026-09-05T19:00"),
+        plannedAt: new Date("2026-09-05T16:00:00Z"),
+        createdAt: new Date("2026-09-05T15:00:00Z"),
+      },
+    });
+    const dashboard = await getStudySessionDashboard(
+      testDb,
+      user.id,
+      new Date("2026-09-05T18:00:00Z"),
+      user.timezone,
+    );
+    expect(dashboard.active?.id).toBe(active.id);
+    expect(dashboard.summary).toMatchObject({ count: 4, totalMinutes: 120, unfinished: 1 });
+    expect(dashboard.recent).toHaveLength(3);
+    expect(dashboard.recent.map((card) => card.endedAt)).toEqual([
+      "2026-09-04T17:30:00.000Z",
+      "2026-09-03T17:30:00.000Z",
+      "2026-09-02T17:30:00.000Z",
+    ]);
   });
 
   it("returns mentor risks with the exact linked sessions", async () => {

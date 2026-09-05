@@ -13,7 +13,6 @@ import {
   Layers,
   Play,
   Sparkles,
-  History,
   type LucideIcon,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -42,6 +41,8 @@ import { ActivityBar } from "@/components/features/activity-bar";
 import { MockBookingCard } from "@/components/features/mock-booking-card";
 import { TodayPlanCard } from "@/components/features/today-plan-card";
 import { buildTodayPlan } from "@/lib/utils/today-plan";
+import { getStudySessionDashboard } from "@/lib/services/study-sessions";
+import { StudySessionDashboard } from "@/components/features/study-session-dashboard";
 
 export const metadata: Metadata = {
   title: "Главная",
@@ -81,6 +82,7 @@ export default async function DashboardPage() {
     levelTitles,
     xpMap,
     guidesEnabled,
+    studySessions,
   ] = await Promise.all([
     getStreakState(prisma, {
       userId: user.id,
@@ -104,6 +106,7 @@ export default async function DashboardPage() {
       resume: user.guidesResumeEnabled,
       legend: user.guidesLegendEnabled,
     }),
+    getStudySessionDashboard(prisma, user.id, now, user.timezone),
   ]);
   const nextReview =
     queue.total === 0 ? await getNextReviewDate(prisma, { userId: user.id, now }) : null;
@@ -187,13 +190,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-7">
-      <Link
-        href="/study-sessions"
-        className="text-text-2 hover:text-text-1 ml-auto inline-flex min-h-11 items-center gap-2 text-[13px]"
-      >
-        <History size={16} />
-        История учебных сессий
-      </Link>
       {/* Приветствие: дата + h1 + стрик/уровень/XP + кольцо цели (design «Главная v2») */}
       <section className="flex flex-wrap items-center justify-between gap-5">
         <div className="flex min-w-0 flex-col gap-2.5">
@@ -235,6 +231,8 @@ export default async function DashboardPage() {
       </section>
 
       <TodayPlanCard plan={todayPlan} />
+
+      <StudySessionDashboard {...studySessions} />
 
       {/* «Сегодня»: очередь + ближайший мок в две колонки (design «Главная v2») */}
       <section className="flex flex-col gap-3">

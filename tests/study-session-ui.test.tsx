@@ -4,6 +4,12 @@ import { StudyCardDetails, StudySessionCard } from "@/components/features/study-
 import { newStudyFields, type StudyCard } from "@/lib/utils/study-session-summary";
 
 describe("full study card", () => {
+  it("briefly explains the mechanic before the first card", () => {
+    const html = renderToStaticMarkup(<StudySessionCard initial={null} />);
+    expect(html).toContain("Что такое карточка занятия?");
+    expect(html).toContain("реальный прогресс");
+    expect(html).toContain("Начать учебную сессию");
+  });
   it("keeps planning, actual facts, reflection and repetitions in one view", () => {
     const card: StudyCard = {
       id: "session-1",

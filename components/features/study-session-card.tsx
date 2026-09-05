@@ -2,14 +2,12 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { BookOpenCheck, ChevronDown, ChevronUp, Clock3, History } from "lucide-react";
+import { BookOpenCheck, ChevronDown, ChevronUp, History } from "lucide-react";
 import { createStudySessionAction, updateStudySessionAction } from "@/lib/actions/study-sessions";
 import {
   elapsedMinutes,
   explainLabels,
-  formatStudyTimer,
   statusLabels,
-  studySessionTimer,
   type StudyCard,
   type StudyFields,
 } from "@/lib/utils/study-session-summary";
@@ -19,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { StudySessionExplainer } from "@/components/features/study-session-explainer";
+import { StudySessionTimer } from "@/components/features/study-session-timer";
 
 const textareaClass =
   "border-border rounded-control text-text-1 placeholder:text-text-3 min-h-20 w-full resize-y border bg-transparent px-3 py-2 text-[14px]";
@@ -39,7 +39,6 @@ export function StudySessionCard({
   const [card, setCard] = useState(initial);
   const [fields, setFields] = useState(initial?.fields ?? null);
   const [collapsed, setCollapsed] = useState(initial?.status === "running");
-  const [nowMs, setNowMs] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const viewOnly = useViewOnly();
@@ -48,17 +47,6 @@ export function StudySessionCard({
     setFields(initial?.fields ?? null);
     setCollapsed(initial?.status === "running");
   }, [initial]);
-  const runningStartedAt = card?.status === "running" ? card.startedAt : null;
-  useEffect(() => {
-    if (!runningStartedAt) {
-      setNowMs(null);
-      return;
-    }
-    const tick = () => setNowMs(Date.now());
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
-  }, [runningStartedAt]);
   const create = () =>
     startTransition(async () => {
       setMessage(null);
@@ -89,12 +77,7 @@ export function StudySessionCard({
     return (
       <Card className={compact ? "my-5" : undefined}>
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-medium">Карточка занятия</p>
-            <p className="text-text-2 text-[13px]">
-              Сформулируй цель до старта — это займёт минуту.
-            </p>
-          </div>
+          <StudySessionExplainer compact />
           <Button onClick={create} loading={pending} disabled={viewOnly}>
             <BookOpenCheck size={16} />
             Начать учебную сессию
@@ -110,15 +93,6 @@ export function StudySessionCard({
     );
   const planning = card.status === "draft";
   const reflection = card.status === "reflection" || card.status === "completed";
-  const timer =
-    card.status === "running" && card.startedAt
-      ? studySessionTimer(
-          card.startedAt,
-          fields.plannedBlocks,
-          fields.blockMinutes,
-          nowMs ?? Date.parse(card.startedAt),
-        )
-      : null;
   return (
     <Card id={`study-session-${card.id}`} className={compact ? "my-5" : undefined}>
       <CardHeader className={collapsed ? "p-4" : undefined}>
@@ -131,30 +105,12 @@ export function StudySessionCard({
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {timer && (
-              <div
-                role="timer"
-                aria-label={
-                  timer.overtime
-                    ? `Плановое время истекло ${formatStudyTimer(timer.overtimeSeconds)} назад`
-                    : `До конца планового времени ${formatStudyTimer(timer.remainingSeconds)}`
-                }
-                className={`rounded-control flex h-9 items-center gap-2 border px-3 text-[13px] tabular-nums ${
-                  timer.overtime
-                    ? "border-warning/35 bg-warning/8 text-warning"
-                    : "border-accent/30 bg-accent/10 text-accent"
-                }`}
-              >
-                <Clock3 size={15} aria-hidden="true" />
-                <span className="font-semibold">
-                  {timer.overtime
-                    ? `План +${formatStudyTimer(timer.overtimeSeconds)}`
-                    : `Осталось ${formatStudyTimer(timer.remainingSeconds)}`}
-                </span>
-                <span className="text-text-2 hidden font-normal sm:inline">
-                  из {fields.plannedBlocks * fields.blockMinutes} мин
-                </span>
-              </div>
+            {card.status === "running" && card.startedAt && (
+              <StudySessionTimer
+                startedAt={card.startedAt}
+                plannedBlocks={fields.plannedBlocks}
+                blockMinutes={fields.blockMinutes}
+              />
             )}
             <Badge variant={card.status === "completed" ? "success" : "accent"}>
               {statusLabels[card.status]}

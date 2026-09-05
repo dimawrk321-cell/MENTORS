@@ -11,6 +11,7 @@ import {
   repetitionSnapshotSchema,
   studyFieldsSchema,
   studyFlags,
+  studyWeek,
   summarizeStudyWeek,
   type RepetitionSnapshot,
   type StudyCard,
@@ -271,6 +272,40 @@ export async function getStudyCards(db: Db, userId: string) {
 export async function getActiveStudySession(db: Db, userId: string) {
   const row = await db.studySession.findUnique({ where: { activeUserId: userId } });
   return row ? studyCard(row) : null;
+}
+export async function getStudySessionDashboard(
+  db: Db,
+  userId: string,
+  now: Date,
+  timezone: string,
+) {
+  const range = studyWeek(now, timezone);
+  const [activeRow, weekRows, recentRows] = await Promise.all([
+    db.studySession.findUnique({ where: { activeUserId: userId } }),
+    db.studySession.findMany({
+      where: {
+        userId,
+        status: "completed",
+        endedAt: { gte: range.start, lt: range.end },
+      },
+      orderBy: [{ endedAt: "desc" }, { id: "desc" }],
+    }),
+    db.studySession.findMany({
+      where: { userId, status: "completed" },
+      orderBy: [{ endedAt: "desc" }, { id: "desc" }],
+      take: 3,
+    }),
+  ]);
+  const active = activeRow ? studyCard(activeRow) : null;
+  return {
+    active,
+    summary: summarizeStudyWeek(
+      [...(active ? [active] : []), ...weekRows.map(studyCard)],
+      now,
+      timezone,
+    ),
+    recent: recentRows.map(studyCard),
+  };
 }
 export async function getStudySessionReport(
   db: Db,
