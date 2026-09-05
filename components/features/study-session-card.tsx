@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { BookOpenCheck, Clock3, History } from "lucide-react";
+import { BookOpenCheck, ChevronDown, ChevronUp, Clock3, History } from "lucide-react";
 import { createStudySessionAction, updateStudySessionAction } from "@/lib/actions/study-sessions";
 import {
   elapsedMinutes,
   explainLabels,
+  formatStudyTimer,
   statusLabels,
+  studySessionTimer,
   type StudyCard,
   type StudyFields,
 } from "@/lib/utils/study-session-summary";
@@ -36,13 +38,27 @@ export function StudySessionCard({
 }) {
   const [card, setCard] = useState(initial);
   const [fields, setFields] = useState(initial?.fields ?? null);
+  const [collapsed, setCollapsed] = useState(initial?.status === "running");
+  const [nowMs, setNowMs] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const viewOnly = useViewOnly();
   useEffect(() => {
     setCard(initial);
     setFields(initial?.fields ?? null);
+    setCollapsed(initial?.status === "running");
   }, [initial]);
+  const runningStartedAt = card?.status === "running" ? card.startedAt : null;
+  useEffect(() => {
+    if (!runningStartedAt) {
+      setNowMs(null);
+      return;
+    }
+    const tick = () => setNowMs(Date.now());
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [runningStartedAt]);
   const create = () =>
     startTransition(async () => {
       setMessage(null);
@@ -64,6 +80,8 @@ export function StudySessionCard({
       if (!result.ok) return setMessage(result.error.message);
       setCard(result.data);
       setFields(result.data.fields);
+      if (operation === "start") setCollapsed(true);
+      if (operation === "stop") setCollapsed(false);
       setMessage(operation === "save" ? "Черновик сохранён" : null);
     });
   };
@@ -92,21 +110,84 @@ export function StudySessionCard({
     );
   const planning = card.status === "draft";
   const reflection = card.status === "reflection" || card.status === "completed";
+  const timer =
+    card.status === "running" && card.startedAt
+      ? studySessionTimer(
+          card.startedAt,
+          fields.plannedBlocks,
+          fields.blockMinutes,
+          nowMs ?? Date.parse(card.startedAt),
+        )
+      : null;
   return (
     <Card id={`study-session-${card.id}`} className={compact ? "my-5" : undefined}>
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>Карточка занятия</CardTitle>
-          <Badge variant={card.status === "completed" ? "success" : "accent"}>
-            {statusLabels[card.status]}
-          </Badge>
+      <CardHeader className={collapsed ? "p-4" : undefined}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <CardTitle>Карточка занятия</CardTitle>
+            <CardDescription className="mt-1 truncate">
+              {card.courseTitle ? `${card.courseTitle} · ` : ""}
+              {card.lessonTitle ?? "Самостоятельное занятие"} · {card.timezone}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {timer && (
+              <div
+                role="timer"
+                aria-label={
+                  timer.overtime
+                    ? `Плановое время истекло ${formatStudyTimer(timer.overtimeSeconds)} назад`
+                    : `До конца планового времени ${formatStudyTimer(timer.remainingSeconds)}`
+                }
+                className={`rounded-control flex h-9 items-center gap-2 border px-3 text-[13px] tabular-nums ${
+                  timer.overtime
+                    ? "border-warning/35 bg-warning/8 text-warning"
+                    : "border-accent/30 bg-accent/10 text-accent"
+                }`}
+              >
+                <Clock3 size={15} aria-hidden="true" />
+                <span className="font-semibold">
+                  {timer.overtime
+                    ? `План +${formatStudyTimer(timer.overtimeSeconds)}`
+                    : `Осталось ${formatStudyTimer(timer.remainingSeconds)}`}
+                </span>
+                <span className="text-text-2 hidden font-normal sm:inline">
+                  из {fields.plannedBlocks * fields.blockMinutes} мин
+                </span>
+              </div>
+            )}
+            <Badge variant={card.status === "completed" ? "success" : "accent"}>
+              {statusLabels[card.status]}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={!collapsed}
+              aria-controls={`study-session-body-${card.id}`}
+              onClick={() => setCollapsed((value) => !value)}
+            >
+              {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+              {collapsed ? "Развернуть" : "Свернуть"}
+            </Button>
+          </div>
         </div>
-        <CardDescription>
-          {card.courseTitle ? `${card.courseTitle} · ` : ""}
-          {card.lessonTitle ?? "Самостоятельное занятие"} · {card.timezone}
-        </CardDescription>
+        {collapsed && card.status === "running" && (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-text-2 truncate text-[13px]">
+              {fields.topic || card.lessonTitle || "Учебная сессия"} · {fields.plannedBlocks} ×{" "}
+              {fields.blockMinutes} мин
+            </p>
+            <Button size="sm" onClick={() => command("stop")} loading={pending} disabled={viewOnly}>
+              Завершить занятие
+            </Button>
+          </div>
+        )}
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent
+        id={`study-session-body-${card.id}`}
+        hidden={collapsed}
+        className={collapsed ? "hidden" : "flex flex-col gap-4"}
+      >
         <div className="grid gap-3 sm:grid-cols-2">
           <label className={labelClass}>
             Тема
@@ -189,10 +270,9 @@ export function StudySessionCard({
           </label>
         </div>
         {card.status === "running" && (
-          <div className="bg-accent/12 text-accent rounded-control flex items-center gap-2 p-3 text-[14px]">
-            <Clock3 size={16} />
-            Занятие идёт. Таймер помогает зафиксировать факт, но не отвлекает от урока.
-          </div>
+          <p className="text-text-2 text-[13px]">
+            Плановый таймер остаётся в шапке карточки, даже когда она свёрнута.
+          </p>
         )}
         {reflection && <Reflection fields={fields} disabled={viewOnly} onChange={setFields} />}
         {card.status === "completed" && <Repetitions card={card} />}

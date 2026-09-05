@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatStudyTimer,
   newStudyFields,
   normalizeStudyText,
+  studySessionTimer,
   studyFlags,
   summarizeStudyWeek,
   type StudyCard,
@@ -73,6 +75,30 @@ describe("study session summary", () => {
   });
   it("normalizes Russian spelling and punctuation deterministically", () =>
     expect(normalizeStudyText("  Всё: про KV-cache! ")).toBe("все про kv cache"));
+});
+describe("study session timer", () => {
+  it("counts down from the full block plan and survives refresh from startedAt", () => {
+    const timer = studySessionTimer(
+      "2026-09-05T10:00:00.000Z",
+      2,
+      25,
+      Date.parse("2026-09-05T10:12:34.000Z"),
+    );
+    expect(timer.remainingSeconds).toBe(2246);
+    expect(formatStudyTimer(timer.remainingSeconds)).toBe("37:26");
+    expect(timer.overtime).toBe(false);
+  });
+  it("shows transparent overtime and formats long plans", () => {
+    const timer = studySessionTimer(
+      "2026-09-05T10:00:00.000Z",
+      1,
+      25,
+      Date.parse("2026-09-05T10:27:05.000Z"),
+    );
+    expect(timer.overtimeSeconds).toBe(125);
+    expect(timer.overtime).toBe(true);
+    expect(formatStudyTimer(3725)).toBe("1:02:05");
+  });
 });
 describe("study session flags", () => {
   it("explains consecutive no and high-distraction runs", () => {

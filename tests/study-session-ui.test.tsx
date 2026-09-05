@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { StudyCardDetails } from "@/components/features/study-session-card";
+import { StudyCardDetails, StudySessionCard } from "@/components/features/study-session-card";
 import { newStudyFields, type StudyCard } from "@/lib/utils/study-session-summary";
 
 describe("full study card", () => {
@@ -64,5 +64,36 @@ describe("full study card", () => {
     ])
       expect(html).toContain(value);
     expect(html).toContain("/study-sessions?edit=session-1");
+  });
+  it("restores a running session as a compact card with an independent timer", () => {
+    const running: StudyCard = {
+      id: "session-running",
+      userId: "student-1",
+      courseId: "course-1",
+      lessonId: "lesson-1",
+      courseTitle: "NLP Advanced",
+      lessonTitle: "Attention",
+      timezone: "Europe/Moscow",
+      status: "running",
+      version: 2,
+      fields: {
+        ...newStudyFields("Механизм внимания", "2026-09-05T19:30"),
+        plannedBlocks: 2,
+        blockMinutes: 25,
+      },
+      repetitions: [],
+      plannedAt: "2026-09-05T16:30:00.000Z",
+      startedAt: "2026-09-05T16:32:00.000Z",
+      endedAt: null,
+      completedAt: null,
+      createdAt: "2026-09-05T16:20:00.000Z",
+    };
+    const html = renderToStaticMarkup(<StudySessionCard initial={running} lessonId="lesson-1" />);
+    expect(html).toContain("Осталось 50:00");
+    expect(html).toContain("из 50 мин");
+    expect(html).toContain("Развернуть");
+    expect(html).toContain("Завершить занятие");
+    expect(html).toContain('id="study-session-body-session-running"');
+    expect(html).toContain('hidden=""');
   });
 });

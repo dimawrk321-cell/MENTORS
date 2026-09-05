@@ -102,6 +102,31 @@ export function elapsedMinutes(card: StudyCard): number | null {
     ? Math.max(0, Math.round((Date.parse(card.endedAt) - Date.parse(card.startedAt)) / 60000))
     : null;
 }
+export function studySessionTimer(
+  startedAt: string,
+  plannedBlocks: number,
+  blockMinutes: number,
+  nowMs: number,
+) {
+  const totalSeconds = Math.max(60, plannedBlocks * blockMinutes * 60);
+  const elapsedSeconds = Math.max(0, Math.floor((nowMs - Date.parse(startedAt)) / 1000));
+  return {
+    totalSeconds,
+    elapsedSeconds,
+    remainingSeconds: Math.max(0, totalSeconds - elapsedSeconds),
+    overtimeSeconds: Math.max(0, elapsedSeconds - totalSeconds),
+    overtime: elapsedSeconds > totalSeconds,
+  };
+}
+export function formatStudyTimer(seconds: number) {
+  const safe = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const rest = safe % 60;
+  return hours
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
 export function studyWeek(now: Date, timezone: string, week?: string) {
   const day = week ?? localDateStr(now, timezone);
   if (
