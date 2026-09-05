@@ -13,6 +13,7 @@ import {
   Layers,
   Play,
   Sparkles,
+  History,
   type LucideIcon,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -186,6 +187,13 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-7">
+      <Link
+        href="/study-sessions"
+        className="text-text-2 hover:text-text-1 ml-auto inline-flex min-h-11 items-center gap-2 text-[13px]"
+      >
+        <History size={16} />
+        История учебных сессий
+      </Link>
       {/* Приветствие: дата + h1 + стрик/уровень/XP + кольцо цели (design «Главная v2») */}
       <section className="flex flex-wrap items-center justify-between gap-5">
         <div className="flex min-w-0 flex-col gap-2.5">

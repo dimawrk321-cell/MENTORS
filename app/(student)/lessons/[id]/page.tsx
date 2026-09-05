@@ -36,6 +36,8 @@ import { lessonDurationLabel } from "@/lib/utils/lesson-path";
 import { resolveAccessibleLessonStep } from "@/lib/utils/lesson-step-access";
 import { lessonStepMarkdownForDisplay } from "@/lib/utils/lesson-step-content";
 import { isPlayableVideoUrl } from "@/lib/utils/youtube";
+import { getActiveStudySession } from "@/lib/services/study-sessions";
+import { StudySessionCard } from "@/components/features/study-session-card";
 
 const DIFFICULTY_LABEL = { intro: "интро", base: "база", advanced: "продвинутый" } as const;
 
@@ -157,7 +159,7 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
     // текста» — подпись обещает ровно то, что ученик увидит на странице.
     videoPlayable: isPlayableVideoUrl(view.lesson.videoUrl),
   });
-  const [keyQuestions, quizQuestions] = await Promise.all([
+  const [keyQuestions, quizQuestions, activeStudySession] = await Promise.all([
     getKeyQuestionsForLesson(
       prisma,
       view.lesson.id,
@@ -169,6 +171,7 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
       contentMd: markdown,
       ...(activeStep ? { stepId: activeStep.id, includeLessonLevel: isFinalStep } : {}),
     }),
+    getActiveStudySession(prisma, user.id),
   ]);
 
   // Сегменты шапки «Урок X из Y» — уже посчитанное состояние гейтинга модуля.
@@ -285,6 +288,8 @@ export default async function LessonPage({ params, searchParams }: LessonPagePro
               />
             </div>
           </div>
+
+          <StudySessionCard initial={activeStudySession} lessonId={view.lesson.id} compact />
 
           <LessonReader
             lessonId={view.lesson.id}

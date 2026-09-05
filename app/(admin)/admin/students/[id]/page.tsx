@@ -35,6 +35,8 @@ import {
 } from "./student-controls";
 import { ResetPasswordDialog } from "./reset-password-dialog";
 import { ChangeEmailDialog } from "./change-email-dialog";
+import { getStudySessionReport } from "@/lib/services/study-sessions";
+import { StudySessionsAdmin } from "./study-sessions-admin";
 
 export const metadata: Metadata = {
   title: "Карточка ученика",
@@ -67,7 +69,7 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
   const canManage = hasPermission(viewer, "students.manage");
   const now = new Date();
   // Diagnostic tabs (spec 8.5): progress, tests, reviews, mocks, notifications, events.
-  const [notifications, progress, testAttempts, review, mocks, events, courseAccess] =
+  const [notifications, progress, testAttempts, review, mocks, events, courseAccess, studyReport] =
     await Promise.all([
       getRecentSentNotifications(prisma, user.id, 30),
       getStudentProgress(prisma, user.id),
@@ -76,6 +78,7 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
       getStudentMockHistory(prisma, user.id),
       getStudentEvents(prisma, user.id, 50),
       listCourseAccess(prisma, user.id),
+      getStudySessionReport(prisma, user.id, now),
     ]);
   const daysLeft = user.accessUntil ? daysUntil(user.accessUntil, now) : null;
 
@@ -315,6 +318,8 @@ export default async function StudentPage({ params, searchParams }: StudentPageP
 
       {/* Вкладки диагностики (spec 8.5): прогресс/тесты/повторения/моки/уведомления/события.
           Обёрнуты в карточку-секцию (прототип «Карточка ученика»). */}
+      <StudySessionsAdmin report={studyReport} />
+
       <Card className="p-5">
         <StudentTabs
           progress={progress}

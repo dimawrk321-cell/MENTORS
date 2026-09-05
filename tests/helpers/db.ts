@@ -6,6 +6,7 @@ export const testDb = new PrismaClient({ datasourceUrl: testDatabaseUrl() });
 
 /** Wipes all stage-1..11 tables in FK-safe order. */
 export async function resetDb(): Promise<void> {
+  await testDb.studySession.deleteMany();
   // Stage 11 (importer runs) — reference users.
   await testDb.importRun.deleteMany();
   // Stage 9 (notifications & announcements) — reference users/announcements.

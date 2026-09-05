@@ -37,6 +37,7 @@ export default async function AdminDashboardPage() {
   // Walk 12.4/B2: resolving a content report needs content.manage — mirror the
   // view/mutate split in the UI (the action fails closed regardless).
   const canResolveReports = hasPermission(user, "content.manage");
+  const canViewStudents = hasPermission(user, "students.view");
 
   return (
     <div className="flex flex-col gap-6">
@@ -52,6 +53,24 @@ export default async function AdminDashboardPage() {
 
       {/* Красные флаги */}
       <div className="grid items-start gap-3 md:grid-cols-2">
+        {canViewStudents && (
+          <FlagWidget
+            icon={AlertTriangle}
+            title="Учебные риски"
+            count={flags.studyRisks.length}
+            empty="По карточкам занятий рисков нет."
+          >
+            {flags.studyRisks.map((risk) => (
+              <FlagRowLink
+                key={`${risk.studentId}:${risk.type}`}
+                href={`/admin/students/${risk.studentId}#${risk.sessionIds[0] ? `study-session-${risk.sessionIds[0]}` : "study-sessions"}`}
+                label={risk.studentName}
+              >
+                {risk.reason}
+              </FlagRowLink>
+            ))}
+          </FlagWidget>
+        )}
         <FlagWidget
           icon={UserX}
           title="Пропали 7+ дней"

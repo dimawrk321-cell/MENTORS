@@ -3,6 +3,7 @@ import type { Db } from "@/lib/db";
 import { prisma } from "@/lib/db";
 import { DAY_MS, localDaysBetween } from "@/lib/utils/dates";
 import { LINK_STALE_DAYS } from "@/lib/constants";
+import { getStudyMentorFlags } from "@/lib/services/study-sessions";
 
 // Пульт (spec 8.5): weekly metrics with week-over-week delta + red-flag widgets.
 // All aggregation is SQL/Prisma over analytics_events and domain tables (spec
@@ -120,6 +121,7 @@ export interface RedFlags {
   expiring: ExpiringStudent[];
   staleRecordings: FlagRow[];
   openReports: OpenReport[];
+  studyRisks: Awaited<ReturnType<typeof getStudyMentorFlags>>;
 }
 
 /** Active students not seen for 7+ local days (spec 8.5), longest gone first. */
@@ -185,6 +187,7 @@ export async function computeRedFlags(db: Db, now: Date): Promise<RedFlags> {
     expiring,
     staleRecordings,
     openReports,
+    studyRisks,
   ] = await Promise.all([
     missingStudents(db, now),
     failingThreeStudents(db),
@@ -283,6 +286,7 @@ export async function computeRedFlags(db: Db, now: Date): Promise<RedFlags> {
               : null,
         })),
       ),
+    getStudyMentorFlags(db, now),
   ]);
 
   return {
@@ -293,6 +297,7 @@ export async function computeRedFlags(db: Db, now: Date): Promise<RedFlags> {
     expiring,
     staleRecordings,
     openReports,
+    studyRisks,
   };
 }
 
