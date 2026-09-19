@@ -70,7 +70,15 @@ export function StudySessionCard({
       setFields(result.data.fields);
       if (operation === "start") setCollapsed(true);
       if (operation === "stop") setCollapsed(false);
-      setMessage(operation === "save" ? "Черновик сохранён" : null);
+      setMessage(
+        operation === "save"
+          ? card.status === "running"
+            ? "Отметка сохранена"
+            : card.status === "completed"
+              ? "Исправления сохранены"
+              : "Черновик сохранён"
+          : null,
+      );
     });
   };
   if (!card || !fields)
@@ -144,6 +152,20 @@ export function StudySessionCard({
         hidden={collapsed}
         className={collapsed ? "hidden" : "flex flex-col gap-4"}
       >
+        {fields.previousCheckpoint && (
+          <div className="bg-surface-2 rounded-control min-w-0 p-3 text-[13px] break-words">
+            <p className="font-medium">В прошлый раз по этому уроку</p>
+            {fields.previousCheckpoint.percent !== null && (
+              <p>Пройдено: {fields.previousCheckpoint.percent}%</p>
+            )}
+            {fields.previousCheckpoint.stoppingPoint && (
+              <p>Где остановился: {fields.previousCheckpoint.stoppingPoint}</p>
+            )}
+            {fields.previousCheckpoint.nextAction && (
+              <p>Следующий шаг: {fields.previousCheckpoint.nextAction}</p>
+            )}
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <label className={labelClass}>
             Тема
@@ -230,13 +252,21 @@ export function StudySessionCard({
             Плановый таймер остаётся в шапке карточки, даже когда она свёрнута.
           </p>
         )}
+        {card.status !== "draft" && (
+          <LessonCheckpointFields
+            fields={fields}
+            hasLesson={Boolean(card.lessonId || card.lessonTitle)}
+            disabled={viewOnly || pending || card.status === "abandoned"}
+            onChange={setFields}
+          />
+        )}
         {reflection && <Reflection fields={fields} disabled={viewOnly} onChange={setFields} />}
         {card.status === "completed" && <Repetitions card={card} />}
         {message && (
           <p
             role="status"
             className={
-              message === "Черновик сохранён"
+              ["Черновик сохранён", "Отметка сохранена", "Исправления сохранены"].includes(message)
                 ? "text-success text-[13px]"
                 : "text-danger text-[13px]"
             }
@@ -260,6 +290,16 @@ export function StudySessionCard({
                 Начать занятие
               </Button>
             </>
+          )}
+          {card.status === "running" && (
+            <Button
+              variant="secondary"
+              onClick={() => command("save")}
+              loading={pending}
+              disabled={viewOnly}
+            >
+              Сохранить отметку
+            </Button>
           )}
           {card.status === "running" && (
             <Button onClick={() => command("stop")} loading={pending} disabled={viewOnly}>
@@ -307,6 +347,86 @@ export function StudySessionCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+export function LessonCheckpointFields({
+  fields,
+  hasLesson,
+  disabled,
+  onChange,
+}: {
+  fields: StudyFields;
+  hasLesson: boolean;
+  disabled: boolean;
+  onChange: (fields: StudyFields) => void;
+}) {
+  return (
+    <fieldset
+      disabled={disabled}
+      className="border-border flex min-w-0 flex-col gap-3 border-t pt-4"
+    >
+      <legend className="text-[14px] font-medium">
+        {hasLesson ? "Насколько прошёл урок" : "Место остановки"}
+      </legend>
+      {hasLesson && (
+        <>
+          <label className={labelClass}>
+            Всего пройдено, %
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={100}
+              step={1}
+              value={fields.lessonPercent ?? ""}
+              placeholder="Не указано"
+              onChange={(e) =>
+                onChange(
+                  set(
+                    fields,
+                    "lessonPercent",
+                    e.target.value === "" ? null : Number(e.target.value),
+                  ),
+                )
+              }
+            />
+          </label>
+          <div className="flex flex-wrap gap-2" aria-label="Быстрая отметка прохождения">
+            {[0, 25, 50, 75, 100].map((percent) => (
+              <Button
+                key={percent}
+                type="button"
+                variant={fields.lessonPercent === percent ? "primary" : "secondary"}
+                className="min-h-11"
+                aria-pressed={fields.lessonPercent === percent}
+                disabled={disabled}
+                onClick={() => onChange(set(fields, "lessonPercent", percent))}
+              >
+                {percent}%
+              </Button>
+            ))}
+          </div>
+          <p className="text-text-2 text-[12px]">
+            Общий прогресс по уроку к этому моменту, по твоей оценке. Даже 100% не заменяет действие
+            «Завершить урок».
+          </p>
+        </>
+      )}
+      <label className={labelClass}>
+        Где остановился
+        <textarea
+          className={textareaClass}
+          maxLength={500}
+          value={fields.stoppingPoint}
+          placeholder="Например: шаг 3, раздел «Практика» или видео 24:30"
+          onChange={(e) => onChange(set(fields, "stoppingPoint", e.target.value))}
+        />
+      </label>
+      <p className="text-text-2 text-[12px]">
+        Можно оставить пустым. Сохрани отметку перед выходом; место записывается как заметка.
+      </p>
+    </fieldset>
   );
 }
 
@@ -507,6 +627,17 @@ export function StudyCardDetails({
         <p>
           <b className="text-text-1">После занятия смогу:</b> {f.goal || "—"}
         </p>
+        {(card.lessonId || card.lessonTitle) && (
+          <p>
+            <b className="text-text-1">Пройдено по самооценке:</b>{" "}
+            {f.lessonPercent === null ? "не указано" : `${f.lessonPercent}%`}
+          </p>
+        )}
+        {f.stoppingPoint && (
+          <p className="break-words">
+            <b className="text-text-1">Где остановился:</b> {f.stoppingPoint}
+          </p>
+        )}
         <p>
           <b className="text-text-1">Перед стартом:</b> телефон{" "}
           {f.phoneAway ? "убран" : "не отмечен"}, один материал {f.oneMaterial ? "да" : "нет"},

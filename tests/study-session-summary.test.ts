@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatStudyTimer,
   newStudyFields,
+  studyFieldsSchema,
   normalizeStudyText,
   studySessionTimer,
   studyFlags,
@@ -44,6 +45,27 @@ function card(
   };
 }
 describe("study session summary", () => {
+  it("reads old cards without inventing progress and validates manual checkpoints", () => {
+    const { lessonPercent, stoppingPoint, previousCheckpoint, ...legacy } = newStudyFields(
+      "Урок",
+      "2026-09-11T12:00",
+    );
+    expect(studyFieldsSchema.parse(legacy)).toMatchObject({
+      lessonPercent: null,
+      stoppingPoint: "",
+      previousCheckpoint: null,
+    });
+    for (const value of [0, 25, 100, null])
+      expect(studyFieldsSchema.parse({ ...legacy, lessonPercent: value }).lessonPercent).toBe(
+        value,
+      );
+    for (const value of [-1, 101, 1.5, "50"])
+      expect(studyFieldsSchema.safeParse({ ...legacy, lessonPercent: value }).success).toBe(false);
+    expect(studyFieldsSchema.safeParse({ ...legacy, stoppingPoint: "a".repeat(501) }).success).toBe(
+      false,
+    );
+    expect([lessonPercent, stoppingPoint, previousCheckpoint]).toEqual([null, "", null]);
+  });
   it("aggregates a local Monday week and preserves zero values", () => {
     const cards = [
       card("a", "2026-09-01T17:00:00.000Z"),

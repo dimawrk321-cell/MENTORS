@@ -105,6 +105,29 @@ export async function createStudySession(
       view?.lesson.title ?? "",
       `${localDateStr(now, user.timezone)}T${formatTimeRu(now, user.timezone)}`,
     );
+    if (lessonId) {
+      const previous = await tx.studySession.findFirst({
+        where: {
+          userId,
+          lessonId,
+          status: { in: ["completed", "abandoned"] },
+          OR: [
+            { fields: { path: ["lessonPercent"], gte: 0 } },
+            { fields: { path: ["stoppingPoint"], gt: "" } },
+          ],
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      if (previous) {
+        const saved = studyCard(previous).fields;
+        fields.previousCheckpoint = {
+          sessionId: previous.id,
+          percent: saved.lessonPercent,
+          stoppingPoint: saved.stoppingPoint,
+          nextAction: saved.nextAction,
+        };
+      }
+    }
     return studyCard(
       await tx.studySession.create({
         data: {
@@ -151,6 +174,8 @@ const reflectionKeys = [
   "thoughts",
   "gaps",
   "nextAction",
+  "lessonPercent",
+  "stoppingPoint",
 ] as const;
 export async function updateStudySession(
   db: PrismaClient,
@@ -175,11 +200,14 @@ export async function updateStudySession(
     // Planning facts cannot be rewritten after the actual start.
     const fields =
       row.status === "draft"
-        ? command.fields
+        ? { ...command.fields, previousCheckpoint: old.previousCheckpoint }
         : ({
             ...old,
             ...Object.fromEntries(reflectionKeys.map((key) => [key, command.fields[key]])),
           } as StudyFields);
+    // DECISION: these are personal session notes, never lesson completion or XP.
+    if (!row.lessonId && !row.lessonTitle && fields.lessonPercent !== null)
+      return fail("validation", "Процент прохождения доступен только для сессии с уроком");
     if (fields.completedBlocks !== null && fields.completedBlocks > fields.plannedBlocks)
       return fail("validation", "Завершённых блоков не может быть больше запланированных");
     const op = command.operation;

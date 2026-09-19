@@ -1,9 +1,37 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { StudyCardDetails, StudySessionCard } from "@/components/features/study-session-card";
+import {
+  LessonCheckpointFields,
+  StudyCardDetails,
+  StudySessionCard,
+} from "@/components/features/study-session-card";
 import { newStudyFields, type StudyCard } from "@/lib/utils/study-session-summary";
 
 describe("full study card", () => {
+  it("shows manual percentages, optional stopping notes and a disabled view-only form", () => {
+    const fields = {
+      ...newStudyFields("Урок", "2026-09-11T12:00"),
+      lessonPercent: 0,
+      stoppingPoint: "Видео 24:30",
+    };
+    const html = renderToStaticMarkup(
+      <LessonCheckpointFields fields={fields} hasLesson disabled onChange={() => {}} />,
+    );
+    expect(html).toContain('fieldset disabled=""');
+    expect(html).toContain('value="0"');
+    expect(html).toContain("Видео 24:30");
+    expect(html).toContain("не заменяет действие");
+    const unlinked = renderToStaticMarkup(
+      <LessonCheckpointFields
+        fields={fields}
+        hasLesson={false}
+        disabled={false}
+        onChange={() => {}}
+      />,
+    );
+    expect(unlinked).not.toContain("Всего пройдено");
+    expect(unlinked).toContain("Где остановился");
+  });
   it("briefly explains the mechanic before the first card", () => {
     const html = renderToStaticMarkup(<StudySessionCard initial={null} />);
     expect(html).toContain("Что такое карточка занятия?");

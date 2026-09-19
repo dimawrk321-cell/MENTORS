@@ -28,6 +28,17 @@ export const studyFieldsSchema = z
     thoughts: z.tuple([text, text, text]),
     gaps: text,
     nextAction: text,
+    lessonPercent: z.number().int().min(0).max(100).nullable().default(null),
+    stoppingPoint: z.string().trim().max(500).default(""),
+    previousCheckpoint: z
+      .object({
+        sessionId: z.string(),
+        percent: z.number().int().min(0).max(100).nullable(),
+        stoppingPoint: z.string().max(500),
+        nextAction: text,
+      })
+      .nullable()
+      .default(null),
   })
   .strict();
 export type StudyFields = z.infer<typeof studyFieldsSchema>;
@@ -95,6 +106,9 @@ export function newStudyFields(topic: string, plannedLocal: string): StudyFields
     thoughts: ["", "", ""],
     gaps: "",
     nextAction: "",
+    lessonPercent: null,
+    stoppingPoint: "",
+    previousCheckpoint: null,
   };
 }
 export function elapsedMinutes(card: StudyCard): number | null {

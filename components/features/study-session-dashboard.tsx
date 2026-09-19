@@ -111,6 +111,12 @@ export function StudySessionDashboard({
                           ? `Объясню: ${explainLabels[card.fields.explain].toLocaleLowerCase("ru")}`
                           : "Открыть карточку"}
                       </p>
+                      {card.fields.lessonPercent !== null &&
+                        (card.lessonId || card.lessonTitle) && (
+                          <p className="text-text-2 mt-1 text-[12px]">
+                            Пройдено: {card.fields.lessonPercent}% · самооценка
+                          </p>
+                        )}
                     </Link>
                   );
                 })}
