@@ -25,7 +25,7 @@ export function CodeBlock({ children, ...props }: ComponentProps<"pre">) {
   }
 
   return (
-    <div className="group relative my-5">
+    <div className="group relative my-5 max-w-full overflow-hidden">
       <pre ref={preRef} {...props}>
         {children}
       </pre>

@@ -18,8 +18,10 @@ import { InlineQuestionUnavailable } from "@/components/blocks/inline-question-s
 function TableWrap(props: React.ComponentProps<"table">) {
   // Spec 13: no horizontal page overflow — wide tables scroll inside their box.
   return (
-    <div className="rounded-card border-border my-5 overflow-x-auto border">
-      <table {...props} />
+    <div className="rounded-card border-border my-5 max-w-full overflow-hidden border">
+      <div className="max-w-full overflow-x-auto">
+        <table {...props} />
+      </div>
     </div>
   );
 }

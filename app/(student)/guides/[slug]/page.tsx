@@ -95,7 +95,7 @@ export default async function GuidePage({ params }: GuidePageProps) {
           <BackButton href={back.href} label={back.label} className="mb-3" />
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <Badge>{GUIDE_SECTION_LABEL[guide.section] ?? guide.section}</Badge>
-            <div className="flex items-center gap-2">
+            <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">
               {/* D6 (spec 13.1): auto table of contents from headings (шторка). */}
               <LessonTocSheet headings={headings} title="В этом гайде" />
               <ReadingSizeControl initial={user.readingFontSize} />
